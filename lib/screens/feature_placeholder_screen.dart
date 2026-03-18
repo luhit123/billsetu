@@ -1,3 +1,4 @@
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:flutter/material.dart';
 
 class FeaturePlaceholderScreen extends StatelessWidget {
@@ -95,7 +96,7 @@ class FeaturePlaceholderScreen extends StatelessWidget {
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Text(
-                          '$title module is coming soon. This placeholder is ready for the real feature to be plugged in next.',
+                          AppStrings.of(context).placeholderComingSoon(title),
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(

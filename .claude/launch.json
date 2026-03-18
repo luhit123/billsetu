@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Flutter App (Android/iOS)",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run"],
+      "port": 8080
+    },
+    {
+      "name": "Flutter App (Chrome/Web)",
+      "runtimeExecutable": "flutter",
+      "runtimeArgs": ["run", "-d", "chrome"],
+      "port": 8080
+    }
+  ]
+}

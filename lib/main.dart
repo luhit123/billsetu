@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:billeasy/firebase_options.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
@@ -13,7 +15,11 @@ import 'package:billeasy/screens/home_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
   runApp(const BillEasyApp());
 }
 
@@ -22,7 +28,9 @@ class BillEasyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return LanguageProvider(
+      child: Builder(
+        builder: (context) => MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'BillEasy',
       theme: ThemeData(
@@ -38,6 +46,8 @@ class BillEasyApp extends StatelessWidget {
         ),
       ),
       home: const AuthGate(),
+        ),
+      ),
     );
   }
 }
@@ -143,7 +153,11 @@ class _PostLoginFlowState extends State<PostLoginFlow> {
   Widget build(BuildContext context) {
     if (_language == null) {
       return LanguageSelectionScreen(
-        onLanguageSelected: (lang) => setState(() => _language = lang),
+        onLanguageSelected: (lang) async {
+          await LanguageProvider.setLanguage(context, lang);
+          if (!mounted) return;
+          setState(() => _language = lang);
+        },
       );
     }
 
@@ -176,7 +190,7 @@ class SignedInHomeGate extends StatelessWidget {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Unable to load your profile right now. Please try again.',
+                  AppStrings.of(context).drawerProfileLoadError,
                   style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),

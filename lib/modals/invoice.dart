@@ -1,3 +1,4 @@
+import 'package:billeasy/utils/number_utils.dart' as nu;
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'line_item.dart';
@@ -154,7 +155,7 @@ class Invoice {
     }
 
     if (value is String) {
-      return double.tryParse(value) ?? 0;
+      return nu.parseDouble(value) ?? 0;
     }
 
     return 0;

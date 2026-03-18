@@ -207,10 +207,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           PageView(
             controller: _pageController,
             onPageChanged: (page) => setState(() => _currentPage = page),
-            children: [
-              _buildPage1(),
-              _buildPage2(),
-            ],
+            children: [_buildPage1(), _buildPage2()],
           ),
           // Bottom controls overlay
           Positioned(
@@ -230,11 +227,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0B234F),
-            Color(0xFF0F4A75),
-            Color(0xFF0F7D83),
-          ],
+          colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
         ),
       ),
       child: Stack(
@@ -272,13 +265,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   Expanded(
                     flex: 5,
                     child: Center(
-                      child: AnimatedBuilder(
-                        animation: _floatAnimation,
-                        builder: (context, child) => Transform.translate(
-                          offset: Offset(0, _floatAnimation.value),
-                          child: child,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AnimatedBuilder(
+                          animation: _floatAnimation,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(0, _floatAnimation.value),
+                            child: child,
+                          ),
+                          child: _buildInvoiceIllustration(),
                         ),
-                        child: _buildInvoiceIllustration(),
                       ),
                     ),
                   ),
@@ -294,12 +290,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         // Badge
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: Colors.white.withOpacity(0.25)),
+                              color: Colors.white.withOpacity(0.25),
+                            ),
                           ),
                           child: Text(
                             _s.step1Badge,
@@ -332,9 +331,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         const SizedBox(height: 28),
-                        _buildFeatureRow(Icons.person_add_alt_1_rounded, _s.feat1a),
+                        _buildFeatureRow(
+                          Icons.person_add_alt_1_rounded,
+                          _s.feat1a,
+                        ),
                         const SizedBox(height: 12),
-                        _buildFeatureRow(Icons.add_shopping_cart_rounded, _s.feat1b),
+                        _buildFeatureRow(
+                          Icons.add_shopping_cart_rounded,
+                          _s.feat1b,
+                        ),
                         const SizedBox(height: 12),
                         _buildFeatureRow(Icons.local_offer_rounded, _s.feat1c),
                       ],
@@ -357,11 +362,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF004D40),
-            Color(0xFF00695C),
-            Color(0xFF00897B),
-          ],
+          colors: [Color(0xFF004D40), Color(0xFF00695C), Color(0xFF00897B)],
         ),
       ),
       child: Stack(
@@ -384,13 +385,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   Expanded(
                     flex: 5,
                     child: Center(
-                      child: AnimatedBuilder(
-                        animation: _floatAnimation,
-                        builder: (context, child) => Transform.translate(
-                          offset: Offset(0, _floatAnimation.value * 0.7),
-                          child: child,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AnimatedBuilder(
+                          animation: _floatAnimation,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(0, _floatAnimation.value * 0.7),
+                            child: child,
+                          ),
+                          child: _buildDashboardIllustration(),
                         ),
-                        child: _buildDashboardIllustration(),
                       ),
                     ),
                   ),
@@ -405,12 +409,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 6),
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(20),
                             border: Border.all(
-                                color: Colors.white.withOpacity(0.25)),
+                              color: Colors.white.withOpacity(0.25),
+                            ),
                           ),
                           child: Text(
                             _s.step2Badge,
@@ -447,7 +454,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                         const SizedBox(height: 12),
                         _buildFeatureRow(Icons.filter_alt_rounded, _s.feat2b),
                         const SizedBox(height: 12),
-                        _buildFeatureRow(Icons.picture_as_pdf_rounded, _s.feat2c),
+                        _buildFeatureRow(
+                          Icons.picture_as_pdf_rounded,
+                          _s.feat2c,
+                        ),
                       ],
                     ),
                   ),
@@ -472,7 +482,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           end: Alignment.bottomCenter,
           colors: [
             Colors.transparent,
-            (_currentPage == 0 ? const Color(0xFF0F7D83) : const Color(0xFF00897B))
+            (_currentPage == 0
+                    ? const Color(0xFF0F7D83)
+                    : const Color(0xFF00897B))
                 .withOpacity(0.95),
           ],
         ),
@@ -541,7 +553,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                     const SizedBox(width: 8),
                     Icon(
-                      isLast ? Icons.rocket_launch_rounded : Icons.arrow_forward_rounded,
+                      isLast
+                          ? Icons.rocket_launch_rounded
+                          : Icons.arrow_forward_rounded,
                       color: isLast
                           ? const Color(0xFF00695C)
                           : const Color(0xFF0B234F),
@@ -570,12 +584,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           child: Icon(icon, color: Colors.white, size: 18),
         ),
         const SizedBox(width: 14),
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14.5,
-            fontWeight: FontWeight.w500,
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
       ],
@@ -601,10 +619,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: RadialGradient(
-            colors: [
-              Colors.white.withOpacity(opacity),
-              Colors.transparent,
-            ],
+            colors: [Colors.white.withOpacity(opacity), Colors.transparent],
           ),
         ),
       ),
@@ -641,8 +656,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               builder: (_, child) =>
                   Transform.scale(scale: _pulseAnimation.value, child: child),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4CAF50),
                   borderRadius: BorderRadius.circular(20),
@@ -681,15 +698,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: AnimatedBuilder(
               animation: _floatAnimation,
               builder: (_, child) => Transform.translate(
-                  offset: Offset(0, _floatAnimation.value * 0.5), child: child),
+                offset: Offset(0, _floatAnimation.value * 0.5),
+                child: child,
+              ),
               child: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: const Color(0xFF00E5FF).withOpacity(0.2),
                   shape: BoxShape.circle,
                   border: Border.all(
-                      color: const Color(0xFF00E5FF).withOpacity(0.4),
-                      width: 1.5),
+                    color: const Color(0xFF00E5FF).withOpacity(0.4),
+                    width: 1.5,
+                  ),
                 ),
                 child: const Text(
                   '₹',
@@ -746,7 +766,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   Text(
                     '#INV-0042',
                     style: TextStyle(
-                        color: Colors.white.withOpacity(0.5), fontSize: 11),
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 11,
+                    ),
                   ),
                 ],
               ),
@@ -759,7 +781,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.receipt_long, color: Colors.white, size: 18),
+                child: const Icon(
+                  Icons.receipt_long,
+                  color: Colors.white,
+                  size: 18,
+                ),
               ),
             ],
           ),
@@ -778,9 +804,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               Text(
                 'Total',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600),
+                  color: Colors.white.withOpacity(0.7),
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const Text(
                 '₹1,850',
@@ -801,15 +828,25 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: TextStyle(
-              color: Colors.white.withOpacity(0.65), fontSize: 12),
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.65),
+              fontSize: 12,
+            ),
+          ),
         ),
+        const SizedBox(width: 8),
         Text(
           amount,
           style: const TextStyle(
-              color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            color: Colors.white,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
@@ -834,10 +871,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: AnimatedBuilder(
               animation: _floatAnimation,
               builder: (_, child) => Transform.translate(
-                  offset: Offset(_floatAnimation.value * 0.4, 0), child: child),
+                offset: Offset(_floatAnimation.value * 0.4, 0),
+                child: child,
+              ),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFFFF5252).withOpacity(0.9),
                   borderRadius: BorderRadius.circular(14),
@@ -852,8 +893,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.warning_amber_rounded,
-                        color: Colors.white, size: 12),
+                    Icon(
+                      Icons.warning_amber_rounded,
+                      color: Colors.white,
+                      size: 12,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       '2 Overdue',
@@ -876,10 +920,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             child: AnimatedBuilder(
               animation: _floatAnimation,
               builder: (_, child) => Transform.translate(
-                  offset: Offset(_floatAnimation.value * -0.4, 0), child: child),
+                offset: Offset(_floatAnimation.value * -0.4, 0),
+                child: child,
+              ),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(14),
@@ -888,8 +936,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.calendar_today_rounded,
-                        color: Colors.white, size: 11),
+                    Icon(
+                      Icons.calendar_today_rounded,
+                      color: Colors.white,
+                      size: 11,
+                    ),
                     SizedBox(width: 5),
                     Text(
                       'This Month',
@@ -951,7 +1002,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             'Total Billed',
             style: TextStyle(
-                color: Colors.white.withOpacity(0.5), fontSize: 11),
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 11,
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -959,11 +1012,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Row(
             children: [
               Expanded(
-                  child: _miniStat('Collected', '₹98,200', const Color(0xFF69F0AE))),
+                child: _miniStat(
+                  'Collected',
+                  '₹98,200',
+                  const Color(0xFF69F0AE),
+                ),
+              ),
               const SizedBox(width: 8),
               Expanded(
-                  child: _miniStat(
-                      'Outstanding', '₹26,300', const Color(0xFFFFD740))),
+                child: _miniStat(
+                  'Outstanding',
+                  '₹26,300',
+                  const Color(0xFFFFD740),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -1011,7 +1073,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           Text(
             label,
             style: TextStyle(
-                color: Colors.white.withOpacity(0.5), fontSize: 10),
+              color: Colors.white.withOpacity(0.5),
+              fontSize: 10,
+            ),
           ),
         ],
       ),
@@ -1028,7 +1092,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Text(
         label,
         style: TextStyle(
-          color: active ? const Color(0xFF00695C) : Colors.white.withOpacity(0.6),
+          color: active
+              ? const Color(0xFF00695C)
+              : Colors.white.withOpacity(0.6),
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
@@ -1045,7 +1111,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         return AnimatedBuilder(
           animation: _pulseAnimation,
           builder: (_, child) {
-            final scale = 1.0 + (h - 0.5) * (_pulseAnimation.value - 1.0) * 0.05;
+            final scale =
+                1.0 + (h - 0.5) * (_pulseAnimation.value - 1.0) * 0.05;
             return Transform.scale(
               alignment: Alignment.bottomCenter,
               scaleY: scale,
@@ -1072,8 +1139,11 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _glassCard(
-      {required double width, required double height, double opacity = 0.1}) {
+  Widget _glassCard({
+    required double width,
+    required double height,
+    double opacity = 0.1,
+  }) {
     return Container(
       width: width,
       height: height,

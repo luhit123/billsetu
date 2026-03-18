@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +18,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
       body: Container(
         decoration: const BoxDecoration(
@@ -74,7 +76,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          'A calmer way to create, track, and manage invoices.',
+                          s.loginTagline,
                           style: TextStyle(
                             color: Colors.white.withAlpha(210),
                             fontSize: 16,
@@ -126,7 +128,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ),
                                     child: Text(
-                                      'Minimal billing workspace',
+                                      s.loginBadgeLabel,
                                       style: TextStyle(
                                         color: Colors.white.withAlpha(220),
                                         fontSize: 12,
@@ -135,9 +137,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 22),
-                                  const Text(
-                                    'Welcome back',
-                                    style: TextStyle(
+                                  Text(
+                                    s.loginWelcome,
+                                    style: const TextStyle(
                                       color: Colors.white,
                                       fontSize: 30,
                                       fontWeight: FontWeight.w700,
@@ -145,7 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   const SizedBox(height: 10),
                                   Text(
-                                    'Sign in with Google to continue to your invoices, customers, and billing dashboard.',
+                                    s.loginSubtitle,
                                     style: TextStyle(
                                       color: Colors.white.withAlpha(210),
                                       fontSize: 15,
@@ -193,7 +195,7 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Google sign-in was cancelled.')),
+          SnackBar(content: Text(AppStrings.of(context).loginCancelled)),
         );
       }
     } on FirebaseAuthException catch (error) {
@@ -234,6 +236,7 @@ class _GoogleSignInButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return SizedBox(
       width: double.infinity,
       child: Material(
@@ -257,7 +260,7 @@ class _GoogleSignInButton extends StatelessWidget {
                   const _GoogleLogo(size: 22),
                 const SizedBox(width: 12),
                 Text(
-                  isLoading ? 'Signing in...' : 'Continue with Google',
+                  isLoading ? s.loginSigningIn : s.loginContinueGoogle,
                   style: const TextStyle(
                     color: Colors.black87,
                     fontSize: 15,

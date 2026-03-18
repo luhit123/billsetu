@@ -1,5 +1,10 @@
+import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/modals/client.dart';
+import 'package:billeasy/utils/number_utils.dart' as nu;
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
+import 'package:billeasy/screens/customer_form_screen.dart';
+import 'package:billeasy/screens/customers_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,15 +12,29 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
-  const CreateInvoiceScreen({super.key});
+  const CreateInvoiceScreen({super.key, this.initialClient});
+
+  final Client? initialClient;
 
   @override
   State<CreateInvoiceScreen> createState() => _CreateInvoiceScreenState();
 }
 
 class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
+  static const List<String> _itemUnitOptions = [
+    'pcs',
+    'kg',
+    'g',
+    'ltr',
+    'ml',
+    'box',
+    'pack',
+    'dozen',
+    'meter',
+  ];
+  static const String _defaultItemUnit = 'pcs';
+
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
-  final TextEditingController clientNameController = TextEditingController();
   final TextEditingController _discountController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
@@ -24,7 +43,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   );
 
   DateTime? selectedDate;
+  Client? _selectedClient;
   bool _isSaving = false;
+  bool _showClientValidationError = false;
   InvoiceStatus _selectedStatus = InvoiceStatus.paid;
   InvoiceDiscountType _selectedDiscountType = InvoiceDiscountType.percentage;
   late List<Map<String, TextEditingController>> itemRows;
@@ -32,12 +53,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedClient = widget.initialClient;
     itemRows = [_createItemRowControllers()];
   }
 
   @override
   void dispose() {
-    clientNameController.dispose();
     _discountController.dispose();
     for (final row in itemRows) {
       _disposeRowControllers(row);
@@ -47,32 +68,20 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final subtotal = _calculateSubtotal();
     final discountAmount = _calculateDiscountAmount(subtotal);
     final grandTotal = subtotal - discountAmount;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Create Invoice')),
+      appBar: AppBar(title: Text(s.createTitle)),
       body: SafeArea(
         child: Form(
           key: _formKey,
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              TextFormField(
-                controller: clientNameController,
-                decoration: const InputDecoration(
-                  labelText: 'Client Name',
-                  border: OutlineInputBorder(),
-                ),
-                textCapitalization: TextCapitalization.words,
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Enter client name';
-                  }
-                  return null;
-                },
-              ),
+              _buildCustomerSection(context),
               const SizedBox(height: 16),
               Material(
                 color: Colors.transparent,
@@ -136,7 +145,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Invoice Date',
+                                s.createInvoiceDate,
                                 style: Theme.of(context).textTheme.titleSmall
                                     ?.copyWith(
                                       fontWeight: FontWeight.w800,
@@ -146,7 +155,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                               const SizedBox(height: 4),
                               Text(
                                 selectedDate == null
-                                    ? 'Pick Invoice Date'
+                                    ? s.createPickDate
                                     : DateFormat(
                                         'dd MMM yyyy',
                                       ).format(selectedDate!),
@@ -161,8 +170,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                               const SizedBox(height: 2),
                               Text(
                                 selectedDate == null
-                                    ? 'Tap here to choose the billing date before saving.'
-                                    : 'Tap to change the selected billing date.',
+                                    ? s.createDateHintEmpty
+                                    : s.createDateHintSelected,
                                 style: TextStyle(
                                   fontSize: 12.5,
                                   color: Colors.blueGrey.shade700,
@@ -188,7 +197,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 4, left: 12),
                   child: Text(
-                    'Select an invoice date',
+                    s.createDateRequired,
                     style: TextStyle(
                       color: Theme.of(context).colorScheme.error,
                       fontSize: 12,
@@ -201,75 +210,149 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 14),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: TextFormField(
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.teal.shade100),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                s.createItemNumber(index + 1),
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.teal.shade900,
+                                    ),
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: () => _removeItemRow(index),
+                              icon: const Icon(Icons.delete_outline),
+                              tooltip: s.createDeleteItem,
+                            ),
+                          ],
+                        ),
+                        TextFormField(
                           controller: row['desc'],
-                          decoration: const InputDecoration(
-                            labelText: 'Product / Description',
-                            border: OutlineInputBorder(),
+                          decoration: InputDecoration(
+                            labelText: s.createProductLabel,
+                            border: const OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Enter product';
+                              return s.createEnterProduct;
                             }
                             return null;
                           },
                           onChanged: (_) => setState(() {}),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 2,
-                        child: TextFormField(
-                          controller: row['qty'],
-                          decoration: const InputDecoration(
-                            labelText: 'Qty',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: TextInputType.number,
-                          validator: (value) {
-                            final qty = int.tryParse(value ?? '');
-                            if (qty == null || qty <= 0) {
-                              return 'Qty';
+                        const SizedBox(height: 12),
+                        LayoutBuilder(
+                          builder: (context, constraints) {
+                            final isCompact = constraints.maxWidth < 360;
+
+                            final qtyField = TextFormField(
+                              controller: row['qty'],
+                              decoration: InputDecoration(
+                                labelText: s.createQtyLabel,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              validator: (value) {
+                                final qty = nu.parseDouble(value);
+                                if (qty == null || qty <= 0) {
+                                  return s.createQtyLabel;
+                                }
+                                return null;
+                              },
+                              onChanged: (_) => setState(() {}),
+                            );
+
+                            final unitField = DropdownButtonFormField<String>(
+                              initialValue: _normalizeItemUnit(
+                                row['unit']!.text,
+                              ),
+                              isExpanded: true,
+                              items: _itemUnitOptions.map((unit) {
+                                return DropdownMenuItem(
+                                  value: unit,
+                                  child: Text(
+                                    unit,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) {
+                                row['unit']!.text = _normalizeItemUnit(value);
+                                setState(() {});
+                              },
+                              decoration: InputDecoration(
+                                labelText: s.createUnitLabel,
+                                border: const OutlineInputBorder(),
+                              ),
+                            );
+
+                            final priceField = TextFormField(
+                              controller: row['price'],
+                              decoration: InputDecoration(
+                                labelText: s.createUnitPriceLabel,
+                                border: const OutlineInputBorder(),
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
+                              validator: (value) {
+                                final price = nu.parseDouble(value);
+                                if (price == null || price <= 0) {
+                                  return s.createUnitPriceLabel;
+                                }
+                                return null;
+                              },
+                              onChanged: (_) => setState(() {}),
+                            );
+
+                            if (isCompact) {
+                              return Column(
+                                children: [
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: qtyField),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: unitField),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  priceField,
+                                ],
+                              );
                             }
-                            return null;
+
+                            return Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(flex: 2, child: qtyField),
+                                const SizedBox(width: 8),
+                                Expanded(flex: 2, child: unitField),
+                                const SizedBox(width: 8),
+                                Expanded(flex: 3, child: priceField),
+                              ],
+                            );
                           },
-                          onChanged: (_) => setState(() {}),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        flex: 3,
-                        child: TextFormField(
-                          controller: row['price'],
-                          decoration: const InputDecoration(
-                            labelText: 'Unit Price',
-                            border: OutlineInputBorder(),
-                          ),
-                          keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true,
-                          ),
-                          validator: (value) {
-                            final price = double.tryParse(value ?? '');
-                            if (price == null || price <= 0) {
-                              return 'Price';
-                            }
-                            return null;
-                          },
-                          onChanged: (_) => setState(() {}),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        onPressed: () => _removeItemRow(index),
-                        icon: const Icon(Icons.delete_outline),
-                        tooltip: 'Delete item',
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               }),
@@ -278,7 +361,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 child: TextButton.icon(
                   onPressed: _addItemRow,
                   icon: const Icon(Icons.add),
-                  label: const Text('+ Add Item'),
+                  label: Text(s.createAddItem),
                 ),
               ),
               const SizedBox(height: 8),
@@ -293,7 +376,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Invoice Status',
+                      s.createInvoiceStatus,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: Colors.teal.shade900,
@@ -307,7 +390,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         final isSelected = _selectedStatus == status;
 
                         return ChoiceChip(
-                          label: Text(_statusLabel(status)),
+                          label: Text(_statusLabel(status, s)),
                           selected: isSelected,
                           onSelected: (_) {
                             setState(() {
@@ -346,7 +429,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Discount',
+                      s.createDiscountTitle,
                       style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: Colors.teal.shade900,
@@ -361,7 +444,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             _selectedDiscountType == discountType;
 
                         return ChoiceChip(
-                          label: Text(_discountTypeLabel(discountType)),
+                          label: Text(_discountTypeLabel(discountType, s)),
                           selected: isSelected,
                           onSelected: (_) {
                             setState(() {
@@ -392,13 +475,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         labelText:
                             _selectedDiscountType ==
                                 InvoiceDiscountType.percentage
-                            ? 'Discount Percentage'
-                            : 'Overall Discount',
+                            ? s.createDiscountPctField
+                            : s.createDiscountOverallField,
                         hintText:
                             _selectedDiscountType ==
                                 InvoiceDiscountType.percentage
-                            ? 'Optional, e.g. 10'
-                            : 'Optional, e.g. 500',
+                            ? s.createDiscountPctHint
+                            : s.createDiscountOverallHint,
                         suffixText:
                             _selectedDiscountType ==
                                 InvoiceDiscountType.percentage
@@ -413,7 +496,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      _discountPreviewText(subtotal, discountAmount),
+                      _discountPreviewText(subtotal, discountAmount, s),
                       style: TextStyle(
                         color: Colors.blueGrey.shade700,
                         fontSize: 13,
@@ -439,9 +522,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Subtotal',
-                            style: TextStyle(
+                          Text(
+                            s.createSummarySubtotal,
+                            style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
@@ -461,9 +544,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const Text(
-                            'Discount',
-                            style: TextStyle(
+                          Text(
+                            s.createSummaryDiscount,
+                            style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
@@ -488,9 +571,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          const Text(
-                            'Grand Total',
-                            style: TextStyle(
+                          Text(
+                            s.createSummaryGrandTotal,
+                            style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
@@ -533,7 +616,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                           ),
                         )
                       : const Icon(Icons.check_circle_outline_rounded),
-                  label: Text(_isSaving ? 'Saving Invoice...' : 'Save Invoice'),
+                  label: Text(
+                    _isSaving ? s.createSavingInvoice : s.createSaveInvoice,
+                  ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal.shade700,
                     foregroundColor: Colors.white,
@@ -557,7 +642,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Review the invoice date and total, then save to generate the final bill.',
+                s.createSaveHint,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: Colors.blueGrey.shade600,
@@ -569,6 +654,144 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildCustomerSection(BuildContext context) {
+    final s = AppStrings.of(context);
+    final selectedClient = _selectedClient;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: _showClientValidationError && selectedClient == null
+                  ? Theme.of(context).colorScheme.error
+                  : Colors.teal.shade100,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.blueGrey.withValues(alpha: 0.08),
+                blurRadius: 18,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: const Color(0xFFE4F7F8),
+                foregroundColor: const Color(0xFF0F7D83),
+                child: Text(
+                  selectedClient?.initials ?? '+',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      s.createCustomerLabel,
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: const Color(0xFF123C85),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      selectedClient?.name ?? s.createSelectCustomer,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: selectedClient == null
+                            ? const Color(0xFF8A5A16)
+                            : Colors.teal.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      selectedClient == null
+                          ? s.createCustomerHint
+                          : selectedClient.subtitle,
+                      style: TextStyle(
+                        color: Colors.blueGrey.shade700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final shouldStackButtons = constraints.maxWidth < 360;
+
+            final pickButton = OutlinedButton.icon(
+              onPressed: _pickCustomer,
+              icon: const Icon(Icons.groups_2_outlined),
+              label: Text(
+                selectedClient == null
+                    ? s.createPickCustomer
+                    : s.createChangeCustomer,
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            );
+
+            final addButton = FilledButton.tonalIcon(
+              onPressed: _addCustomer,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: Text(s.createAddNew),
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            );
+
+            if (shouldStackButtons) {
+              return Column(
+                children: [
+                  SizedBox(width: double.infinity, child: pickButton),
+                  const SizedBox(height: 10),
+                  SizedBox(width: double.infinity, child: addButton),
+                ],
+              );
+            }
+
+            return Row(
+              children: [
+                Expanded(child: pickButton),
+                const SizedBox(width: 10),
+                Expanded(child: addButton),
+              ],
+            );
+          },
+        ),
+        if (_showClientValidationError && selectedClient == null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6, left: 12),
+            child: Text(
+              s.createCustomerRequired,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.error,
+                fontSize: 12,
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -585,6 +808,43 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         selectedDate = pickedDate;
       });
     }
+  }
+
+  Future<void> _pickCustomer() async {
+    final selectedClient = await Navigator.push<Client>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomersScreen(
+          selectionMode: true,
+          preselectedClientId: _selectedClient?.id,
+        ),
+      ),
+    );
+
+    if (!mounted || selectedClient == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedClient = selectedClient;
+      _showClientValidationError = false;
+    });
+  }
+
+  Future<void> _addCustomer() async {
+    final savedClient = await Navigator.push<Client>(
+      context,
+      MaterialPageRoute(builder: (_) => const CustomerFormScreen()),
+    );
+
+    if (!mounted || savedClient == null) {
+      return;
+    }
+
+    setState(() {
+      _selectedClient = savedClient;
+      _showClientValidationError = false;
+    });
   }
 
   void _addItemRow() {
@@ -605,6 +865,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     return {
       'desc': TextEditingController(),
       'qty': TextEditingController(),
+      'unit': TextEditingController(text: _defaultItemUnit),
       'price': TextEditingController(),
     };
   }
@@ -619,8 +880,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     var total = 0.0;
 
     for (final row in itemRows) {
-      final qty = int.tryParse(row['qty']!.text) ?? 0;
-      final price = double.tryParse(row['price']!.text) ?? 0;
+      final qty = nu.parseDouble(row['qty']!.text) ?? 0;
+      final price = nu.parseDouble(row['price']!.text) ?? 0;
       total += qty * price;
     }
 
@@ -628,7 +889,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   }
 
   double _calculateDiscountAmount(double subtotal) {
-    final rawDiscount = double.tryParse(_discountController.text.trim()) ?? 0;
+    final rawDiscount = nu.parseDouble(_discountController.text.trim()) ?? 0;
 
     if (rawDiscount <= 0 || subtotal <= 0) {
       return 0;
@@ -649,6 +910,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
+    if (_selectedClient == null) {
+      setState(() {
+        _showClientValidationError = true;
+      });
+      return;
+    }
+
     if (selectedDate == null) {
       setState(() {});
       return;
@@ -656,13 +924,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
     if (itemRows.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add at least one line item.')),
+        SnackBar(content: Text(AppStrings.of(context).createAddLineItem)),
       );
       return;
     }
 
     final subtotal = _calculateSubtotal();
-    final discountValue = double.tryParse(_discountController.text.trim()) ?? 0;
+    final discountValue = nu.parseDouble(_discountController.text.trim()) ?? 0;
     final discountError = _validateDiscount(subtotal, discountValue);
 
     if (discountError != null) {
@@ -675,16 +943,17 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final items = itemRows.map((row) {
       return LineItem(
         description: row['desc']!.text.trim(),
-        quantity: int.parse(row['qty']!.text.trim()),
-        unitPrice: double.parse(row['price']!.text.trim()),
+        quantity: nu.parseDouble(row['qty']!.text.trim()) ?? 0,
+        unitPrice: nu.parseDouble(row['price']!.text.trim()) ?? 0,
+        unit: _normalizeItemUnit(row['unit']!.text),
       );
     }).toList();
-    final clientName = clientNameController.text.trim();
+    final selectedClient = _selectedClient!;
     final currentUser = FirebaseAuth.instance.currentUser;
 
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in before saving invoices.')),
+        SnackBar(content: Text(AppStrings.of(context).createSignInRequired)),
       );
       return;
     }
@@ -694,8 +963,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       ownerId: currentUser.uid,
       invoiceNumber:
           'BE-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}',
-      clientId: _buildClientId(clientName),
-      clientName: clientName,
+      clientId: selectedClient.id,
+      clientName: selectedClient.name,
       items: items,
       createdAt: selectedDate!,
       status: _selectedStatus,
@@ -735,9 +1004,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to save invoice: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            AppStrings.of(context).createFailedSave(error.toString()),
+          ),
+        ),
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -747,24 +1020,23 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  String _buildClientId(String clientName) {
-    final normalized = clientName
-        .toLowerCase()
-        .trim()
-        .replaceAll(RegExp(r'[^a-z0-9]+'), '-')
-        .replaceAll(RegExp(r'^-+|-+$'), '');
+  String _normalizeItemUnit(String? unit) {
+    final normalized = unit?.trim().toLowerCase() ?? '';
+    if (_itemUnitOptions.contains(normalized)) {
+      return normalized;
+    }
 
-    return normalized.isEmpty ? 'client' : normalized;
+    return _defaultItemUnit;
   }
 
-  String _statusLabel(InvoiceStatus status) {
+  String _statusLabel(InvoiceStatus status, AppStrings s) {
     switch (status) {
       case InvoiceStatus.paid:
-        return 'Paid';
+        return s.statusPaid;
       case InvoiceStatus.pending:
-        return 'Pending';
+        return s.statusPending;
       case InvoiceStatus.overdue:
-        return 'Overdue';
+        return s.statusOverdue;
     }
   }
 
@@ -801,27 +1073,41 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  String _discountTypeLabel(InvoiceDiscountType discountType) {
+  String _discountTypeLabel(InvoiceDiscountType discountType, AppStrings s) {
     switch (discountType) {
       case InvoiceDiscountType.percentage:
-        return 'Percentage';
+        return s.createDiscountPctLabel;
       case InvoiceDiscountType.overall:
-        return 'Overall';
+        return s.createDiscountOverallLabel;
     }
   }
 
-  String _discountPreviewText(double subtotal, double discountAmount) {
-    final rawDiscount = double.tryParse(_discountController.text.trim()) ?? 0;
+  String _discountPreviewText(
+    double subtotal,
+    double discountAmount,
+    AppStrings s,
+  ) {
+    final rawDiscount = nu.parseDouble(_discountController.text.trim()) ?? 0;
 
     if (rawDiscount <= 0 || subtotal <= 0) {
-      return 'Leave discount empty to keep the invoice at full subtotal.';
+      return s.createDiscountEmptyHint;
     }
 
     if (_selectedDiscountType == InvoiceDiscountType.percentage) {
-      return '${rawDiscount.toStringAsFixed(rawDiscount.truncateToDouble() == rawDiscount ? 0 : 2)}% discount will reduce ${_currencyFormat.format(subtotal)} by ${_currencyFormat.format(discountAmount)}.';
+      final pct = rawDiscount.toStringAsFixed(
+        rawDiscount.truncateToDouble() == rawDiscount ? 0 : 2,
+      );
+      return s.createDiscountPreviewPct(
+        pct,
+        _currencyFormat.format(subtotal),
+        _currencyFormat.format(discountAmount),
+      );
     }
 
-    return 'Overall discount of ${_currencyFormat.format(discountAmount)} will be applied to ${_currencyFormat.format(subtotal)}.';
+    return s.createDiscountPreviewOverall(
+      _currencyFormat.format(discountAmount),
+      _currencyFormat.format(subtotal),
+    );
   }
 
   String? _validateDiscount(double subtotal, double discountValue) {
@@ -829,14 +1115,16 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return null;
     }
 
+    final s = AppStrings.of(context);
+
     if (_selectedDiscountType == InvoiceDiscountType.percentage &&
         discountValue > 100) {
-      return 'Percentage discount cannot be more than 100.';
+      return s.createErrorPctMax;
     }
 
     if (_selectedDiscountType == InvoiceDiscountType.overall &&
         discountValue > subtotal) {
-      return 'Overall discount cannot be more than the subtotal.';
+      return s.createErrorOverallMax;
     }
 
     return null;

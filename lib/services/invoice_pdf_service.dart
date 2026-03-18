@@ -1,21 +1,28 @@
-import 'dart:typed_data';
-
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/screens/language_selection_screen.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 class InvoicePdfService {
-  static const PdfColor _brandDark = PdfColor(0.07, 0.24, 0.52);
-  static const PdfColor _brandLight = PdfColor(0.13, 0.63, 0.67);
-  static const PdfColor _paperTint = PdfColor(0.95, 0.97, 1);
-  static const PdfColor _border = PdfColor(0.86, 0.89, 0.93);
-  static const PdfColor _mutedText = PdfColor(0.39, 0.44, 0.53);
-  static const PdfColor _darkText = PdfColor(0.12, 0.16, 0.23);
-  static const PdfColor _success = PdfColor(0.12, 0.55, 0.29);
-  static const PdfColor _warning = PdfColor(0.83, 0.49, 0.09);
-  static const PdfColor _danger = PdfColor(0.76, 0.15, 0.15);
+  // Brand palette
+  static const PdfColor _navy = PdfColor(0.07, 0.24, 0.52);
+  static const PdfColor _teal = PdfColor(0.06, 0.49, 0.51);
+  static const PdfColor _navyLight = PdfColor(0.14, 0.34, 0.65);
+  static const PdfColor _surface = PdfColor(0.97, 0.98, 1.00);
+  static const PdfColor _border = PdfColor(0.87, 0.90, 0.95);
+  static const PdfColor _mutedText = PdfColor(0.45, 0.51, 0.62);
+  static const PdfColor _bodyText = PdfColor(0.20, 0.25, 0.35);
+  static const PdfColor _headingText = PdfColor(0.08, 0.13, 0.22);
+  static const PdfColor _success = PdfColor(0.10, 0.52, 0.27);
+  static const PdfColor _warning = PdfColor(0.72, 0.40, 0.04);
+  static const PdfColor _danger = PdfColor(0.74, 0.13, 0.13);
+  static const PdfColor _successBg = PdfColor(0.91, 0.97, 0.93);
+  static const PdfColor _warningBg = PdfColor(1.00, 0.96, 0.86);
+  static const PdfColor _dangerBg = PdfColor(0.99, 0.91, 0.91);
 
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   final DateFormat _generatedFormat = DateFormat('dd MMM yyyy, hh:mm a');
@@ -25,42 +32,74 @@ class InvoicePdfService {
     decimalDigits: 0,
   );
 
+  pw.Font? _fontRegular;
+  pw.Font? _fontBold;
+
+  Future<void> _loadFonts(AppLanguage language) async {
+    if (_fontRegular != null) return;
+    try {
+      switch (language) {
+        case AppLanguage.hindi:
+          final data = await rootBundle.load(
+            'assets/fonts/NotoSansDevanagari.ttf',
+          );
+          _fontRegular = pw.Font.ttf(data);
+          _fontBold = pw.Font.ttf(data);
+        case AppLanguage.assamese:
+          final data = await rootBundle.load(
+            'assets/fonts/NotoSansBengali.ttf',
+          );
+          _fontRegular = pw.Font.ttf(data);
+          _fontBold = pw.Font.ttf(data);
+        case AppLanguage.english:
+          _fontRegular = pw.Font.helvetica();
+          _fontBold = pw.Font.helveticaBold();
+      }
+    } catch (_) {
+      _fontRegular = pw.Font.helvetica();
+      _fontBold = pw.Font.helveticaBold();
+    }
+  }
+
   Future<Uint8List> buildInvoicePdf({
     required Invoice invoice,
     BusinessProfile? profile,
+    AppLanguage language = AppLanguage.english,
   }) async {
+    await _loadFonts(language);
+    // PDF structural labels are always English — the pdf package cannot do
+    // Indic script shaping (Devanagari / Bengali conjuncts, vowel marks) so
+    // regional text breaks apart visually. English labels render perfectly with
+    // every font and match standard Indian business invoice format.
+    const s = AppStrings(AppLanguage.english);
+
     final document = pw.Document(
       title: invoice.invoiceNumber,
-      author: _sellerName(profile),
+      author: _sellerName(profile, s),
       subject: 'BillEasy invoice ${invoice.invoiceNumber}',
       creator: 'BillEasy',
     );
 
-    final theme = pw.ThemeData.withFont(
-      base: pw.Font.helvetica(),
-      bold: pw.Font.helveticaBold(),
-      italic: pw.Font.helveticaOblique(),
-      boldItalic: pw.Font.helveticaBoldOblique(),
-    );
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
 
     document.addPage(
       pw.MultiPage(
         pageTheme: pw.PageTheme(
           theme: theme,
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(28, 32, 28, 28),
+          margin: const pw.EdgeInsets.fromLTRB(36, 0, 36, 32),
         ),
-        footer: (context) => _buildFooter(context),
-        build: (context) => [
-          _buildHeader(invoice, profile),
-          pw.SizedBox(height: 22),
-          _buildPartySection(invoice, profile),
-          pw.SizedBox(height: 22),
-          _buildItemsTable(invoice),
-          pw.SizedBox(height: 22),
-          _buildTotalsSection(invoice),
-          pw.SizedBox(height: 18),
-          _buildNotesSection(invoice),
+        footer: (ctx) => _footer(ctx, s),
+        build: (ctx) => [
+          _header(invoice, profile, s),
+          pw.SizedBox(height: 26),
+          _partySection(invoice, profile, s),
+          pw.SizedBox(height: 26),
+          _itemsTable(invoice, s),
+          pw.SizedBox(height: 26),
+          _totalsSection(invoice, s),
+          pw.SizedBox(height: 20),
+          _footNote(invoice, s),
         ],
       ),
     );
@@ -69,121 +108,182 @@ class InvoicePdfService {
   }
 
   String fileNameForInvoice(Invoice invoice) {
-    final invoicePart = _sanitizeForFileName(invoice.invoiceNumber, 'invoice');
-    final clientPart = _sanitizeForFileName(invoice.clientName, 'customer');
+    final invoicePart = _sanitize(invoice.invoiceNumber, 'invoice');
+    final clientPart = _sanitize(invoice.clientName, 'customer');
     return 'BillEasy_${invoicePart}_$clientPart.pdf';
   }
 
-  pw.Widget _buildHeader(Invoice invoice, BusinessProfile? profile) {
-    return pw.Container(
-      padding: const pw.EdgeInsets.all(24),
-      decoration: pw.BoxDecoration(
-        gradient: const pw.LinearGradient(
-          colors: [_brandDark, _brandLight],
-          begin: pw.Alignment.topLeft,
-          end: pw.Alignment.bottomRight,
+  // -------------------------------------------------------------------------
+  // Header
+  // -------------------------------------------------------------------------
+
+  pw.Widget _header(Invoice invoice, BusinessProfile? profile, AppStrings s) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        // Gradient accent strip
+        pw.Container(
+          height: 5,
+          decoration: const pw.BoxDecoration(
+            gradient: pw.LinearGradient(colors: [_navy, _teal]),
+          ),
         ),
-        borderRadius: pw.BorderRadius.circular(22),
-      ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Expanded(
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Text(
-                  'BillEasy',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 14,
-                    fontWeight: pw.FontWeight.bold,
-                    letterSpacing: 2.4,
+        pw.SizedBox(height: 22),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Left: branding + invoice label
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: pw.BoxDecoration(
+                      color: const PdfColor(0.07, 0.24, 0.52, 0.10),
+                      borderRadius: pw.BorderRadius.circular(6),
+                    ),
+                    child: pw.Text(
+                      'BillEasy',
+                      style: pw.TextStyle(
+                        color: _navyLight,
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
                   ),
-                ),
-                pw.SizedBox(height: 14),
-                pw.Text(
-                  'INVOICE',
-                  style: pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 28,
-                    fontWeight: pw.FontWeight.bold,
+                  pw.SizedBox(height: 10),
+                  pw.Text(
+                    s.pdfInvoice,
+                    style: pw.TextStyle(
+                      color: _headingText,
+                      fontSize: 34,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
                   ),
-                ),
-                pw.SizedBox(height: 8),
-                pw.Text(
-                  'Prepared for ${_customerName(invoice)}',
-                  style: const pw.TextStyle(
-                    color: PdfColors.white,
-                    fontSize: 12,
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    _sellerName(profile, s),
+                    style: pw.TextStyle(color: _mutedText, fontSize: 11),
                   ),
-                ),
-                pw.SizedBox(height: 12),
-                pw.Text(
-                  'Issued by ${_sellerName(profile)}',
-                  style: pw.TextStyle(
-                    color: const PdfColor(0.91, 0.95, 1),
-                    fontSize: 11,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-          pw.SizedBox(width: 18),
-          pw.Container(
-            width: 195,
-            padding: const pw.EdgeInsets.all(16),
-            decoration: pw.BoxDecoration(
-              color: PdfColors.white,
-              borderRadius: pw.BorderRadius.circular(18),
+            pw.SizedBox(width: 24),
+            // Right: meta card
+            pw.Container(
+              width: 196,
+              decoration: pw.BoxDecoration(
+                color: _surface,
+                borderRadius: pw.BorderRadius.circular(14),
+                border: pw.Border.all(color: _border, width: 0.8),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  // Status banner inside card
+                  pw.Container(
+                    padding: const pw.EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: pw.BoxDecoration(
+                      color: _statusBg(invoice.status),
+                      borderRadius: const pw.BorderRadius.only(
+                        topLeft: pw.Radius.circular(13),
+                        topRight: pw.Radius.circular(13),
+                      ),
+                    ),
+                    child: pw.Row(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      children: [
+                        pw.Text(
+                          s.detailsStatus.toUpperCase(),
+                          style: pw.TextStyle(
+                            color: _statusColor(invoice.status),
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                        pw.Text(
+                          _statusLabel(invoice.status, s),
+                          style: pw.TextStyle(
+                            color: _statusColor(invoice.status),
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.all(16),
+                    child: pw.Column(
+                      children: [
+                        _metaRow(s.pdfInvoiceNo, invoice.invoiceNumber),
+                        pw.Divider(color: _border, height: 14, thickness: 0.6),
+                        _metaRow(
+                          s.pdfInvoiceDate,
+                          _dateFormat.format(invoice.createdAt),
+                        ),
+                        pw.Divider(color: _border, height: 14, thickness: 0.6),
+                        _metaRow(
+                          s.detailsGrandTotal,
+                          _fmt(invoice.grandTotal),
+                          valueStyle: pw.TextStyle(
+                            color: _navy,
+                            fontSize: 13,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            child: pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _buildStatusBadge(invoice.status),
-                pw.SizedBox(height: 16),
-                _buildMetaLine('Invoice No.', invoice.invoiceNumber),
-                pw.SizedBox(height: 10),
-                _buildMetaLine(
-                  'Invoice Date',
-                  _dateFormat.format(invoice.createdAt),
-                ),
-                pw.SizedBox(height: 10),
-                _buildMetaLine(
-                  'Grand Total',
-                  _formatCurrency(invoice.grandTotal),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
-  pw.Widget _buildPartySection(Invoice invoice, BusinessProfile? profile) {
+  // -------------------------------------------------------------------------
+  // Party (From / Bill To)
+  // -------------------------------------------------------------------------
+
+  pw.Widget _partySection(
+    Invoice invoice,
+    BusinessProfile? profile,
+    AppStrings s,
+  ) {
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Expanded(
-          child: _buildPartyCard(
-            heading: 'From',
-            title: _sellerName(profile),
-            rows: [
-              _profileValue(profile?.address, 'Store address not added'),
-              _profileValue(profile?.phoneNumber, 'Phone number not added'),
+          child: _partyCard(
+            label: s.pdfFrom,
+            name: _sellerName(profile, s),
+            lines: [
+              _profileVal(profile?.address, s.pdfAddressNotAdded),
+              _profileVal(profile?.phoneNumber, s.pdfPhoneNotAdded),
             ],
           ),
         ),
         pw.SizedBox(width: 16),
         pw.Expanded(
-          child: _buildPartyCard(
-            heading: 'Bill To',
-            title: _customerName(invoice),
-            rows: [
+          child: _partyCard(
+            label: s.pdfBillTo,
+            name: _customerName(invoice),
+            lines: [
               if (invoice.clientId.trim().isNotEmpty)
-                'Reference: ${invoice.clientId.trim()}',
-              'Status: ${_statusLabel(invoice.status)}',
+                '${s.detailsReference}: ${invoice.clientId.trim()}',
+              '${s.detailsStatus}: ${_statusLabel(invoice.status, s)}',
             ],
           ),
         ),
@@ -191,103 +291,103 @@ class InvoicePdfService {
     );
   }
 
-  pw.Widget _buildPartyCard({
-    required String heading,
-    required String title,
-    required List<String> rows,
+  pw.Widget _partyCard({
+    required String label,
+    required String name,
+    required List<String> lines,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.all(18),
       decoration: pw.BoxDecoration(
-        color: _paperTint,
-        borderRadius: pw.BorderRadius.circular(18),
-        border: pw.Border.all(color: _border, width: 1),
+        color: _surface,
+        borderRadius: pw.BorderRadius.circular(14),
+        border: pw.Border.all(color: _border, width: 0.8),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Text(
-            heading.toUpperCase(),
+            label,
             style: pw.TextStyle(
-              color: _brandDark,
-              fontSize: 10,
+              color: _teal,
+              fontSize: 9,
               fontWeight: pw.FontWeight.bold,
-              letterSpacing: 1.2,
+              letterSpacing: 1.4,
             ),
           ),
-          pw.SizedBox(height: 10),
+          pw.SizedBox(height: 8),
           pw.Text(
-            title,
+            name,
             style: pw.TextStyle(
-              color: _darkText,
-              fontSize: 16,
+              color: _headingText,
+              fontSize: 15,
               fontWeight: pw.FontWeight.bold,
             ),
           ),
-          pw.SizedBox(height: 10),
-          ...rows.map(
-            (row) => pw.Padding(
-              padding: const pw.EdgeInsets.only(bottom: 6),
-              child: pw.Text(
-                row,
-                style: pw.TextStyle(
-                  color: _mutedText,
-                  fontSize: 11,
-                  lineSpacing: 3,
+          if (lines.isNotEmpty) ...[
+            pw.SizedBox(height: 10),
+            pw.Container(height: 0.6, color: _border),
+            pw.SizedBox(height: 10),
+            ...lines.map(
+              (line) => pw.Padding(
+                padding: const pw.EdgeInsets.only(bottom: 5),
+                child: pw.Text(
+                  line,
+                  style: pw.TextStyle(
+                    color: _mutedText,
+                    fontSize: 10,
+                    lineSpacing: 2,
+                  ),
                 ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
   }
 
-  pw.Widget _buildItemsTable(Invoice invoice) {
+  // -------------------------------------------------------------------------
+  // Items table
+  // -------------------------------------------------------------------------
+
+  pw.Widget _itemsTable(Invoice invoice, AppStrings s) {
+    final headerCells = [
+      _cell(s.pdfItem, header: true),
+      _cell(s.detailsItemQty, header: true, align: pw.Alignment.center),
+      _cell(
+        s.detailsItemUnitPrice,
+        header: true,
+        align: pw.Alignment.centerRight,
+      ),
+      _cell(s.pdfAmount, header: true, align: pw.Alignment.centerRight),
+    ];
+
     final rows = <pw.TableRow>[
       pw.TableRow(
-        decoration: const pw.BoxDecoration(color: _brandDark),
-        children: [
-          _tableCell('Item', isHeader: true),
-          _tableCell('Qty', isHeader: true, alignment: pw.Alignment.center),
-          _tableCell(
-            'Unit Price',
-            isHeader: true,
-            alignment: pw.Alignment.centerRight,
-          ),
-          _tableCell(
-            'Amount',
-            isHeader: true,
-            alignment: pw.Alignment.centerRight,
-          ),
-        ],
+        decoration: const pw.BoxDecoration(
+          gradient: pw.LinearGradient(colors: [_navy, _navyLight]),
+        ),
+        children: headerCells,
       ),
     ];
 
-    for (var index = 0; index < invoice.items.length; index++) {
-      final item = invoice.items[index];
-      final isStriped = index.isOdd;
-
+    for (var i = 0; i < invoice.items.length; i++) {
+      final item = invoice.items[i];
       rows.add(
         pw.TableRow(
           decoration: pw.BoxDecoration(
-            color: isStriped ? _paperTint : PdfColors.white,
+            color: i.isEven ? PdfColors.white : _surface,
           ),
           children: [
-            _tableCell('${index + 1}. ${item.description}'),
-            _tableCell(
-              item.quantity.toString(),
-              alignment: pw.Alignment.center,
-            ),
-            _tableCell(
-              _formatCurrency(item.unitPrice),
-              alignment: pw.Alignment.centerRight,
-            ),
-            _tableCell(
-              _formatCurrency(item.total),
-              alignment: pw.Alignment.centerRight,
-              valueColor: _darkText,
-              fontWeight: pw.FontWeight.bold,
+            _cell('${i + 1}.  ${item.description}'),
+            _cell(item.quantityLabel, align: pw.Alignment.center),
+            _cell(_fmt(item.unitPrice), align: pw.Alignment.centerRight),
+            _cell(
+              _fmt(item.total),
+              align: pw.Alignment.centerRight,
+              color: _bodyText,
+              bold: true,
             ),
           ],
         ),
@@ -297,71 +397,70 @@ class InvoicePdfService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Items',
-          style: pw.TextStyle(
-            color: _darkText,
-            fontSize: 17,
-            fontWeight: pw.FontWeight.bold,
+        _sectionLabel(s.detailsItems),
+        pw.SizedBox(height: 10),
+        pw.ClipRRect(
+          horizontalRadius: 12,
+          verticalRadius: 12,
+          child: pw.Table(
+            border: pw.TableBorder(
+              horizontalInside: pw.BorderSide(color: _border, width: 0.6),
+              left: pw.BorderSide(color: _border, width: 0.6),
+              right: pw.BorderSide(color: _border, width: 0.6),
+              bottom: pw.BorderSide(color: _border, width: 0.6),
+            ),
+            columnWidths: const {
+              0: pw.FlexColumnWidth(4.5),
+              1: pw.FlexColumnWidth(1.1),
+              2: pw.FlexColumnWidth(1.9),
+              3: pw.FlexColumnWidth(1.9),
+            },
+            children: rows,
           ),
-        ),
-        pw.SizedBox(height: 12),
-        pw.Table(
-          border: pw.TableBorder(
-            horizontalInside: pw.BorderSide(color: _border, width: 0.8),
-            bottom: pw.BorderSide(color: _border, width: 0.8),
-            left: pw.BorderSide(color: _border, width: 0.8),
-            right: pw.BorderSide(color: _border, width: 0.8),
-          ),
-          columnWidths: const {
-            0: pw.FlexColumnWidth(4.4),
-            1: pw.FlexColumnWidth(1.1),
-            2: pw.FlexColumnWidth(1.8),
-            3: pw.FlexColumnWidth(1.9),
-          },
-          children: rows,
         ),
       ],
     );
   }
 
-  pw.Widget _buildTotalsSection(Invoice invoice) {
+  // -------------------------------------------------------------------------
+  // Totals section
+  // -------------------------------------------------------------------------
+
+  pw.Widget _totalsSection(Invoice invoice, AppStrings s) {
+    final discLabel = _discountLabel(invoice, s);
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         pw.Expanded(
           child: pw.Container(
-            padding: const pw.EdgeInsets.all(16),
+            padding: const pw.EdgeInsets.all(18),
             decoration: pw.BoxDecoration(
               color: PdfColors.white,
-              borderRadius: pw.BorderRadius.circular(18),
-              border: pw.Border.all(color: _border, width: 1),
+              borderRadius: pw.BorderRadius.circular(14),
+              border: pw.Border.all(color: _border, width: 0.8),
             ),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text(
-                  'Summary',
-                  style: pw.TextStyle(
-                    color: _darkText,
-                    fontSize: 16,
-                    fontWeight: pw.FontWeight.bold,
-                  ),
-                ),
+                _sectionLabel(s.detailsAmountSummary),
                 pw.SizedBox(height: 10),
                 pw.Text(
-                  '${invoice.items.length} item(s) billed • ${_statusLabel(invoice.status)}',
-                  style: pw.TextStyle(color: _mutedText, fontSize: 11),
-                ),
-                pw.SizedBox(height: 12),
-                pw.Text(
-                  invoice.hasDiscount
-                      ? '${_discountLabel(invoice)} reduced the original subtotal by ${_formatCurrency(invoice.discountAmount)}.'
-                      : 'No invoice-level discount has been applied to this bill.',
+                  s.pdfItemsCount(invoice.items.length),
                   style: pw.TextStyle(
                     color: _mutedText,
                     fontSize: 11,
-                    lineSpacing: 3,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.SizedBox(height: 8),
+                pw.Text(
+                  invoice.hasDiscount
+                      ? '$discLabel  |  -${_fmt(invoice.discountAmount)}'
+                      : s.detailsNoDiscount,
+                  style: pw.TextStyle(
+                    color: invoice.hasDiscount ? _success : _mutedText,
+                    fontSize: 10,
+                    lineSpacing: 2,
                   ),
                 ),
               ],
@@ -370,38 +469,39 @@ class InvoicePdfService {
         ),
         pw.SizedBox(width: 16),
         pw.Container(
-          width: 220,
+          width: 218,
           padding: const pw.EdgeInsets.all(18),
           decoration: pw.BoxDecoration(
-            color: _paperTint,
-            borderRadius: pw.BorderRadius.circular(18),
-            border: pw.Border.all(color: _border, width: 1),
+            color: _surface,
+            borderRadius: pw.BorderRadius.circular(14),
+            border: pw.Border.all(color: _border, width: 0.8),
           ),
           child: pw.Column(
             children: [
-              _summaryLine('Subtotal', _formatCurrency(invoice.subtotal)),
-              pw.SizedBox(height: 12),
-              _summaryLine(
-                'Discount',
+              _summaryRow(s.detailsSubtotal, _fmt(invoice.subtotal)),
+              pw.SizedBox(height: 10),
+              _summaryRow(
+                s.detailsDiscount,
                 invoice.hasDiscount
-                    ? '-${_formatCurrency(invoice.discountAmount)}'
-                    : _formatCurrency(0),
-                valueColor: invoice.hasDiscount ? _success : _darkText,
+                    ? '-${_fmt(invoice.discountAmount)}'
+                    : _fmt(0),
+                valueColor: invoice.hasDiscount ? _success : _bodyText,
               ),
               if (invoice.hasDiscount) ...[
-                pw.SizedBox(height: 6),
+                pw.SizedBox(height: 4),
                 pw.Align(
                   alignment: pw.Alignment.centerRight,
                   child: pw.Text(
-                    _discountLabel(invoice),
-                    style: pw.TextStyle(color: _mutedText, fontSize: 10),
+                    discLabel,
+                    style: pw.TextStyle(color: _mutedText, fontSize: 9),
                   ),
                 ),
               ],
-              pw.Divider(color: _border, height: 22),
-              _summaryLine(
-                'Grand Total',
-                _formatCurrency(invoice.grandTotal),
+              pw.SizedBox(height: 2),
+              pw.Divider(color: _border, height: 20, thickness: 0.6),
+              _summaryRow(
+                s.detailsGrandTotal,
+                _fmt(invoice.grandTotal),
                 emphasize: true,
               ),
             ],
@@ -411,102 +511,64 @@ class InvoicePdfService {
     );
   }
 
-  pw.Widget _buildNotesSection(Invoice invoice) {
+  // -------------------------------------------------------------------------
+  // Footnote (above footer)
+  // -------------------------------------------------------------------------
+
+  pw.Widget _footNote(Invoice invoice, AppStrings s) {
     return pw.Container(
-      padding: const pw.EdgeInsets.all(16),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       decoration: pw.BoxDecoration(
-        color: PdfColors.white,
-        borderRadius: pw.BorderRadius.circular(18),
-        border: pw.Border.all(color: _border, width: 1),
+        border: pw.Border(left: pw.BorderSide(color: _teal, width: 3)),
+        color: const PdfColor(0.94, 0.99, 0.99),
       ),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Container(
-            width: 34,
-            height: 34,
-            decoration: const pw.BoxDecoration(
-              color: _paperTint,
-              shape: pw.BoxShape.circle,
-            ),
-            child: pw.Center(
-              child: pw.Text(
-                'i',
-                style: pw.TextStyle(
-                  color: _brandDark,
-                  fontSize: 16,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          pw.SizedBox(width: 12),
-          pw.Expanded(
-            child: pw.Text(
-              'Payment status for this invoice is currently marked as ${_statusLabel(invoice.status)}. '
-              'This invoice was generated digitally using BillEasy and is ready to preview, print, or share.',
-              style: pw.TextStyle(
-                color: _mutedText,
-                fontSize: 11,
-                lineSpacing: 3,
-              ),
-            ),
-          ),
-        ],
+      child: pw.Text(
+        '${_statusLabel(invoice.status, s)} · BillEasy',
+        style: pw.TextStyle(color: _mutedText, fontSize: 10, lineSpacing: 2),
       ),
     );
   }
 
-  pw.Widget _buildFooter(pw.Context context) {
+  // -------------------------------------------------------------------------
+  // Footer
+  // -------------------------------------------------------------------------
+
+  pw.Widget _footer(pw.Context ctx, AppStrings s) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(top: 16),
+      padding: const pw.EdgeInsets.only(top: 14),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            'Generated by BillEasy on ${_generatedFormat.format(DateTime.now())}',
-            style: pw.TextStyle(color: _mutedText, fontSize: 9),
+          pw.Expanded(
+            child: pw.Text(
+              '${s.pdfGeneratedBy} · ${_generatedFormat.format(DateTime.now())}',
+              style: pw.TextStyle(color: _mutedText, fontSize: 8),
+            ),
           ),
           pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: pw.TextStyle(color: _mutedText, fontSize: 9),
+            '${s.pdfPage} ${ctx.pageNumber} ${s.pdfOf} ${ctx.pagesCount}',
+            style: pw.TextStyle(color: _mutedText, fontSize: 8),
           ),
         ],
       ),
     );
   }
 
-  pw.Widget _buildStatusBadge(InvoiceStatus status) {
-    final color = _statusColor(status);
+  // -------------------------------------------------------------------------
+  // Shared helpers
+  // -------------------------------------------------------------------------
 
-    return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: pw.BoxDecoration(
-        color: _statusBackground(status),
-        borderRadius: pw.BorderRadius.circular(999),
-      ),
-      child: pw.Text(
-        _statusLabel(status),
-        style: pw.TextStyle(
-          color: color,
-          fontSize: 10,
-          fontWeight: pw.FontWeight.bold,
-        ),
-      ),
-    );
-  }
-
-  pw.Widget _buildMetaLine(String label, String value) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+  pw.Widget _sectionLabel(String text) {
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.center,
       children: [
-        pw.Text(label, style: pw.TextStyle(color: _mutedText, fontSize: 10)),
-        pw.SizedBox(height: 4),
+        pw.Container(width: 3, height: 14, color: _teal),
+        pw.SizedBox(width: 8),
         pw.Text(
-          value,
+          text,
           style: pw.TextStyle(
-            color: _darkText,
-            fontSize: 12,
+            color: _headingText,
+            fontSize: 13,
             fontWeight: pw.FontWeight.bold,
           ),
         ),
@@ -514,32 +576,52 @@ class InvoicePdfService {
     );
   }
 
-  pw.Widget _tableCell(
+  pw.Widget _metaRow(String label, String value, {pw.TextStyle? valueStyle}) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: pw.TextStyle(color: _mutedText, fontSize: 9)),
+        pw.Text(
+          value,
+          style:
+              valueStyle ??
+              pw.TextStyle(
+                color: _bodyText,
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+              ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _cell(
     String value, {
-    bool isHeader = false,
-    pw.Alignment alignment = pw.Alignment.centerLeft,
-    PdfColor? valueColor,
-    pw.FontWeight? fontWeight,
+    bool header = false,
+    pw.Alignment align = pw.Alignment.centerLeft,
+    PdfColor? color,
+    bool bold = false,
   }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       child: pw.Align(
-        alignment: alignment,
+        alignment: align,
         child: pw.Text(
           value,
           style: pw.TextStyle(
-            color: isHeader ? PdfColors.white : valueColor ?? _mutedText,
-            fontSize: isHeader ? 10 : 11,
-            fontWeight:
-                fontWeight ??
-                (isHeader ? pw.FontWeight.bold : pw.FontWeight.normal),
+            color: header ? PdfColors.white : color ?? _mutedText,
+            fontSize: header ? 9 : 11,
+            fontWeight: (header || bold)
+                ? pw.FontWeight.bold
+                : pw.FontWeight.normal,
+            letterSpacing: header ? 0.6 : 0,
           ),
         ),
       ),
     );
   }
 
-  pw.Widget _summaryLine(
+  pw.Widget _summaryRow(
     String label,
     String value, {
     bool emphasize = false,
@@ -551,7 +633,7 @@ class InvoicePdfService {
         pw.Text(
           label,
           style: pw.TextStyle(
-            color: emphasize ? _darkText : _mutedText,
+            color: emphasize ? _headingText : _mutedText,
             fontSize: emphasize ? 12 : 11,
             fontWeight: emphasize ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
@@ -559,77 +641,13 @@ class InvoicePdfService {
         pw.Text(
           value,
           style: pw.TextStyle(
-            color: valueColor ?? _darkText,
+            color: valueColor ?? (emphasize ? _navy : _bodyText),
             fontSize: emphasize ? 16 : 12,
             fontWeight: pw.FontWeight.bold,
           ),
         ),
       ],
     );
-  }
-
-  String _sellerName(BusinessProfile? profile) {
-    final storeName = profile?.storeName.trim() ?? '';
-    if (storeName.isNotEmpty) {
-      return storeName;
-    }
-
-    return 'Your Store';
-  }
-
-  String _customerName(Invoice invoice) {
-    final clientName = invoice.clientName.trim();
-    if (clientName.isNotEmpty) {
-      return clientName;
-    }
-
-    final clientId = invoice.clientId.trim();
-    if (clientId.isNotEmpty) {
-      return clientId;
-    }
-
-    return 'Customer';
-  }
-
-  String _profileValue(String? value, String fallback) {
-    final normalized = value?.trim() ?? '';
-    if (normalized.isNotEmpty) {
-      return normalized;
-    }
-
-    return fallback;
-  }
-
-  String _discountLabel(Invoice invoice) {
-    if (!invoice.hasDiscount || invoice.discountType == null) {
-      return 'No discount';
-    }
-
-    switch (invoice.discountType!) {
-      case InvoiceDiscountType.percentage:
-        final value = invoice.discountValue;
-        final formatted = value.truncateToDouble() == value
-            ? value.toStringAsFixed(0)
-            : value.toStringAsFixed(2);
-        return '$formatted% off';
-      case InvoiceDiscountType.overall:
-        return 'Overall discount';
-    }
-  }
-
-  String _formatCurrency(double value) {
-    return _currencyFormat.format(value);
-  }
-
-  String _statusLabel(InvoiceStatus status) {
-    switch (status) {
-      case InvoiceStatus.paid:
-        return 'Paid';
-      case InvoiceStatus.pending:
-        return 'Pending';
-      case InvoiceStatus.overdue:
-        return 'Overdue';
-    }
   }
 
   PdfColor _statusColor(InvoiceStatus status) {
@@ -643,24 +661,68 @@ class InvoicePdfService {
     }
   }
 
-  PdfColor _statusBackground(InvoiceStatus status) {
+  PdfColor _statusBg(InvoiceStatus status) {
     switch (status) {
       case InvoiceStatus.paid:
-        return const PdfColor(0.91, 0.97, 0.92);
+        return _successBg;
       case InvoiceStatus.pending:
-        return const PdfColor(1, 0.96, 0.87);
+        return _warningBg;
       case InvoiceStatus.overdue:
-        return const PdfColor(0.99, 0.91, 0.91);
+        return _dangerBg;
     }
   }
 
-  String _sanitizeForFileName(String value, String fallback) {
-    final normalized = value.trim().toLowerCase();
-    if (normalized.isEmpty) {
-      return fallback;
+  String _statusLabel(InvoiceStatus status, AppStrings s) {
+    switch (status) {
+      case InvoiceStatus.paid:
+        return s.statusPaid;
+      case InvoiceStatus.pending:
+        return s.statusPending;
+      case InvoiceStatus.overdue:
+        return s.statusOverdue;
     }
+  }
 
-    final sanitized = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
-    return sanitized.replaceAll(RegExp(r'^-+|-+$'), '');
+  String _sellerName(BusinessProfile? profile, AppStrings s) {
+    final name = profile?.storeName.trim() ?? '';
+    return name.isNotEmpty ? name : s.detailsYourStore;
+  }
+
+  String _customerName(Invoice invoice) {
+    final name = invoice.clientName.trim();
+    if (name.isNotEmpty) return name;
+    final id = invoice.clientId.trim();
+    if (id.isNotEmpty) return id;
+    return 'Customer';
+  }
+
+  String _profileVal(String? value, String fallback) {
+    final v = value?.trim() ?? '';
+    return v.isNotEmpty ? v : fallback;
+  }
+
+  String _discountLabel(Invoice invoice, AppStrings s) {
+    if (!invoice.hasDiscount || invoice.discountType == null) {
+      return s.detailsNoDiscount;
+    }
+    switch (invoice.discountType!) {
+      case InvoiceDiscountType.percentage:
+        final v = invoice.discountValue;
+        final formatted = v.truncateToDouble() == v
+            ? v.toStringAsFixed(0)
+            : v.toStringAsFixed(2);
+        return s.detailsPctOff(formatted);
+      case InvoiceDiscountType.overall:
+        return s.detailsOverallDiscount;
+    }
+  }
+
+  String _fmt(double value) => _currencyFormat.format(value);
+
+  String _sanitize(String value, String fallback) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized.isEmpty) return fallback;
+    final r = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
+    return r.replaceAll(RegExp(r'^-+|-+$'), '');
   }
 }

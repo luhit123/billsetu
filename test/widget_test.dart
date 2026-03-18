@@ -1,14 +1,20 @@
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
 import 'package:billeasy/screens/home_screen.dart';
 import 'package:billeasy/widgets/invoice_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   testWidgets('HomeScreen shows streamed invoices', (
     WidgetTester tester,
   ) async {
+    SharedPreferences.setMockInitialValues({});
+
     final sampleInvoices = [
       Invoice(
         id: 'test-1',
@@ -29,13 +35,15 @@ void main() {
     ];
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: HomeScreen(
-          invoicesStream: Stream<List<Invoice>>.value(sampleInvoices),
+      LanguageProvider(
+        child: MaterialApp(
+          home: HomeScreen(
+            invoicesStream: Stream<List<Invoice>>.value(sampleInvoices),
+          ),
         ),
       ),
     );
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('BE-2026-101'), findsOneWidget);
     expect(find.text('Akash Traders'), findsOneWidget);

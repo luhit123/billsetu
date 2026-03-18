@@ -1,15 +1,12 @@
-import 'package:billeasy/modals/client.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import 'package:billeasy/modals/invoice.dart';
 
 class FirebaseService {
-  FirebaseService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? firebaseAuth,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  FirebaseService({FirebaseFirestore? firestore, FirebaseAuth? firebaseAuth})
+    : _firestore = firestore ?? FirebaseFirestore.instance,
+      _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _firebaseAuth;
@@ -42,31 +39,41 @@ class FirebaseService {
             'createdAt',
             isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
           )
-          .where(
-            'createdAt',
-            isLessThan: Timestamp.fromDate(endDateExclusive),
-          )
+          .where('createdAt', isLessThan: Timestamp.fromDate(endDateExclusive))
           .orderBy('createdAt', descending: true);
     } else if (normalizedQuery.isEmpty) {
       query = query.orderBy('createdAt', descending: true);
     } else {
-      query = query
-          .orderBy('clientNameLower')
-          .startAt([normalizedQuery])
-          .endAt(['$normalizedQuery\uf8ff']);
+      query = query.orderBy('clientNameLower').startAt([normalizedQuery]).endAt(
+        ['$normalizedQuery\uf8ff'],
+      );
     }
 
-    return query
+    return query.snapshots().map((snapshot) {
+      return snapshot.docs
+          .map((doc) => Invoice.fromMap(doc.data(), docId: doc.id))
+          .toList();
+    });
+  }
+
+  Stream<List<Invoice>> getInvoicesForClientStream(String clientId) {
+    final ownerId = _requireOwnerId();
+
+    return _invoicesCollection
+        .where('ownerId', isEqualTo: ownerId)
+        .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
           return snapshot.docs
               .map((doc) => Invoice.fromMap(doc.data(), docId: doc.id))
+              .where((invoice) => invoice.clientId == clientId)
               .toList();
         });
   }
 
   Future<String> addInvoice(Invoice inv) async {
     final ownerId = _requireOwnerId();
+    final now = DateTime.now();
     final docRef = inv.id.isNotEmpty
         ? _invoicesCollection.doc(inv.id)
         : _invoicesCollection.doc();
@@ -75,30 +82,22 @@ class FirebaseService {
       ..['id'] = docRef.id
       ..['ownerId'] = ownerId;
 
-    final client = Client(
-      id: inv.clientId,
-      name: inv.clientName,
-      phone: '',
-      email: '',
-      address: '',
-    );
-    final clientData = client.toMap()
-      ..removeWhere(
-        (key, value) =>
-            value is String &&
-            value.isEmpty &&
-            key != 'id' &&
-            key != 'name' &&
-            key != 'nameLower',
-      );
-
     await _firestore.runTransaction((transaction) async {
+      final clientRef = _clientsCollection(ownerId).doc(inv.clientId);
+      final clientSnapshot = await transaction.get(clientRef);
+      final clientData = <String, dynamic>{
+        'id': inv.clientId,
+        'name': inv.clientName,
+        'nameLower': inv.clientName.trim().toLowerCase(),
+        'updatedAt': Timestamp.fromDate(now),
+      };
+
+      if (!clientSnapshot.exists) {
+        clientData['createdAt'] = Timestamp.fromDate(now);
+      }
+
       transaction.set(docRef, data);
-      transaction.set(
-        _clientsCollection(ownerId).doc(inv.clientId),
-        clientData,
-        SetOptions(merge: true),
-      );
+      transaction.set(clientRef, clientData, SetOptions(merge: true));
     });
 
     return docRef.id;

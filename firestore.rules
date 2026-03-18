@@ -24,6 +24,10 @@ service cloud.firestore {
       match /clients/{clientId} {
         allow read, write: if isOwner(userId);
       }
+
+      match /customerGroups/{groupId} {
+        allow read, write: if isOwner(userId);
+      }
     }
   }
 }

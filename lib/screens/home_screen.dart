@@ -1,9 +1,12 @@
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
+import 'package:billeasy/screens/customers_screen.dart';
 import 'package:billeasy/screens/feature_placeholder_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/screens/settings_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/widgets/invoice_card.dart';
@@ -42,6 +45,13 @@ class _HomeScreenState extends State<HomeScreen> {
   InvoiceFilter _selectedFilter = InvoiceFilter.all;
   InvoicePeriodFilter _selectedPeriodFilter = InvoicePeriodFilter.currentMonth;
   DateTimeRange? _customDateRange;
+  late AppStrings _s;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _s = AppStrings.of(context);
+  }
 
   @override
   void dispose() {
@@ -65,7 +75,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fontWeight: FontWeight.w600,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search customer name',
+                  hintText: _s.homeSearchHint,
                   hintStyle: TextStyle(color: Colors.white.withAlpha(170)),
                   border: InputBorder.none,
                 ),
@@ -75,9 +85,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   });
                 },
               )
-            : const Text(
-                'BillEasy',
-                style: TextStyle(
+            : Text(
+                _s.homeTitle,
+                style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
                 ),
@@ -93,12 +103,12 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             onPressed: _toggleSearch,
             icon: Icon(_isSearching ? Icons.close_rounded : Icons.search),
-            tooltip: _isSearching ? 'Close search' : 'Search customers',
+            tooltip: _isSearching ? _s.homeCloseSearch : _s.homeSearchTooltip,
           ),
           IconButton(
             onPressed: _showPeriodPicker,
             icon: const Icon(Icons.calendar_month_rounded),
-            tooltip: 'Filter by period',
+            tooltip: _s.homeFilterPeriodTooltip,
           ),
         ],
       ),
@@ -115,7 +125,7 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Unable to load invoices right now.',
+                  _s.homeLoadError,
                   style: Theme.of(context).textTheme.titleMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -191,7 +201,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         _PeriodSummaryCard(
-                          label: 'Period',
+                          label: _s.homePeriodLabel,
                           value: _periodLabel,
                           onTap: _showPeriodPicker,
                         ),
@@ -207,28 +217,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                 SizedBox(
                                   width: cardWidth,
                                   child: _StatCard(
-                                    label: 'Total Billed',
+                                    label: _s.homeStatTotalBilled,
                                     value: _currencyFormat.format(totalBilled),
                                   ),
                                 ),
                                 SizedBox(
                                   width: cardWidth,
                                   child: _StatCard(
-                                    label: 'Collected',
+                                    label: _s.homeStatCollected,
                                     value: _currencyFormat.format(collected),
                                   ),
                                 ),
                                 SizedBox(
                                   width: cardWidth,
                                   child: _StatCard(
-                                    label: 'Outstanding',
+                                    label: _s.homeStatOutstanding,
                                     value: _currencyFormat.format(outstanding),
                                   ),
                                 ),
                                 SizedBox(
                                   width: cardWidth,
                                   child: _StatCard(
-                                    label: 'Discounts',
+                                    label: _s.homeStatDiscounts,
                                     value: _currencyFormat.format(
                                       discountsGiven,
                                     ),
@@ -243,18 +253,24 @@ class _HomeScreenState extends State<HomeScreen> {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              _buildFilterChip(InvoiceFilter.all, 'All'),
+                              _buildFilterChip(
+                                InvoiceFilter.all,
+                                _s.homeFilterAll,
+                              ),
                               const SizedBox(width: 8),
-                              _buildFilterChip(InvoiceFilter.paid, 'Paid'),
+                              _buildFilterChip(
+                                InvoiceFilter.paid,
+                                _s.homeFilterPaid,
+                              ),
                               const SizedBox(width: 8),
                               _buildFilterChip(
                                 InvoiceFilter.pending,
-                                'Pending',
+                                _s.homeFilterPending,
                               ),
                               const SizedBox(width: 8),
                               _buildFilterChip(
                                 InvoiceFilter.overdue,
-                                'Overdue',
+                                _s.homeFilterOverdue,
                               ),
                             ],
                           ),
@@ -265,10 +281,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? Center(
                                   child: Text(
                                     hasSearchQuery && invoices.isEmpty
-                                        ? 'No invoices found for "$_searchQuery".'
+                                        ? _s.homeNoInvoicesSearch(_searchQuery)
                                         : invoices.isEmpty
-                                        ? 'No invoices available yet.'
-                                        : 'No invoices match this filter.',
+                                        ? _s.homeNoInvoicesYet
+                                        : _s.homeNoInvoicesFilter,
                                     style: Theme.of(
                                       context,
                                     ).textTheme.titleMedium,
@@ -412,7 +428,7 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               _PeriodOptionTile(
-                title: 'All Invoices',
+                title: _s.homePeriodAllInvoices,
                 isSelected:
                     _selectedPeriodFilter == InvoicePeriodFilter.allTime,
                 onTap: () {
@@ -423,7 +439,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               _PeriodOptionTile(
-                title: 'Today',
+                title: _s.homePeriodToday,
                 isSelected: _selectedPeriodFilter == InvoicePeriodFilter.today,
                 onTap: () {
                   Navigator.of(sheetContext).pop();
@@ -433,7 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               _PeriodOptionTile(
-                title: 'This Week',
+                title: _s.homePeriodThisWeek,
                 isSelected:
                     _selectedPeriodFilter == InvoicePeriodFilter.thisWeek,
                 onTap: () {
@@ -484,7 +500,7 @@ class _HomeScreenState extends State<HomeScreen> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
       initialDateRange: initialRange,
-      saveText: 'Apply',
+      saveText: _s.homeDateApply,
     );
 
     if (pickedRange == null) {
@@ -500,29 +516,35 @@ class _HomeScreenState extends State<HomeScreen> {
   String get _periodLabel {
     switch (_selectedPeriodFilter) {
       case InvoicePeriodFilter.allTime:
-        return 'All Invoices';
+        return _s.homePeriodAllInvoices;
       case InvoicePeriodFilter.today:
-        return 'Today';
+        return _s.homePeriodToday;
       case InvoicePeriodFilter.thisWeek:
-        return 'This Week';
+        return _s.homePeriodThisWeek;
       case InvoicePeriodFilter.currentMonth:
         return _monthLabelFormat.format(DateTime.now());
       case InvoicePeriodFilter.customRange:
         final customRange = _customDateRange;
         if (customRange == null) {
-          return 'Custom Range';
+          return _s.homePeriodCustomRange;
         }
-        return '${_periodDateFormat.format(customRange.start)} - ${_periodDateFormat.format(customRange.end)}';
+        return _s.homePeriodDateRange(
+          _periodDateFormat.format(customRange.start),
+          _periodDateFormat.format(customRange.end),
+        );
     }
   }
 
   String get _customPeriodSheetLabel {
     final customRange = _customDateRange;
     if (customRange == null) {
-      return 'Custom Range';
+      return _s.homePeriodCustomRange;
     }
 
-    return 'Custom: ${_periodDateFormat.format(customRange.start)} - ${_periodDateFormat.format(customRange.end)}';
+    return _s.homePeriodCustomLabel(
+      _periodDateFormat.format(customRange.start),
+      _periodDateFormat.format(customRange.end),
+    );
   }
 
   (DateTime, DateTime)? get _selectedPeriodBounds {
@@ -601,8 +623,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDrawerBody(User? user) {
     final displayName = _displayNameForUser(user);
-    final subtitle = user?.email ?? 'Not signed in';
-    final authActionLabel = user == null ? 'Log In' : 'Log Out';
+    final subtitle = user?.email ?? _s.drawerNotSignedIn;
+    final authActionLabel = user == null ? _s.drawerLogIn : _s.drawerLogOut;
     final authActionIcon = user == null
         ? Icons.login_rounded
         : Icons.logout_rounded;
@@ -663,10 +685,10 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const _DrawerSectionLabel(title: 'Workspace'),
+                  _DrawerSectionLabel(title: _s.drawerWorkspace),
                   _DrawerMenuTile(
                     icon: Icons.badge_outlined,
-                    title: 'My Profile',
+                    title: _s.drawerMyProfile,
                     onTap: () {
                       _openDrawerScreen(const ProfileSetupScreen());
                     },
@@ -674,13 +696,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.inventory_2_outlined,
-                    title: 'Products',
+                    title: _s.drawerProducts,
                     onTap: () {
                       _openDrawerPlaceholder(
-                        title: 'Products',
+                        title: _s.drawerProducts,
                         icon: Icons.inventory_2_outlined,
-                        description:
-                            'Create and organize your product catalog, pricing, and reusable invoice items from one place.',
+                        description: _s.drawerProductsDesc,
                         accentColor: const Color(0xFF16608A),
                       );
                     },
@@ -688,27 +709,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.groups_2_outlined,
-                    title: 'Customers',
+                    title: _s.drawerCustomers,
                     onTap: () {
-                      _openDrawerPlaceholder(
-                        title: 'Customers',
-                        icon: Icons.groups_2_outlined,
-                        description:
-                            'Manage customer records, contact details, and billing relationships for every client account.',
-                        accentColor: const Color(0xFF0F7D83),
-                      );
+                      _openDrawerScreen(const CustomersScreen());
                     },
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.workspace_premium_outlined,
-                    title: 'Subscriptions',
+                    title: _s.drawerSubscriptions,
                     onTap: () {
                       _openDrawerPlaceholder(
-                        title: 'Subscriptions',
+                        title: _s.drawerSubscriptions,
                         icon: Icons.workspace_premium_outlined,
-                        description:
-                            'Track active plans, recurring billing, renewals, and premium access features for your business.',
+                        description: _s.drawerSubscriptionsDesc,
                         accentColor: const Color(0xFF5A4FCF),
                       );
                     },
@@ -716,13 +730,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.query_stats_outlined,
-                    title: 'Analytics',
+                    title: _s.drawerAnalytics,
                     onTap: () {
                       _openDrawerPlaceholder(
-                        title: 'Analytics',
+                        title: _s.drawerAnalytics,
                         icon: Icons.query_stats_outlined,
-                        description:
-                            'See billing trends, collections, overdue patterns, and business performance insights at a glance.',
+                        description: _s.drawerAnalyticsDesc,
                         accentColor: const Color(0xFF005C6B),
                       );
                     },
@@ -730,13 +743,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.receipt_long_outlined,
-                    title: 'GST',
+                    title: _s.drawerGst,
                     onTap: () {
                       _openDrawerPlaceholder(
-                        title: 'GST',
+                        title: _s.drawerGst,
                         icon: Icons.receipt_long_outlined,
-                        description:
-                            'Prepare GST-ready records, tax summaries, and compliance-friendly invoice data for filing.',
+                        description: _s.drawerGstDesc,
                         accentColor: const Color(0xFF8A5A16),
                       );
                     },
@@ -744,15 +756,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.settings_outlined,
-                    title: 'Settings',
+                    title: _s.drawerSettings,
                     onTap: () {
-                      _openDrawerPlaceholder(
-                        title: 'Settings',
-                        icon: Icons.settings_outlined,
-                        description:
-                            'Control preferences, app behavior, business defaults, and account-level configuration settings.',
-                        accentColor: const Color(0xFF3C4A6B),
-                      );
+                      _openDrawerScreen(const SettingsScreen());
                     },
                   ),
                 ],
@@ -830,9 +836,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text('Failed to log out: $error')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_s.drawerFailedLogOut(error.toString()))),
+      );
     }
   }
 
@@ -847,7 +853,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return email;
     }
 
-    return 'My Profile';
+    return _s.drawerMyProfileFallback;
   }
 
   String _avatarLabelForUser(User? user) {
@@ -961,7 +967,7 @@ class _PeriodSummaryCard extends StatelessWidget {
                 ),
               ),
               Text(
-                'Change',
+                AppStrings.of(context).homePeriodChange,
                 style: TextStyle(
                   color: Colors.teal.shade800,
                   fontWeight: FontWeight.w700,

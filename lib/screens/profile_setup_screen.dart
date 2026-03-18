@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/profile_service.dart';
@@ -45,25 +46,26 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final currentUser = FirebaseAuth.instance.currentUser;
     final promptTitle = widget.isRequiredSetup
-        ? 'Set up your billing profile'
-        : 'My Profile';
+        ? s.profilePromptTitleSetup
+        : s.profilePromptTitleEdit;
     final promptBody = widget.isRequiredSetup
-        ? 'Add your shop details once so they can appear on your invoices. Every field is optional, but saving this profile unlocks your workspace.'
-        : 'Update the business details that appear on your invoices. All fields stay optional, so you can keep it light and edit later.';
+        ? s.profilePromptBodySetup
+        : s.profilePromptBodyEdit;
 
     return PopScope(
       canPop: !widget.isRequiredSetup,
       child: Scaffold(
         appBar: AppBar(
           automaticallyImplyLeading: !widget.isRequiredSetup,
-          title: Text(widget.isRequiredSetup ? 'Complete Profile' : 'My Profile'),
+          title: Text(widget.isRequiredSetup ? s.profileAppBarSetup : s.profileAppBarEdit),
           actions: [
             if (widget.isRequiredSetup)
               IconButton(
                 onPressed: _isSaving ? null : _signOut,
-                tooltip: 'Sign out',
+                tooltip: s.profileSignOutTooltip,
                 icon: const Icon(Icons.logout_rounded),
               ),
           ],
@@ -131,7 +133,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       ),
                                     ),
                                     child: Text(
-                                      currentUser?.email ?? 'Business profile',
+                                      currentUser?.email ?? s.profileBadgeFallback,
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
@@ -162,8 +164,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     controller: _storeNameController,
                                     textCapitalization: TextCapitalization.words,
                                     decoration: _inputDecoration(
-                                      label: 'Store / Shop Name',
-                                      hint: 'Optional',
+                                      label: s.profileStoreLabel,
+                                      hint: s.profileOptionalHint,
                                       icon: Icons.storefront_outlined,
                                     ),
                                   ),
@@ -173,8 +175,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     textCapitalization: TextCapitalization.sentences,
                                     maxLines: 3,
                                     decoration: _inputDecoration(
-                                      label: 'Address',
-                                      hint: 'Optional',
+                                      label: s.profileAddressLabel,
+                                      hint: s.profileOptionalHint,
                                       icon: Icons.location_on_outlined,
                                     ),
                                   ),
@@ -183,8 +185,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     controller: _phoneController,
                                     keyboardType: TextInputType.phone,
                                     decoration: _inputDecoration(
-                                      label: 'Phone Number',
-                                      hint: 'Optional',
+                                      label: s.profilePhoneLabel,
+                                      hint: s.profileOptionalHint,
                                       icon: Icons.call_outlined,
                                     ),
                                   ),
@@ -205,10 +207,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       ),
                                       child: Text(
                                         _isSaving
-                                            ? 'Saving...'
+                                            ? s.profileSaving
                                             : widget.isRequiredSetup
-                                            ? 'Save and Continue'
-                                            : 'Save Profile',
+                                            ? s.profileSaveAndContinue
+                                            : s.profileSave,
                                       ),
                                     ),
                                   ),
@@ -287,7 +289,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
     if (currentUser == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in again to save profile.')),
+        SnackBar(content: Text(AppStrings.of(context).profileSignInRequired)),
       );
       return;
     }
@@ -311,7 +313,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile saved successfully.')),
+        SnackBar(content: Text(AppStrings.of(context).profileSavedSuccess)),
       );
 
       if (!widget.isRequiredSetup) {
@@ -323,7 +325,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save profile: $error')),
+        SnackBar(content: Text(AppStrings.of(context).profileFailedSave(error.toString()))),
       );
     } finally {
       if (mounted) {
@@ -343,7 +345,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to sign out: $error')),
+        SnackBar(content: Text(AppStrings.of(context).profileFailedSignOut(error.toString()))),
       );
     }
   }

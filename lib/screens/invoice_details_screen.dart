@@ -1,7 +1,12 @@
 import 'dart:typed_data';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
+import 'package:billeasy/screens/language_selection_screen.dart';
+import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/screens/customer_details_screen.dart';
+import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -32,10 +37,10 @@ class InvoiceDetailsScreen extends StatelessWidget {
       stream: profileStream,
       builder: (context, snapshot) {
         final profile = snapshot.data;
-        final sellerName = _sellerName(profile);
-
+        final s = AppStrings.of(context);
+        final sellerName = _sellerName(profile, s);
         return Scaffold(
-          appBar: AppBar(title: const Text('Invoice Details')),
+          appBar: AppBar(title: Text(s.detailsTitle)),
           bottomNavigationBar: SafeArea(
             minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: Row(
@@ -44,7 +49,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   child: OutlinedButton.icon(
                     onPressed: () => _previewInvoicePdf(context, profile),
                     icon: const Icon(Icons.print_outlined),
-                    label: const Text('Preview / Print'),
+                    label: Text(s.detailsPreviewPrint),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -52,7 +57,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   child: FilledButton.icon(
                     onPressed: () => _shareInvoicePdf(context, profile),
                     icon: const Icon(Icons.share_outlined),
-                    label: const Text('Share PDF'),
+                    label: Text(s.detailsSharePdf),
                   ),
                 ),
               ],
@@ -113,7 +118,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Issued by $sellerName',
+                                  s.detailsIssuedBy(sellerName),
                                   style: const TextStyle(
                                     color: Colors.white70,
                                     fontSize: 13,
@@ -123,7 +128,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                             ),
                           ),
                           Chip(
-                            label: Text(_statusLabel(invoice.status)),
+                            label: Text(_statusLabel(invoice.status, s)),
                             backgroundColor: Colors.white,
                             labelStyle: TextStyle(
                               color: _statusTextColor(invoice.status),
@@ -138,14 +143,14 @@ class InvoiceDetailsScreen extends StatelessWidget {
                         children: [
                           Expanded(
                             child: _HeaderMeta(
-                              label: 'Invoice Date',
+                              label: s.createInvoiceDate,
                               value: _dateFormat.format(invoice.createdAt),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: _HeaderMeta(
-                              label: 'Grand Total',
+                              label: s.createSummaryGrandTotal,
                               value: _currencyFormat.format(invoice.grandTotal),
                             ),
                           ),
@@ -156,25 +161,25 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 _DetailSection(
-                  title: 'Seller',
+                  title: s.detailsSeller,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _InfoRow(label: 'Store', value: sellerName),
+                      _InfoRow(label: s.detailsStore, value: sellerName),
                       const SizedBox(height: 10),
                       _InfoRow(
-                        label: 'Address',
+                        label: s.detailsAddress,
                         value: _profileValueOrFallback(
                           profile?.address,
-                          'Not added yet',
+                          s.detailsNotAddedYet,
                         ),
                       ),
                       const SizedBox(height: 10),
                       _InfoRow(
-                        label: 'Phone',
+                        label: s.detailsPhone,
                         value: _profileValueOrFallback(
                           profile?.phoneNumber,
-                          'Not added yet',
+                          s.detailsNotAddedYet,
                         ),
                       ),
                     ],
@@ -182,19 +187,74 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 _DetailSection(
-                  title: 'Customer',
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _InfoRow(label: 'Name', value: customerName),
-                      const SizedBox(height: 10),
-                      _InfoRow(label: 'Reference', value: invoice.clientId),
-                    ],
+                  title: s.detailsCustomer,
+                  child: StreamBuilder<Client?>(
+                    stream: Firebase.apps.isEmpty
+                        ? Stream<Client?>.value(null)
+                        : ClientService().watchClient(invoice.clientId),
+                    builder: (context, clientSnapshot) {
+                      final client = clientSnapshot.data;
+
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _InfoRow(label: s.detailsName, value: customerName),
+                          const SizedBox(height: 10),
+                          _InfoRow(
+                            label: s.detailsReference,
+                            value: invoice.clientId,
+                          ),
+                          if (client != null &&
+                              client.phone.trim().isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            _InfoRow(
+                              label: s.detailsPhone,
+                              value: client.phone.trim(),
+                            ),
+                          ],
+                          if (client != null &&
+                              client.email.trim().isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            _InfoRow(
+                              label: s.detailsEmail,
+                              value: client.email.trim(),
+                            ),
+                          ],
+                          if (client != null &&
+                              client.address.trim().isNotEmpty) ...[
+                            const SizedBox(height: 10),
+                            _InfoRow(
+                              label: s.detailsAddress,
+                              value: client.address.trim(),
+                            ),
+                          ],
+                          if (client != null) ...[
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerLeft,
+                              child: TextButton.icon(
+                                onPressed: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          CustomerDetailsScreen(client: client),
+                                    ),
+                                  );
+                                },
+                                icon: const Icon(Icons.person_search_outlined),
+                                label: Text(s.detailsOpenProfile),
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 18),
                 _DetailSection(
-                  title: 'Items',
+                  title: s.detailsItems,
                   child: Column(
                     children: [
                       ...invoice.items.map((item) {
@@ -221,13 +281,13 @@ class InvoiceDetailsScreen extends StatelessWidget {
                                 children: [
                                   Expanded(
                                     child: _InfoRow(
-                                      label: 'Qty',
-                                      value: item.quantity.toString(),
+                                      label: s.detailsItemQty,
+                                      value: item.quantityLabel,
                                     ),
                                   ),
                                   Expanded(
                                     child: _InfoRow(
-                                      label: 'Unit Price',
+                                      label: s.detailsItemUnitPrice,
                                       value: _currencyFormat.format(
                                         item.unitPrice,
                                       ),
@@ -235,7 +295,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                                   ),
                                   Expanded(
                                     child: _InfoRow(
-                                      label: 'Total',
+                                      label: s.detailsItemTotal,
                                       value: _currencyFormat.format(item.total),
                                     ),
                                   ),
@@ -250,33 +310,33 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 18),
                 _DetailSection(
-                  title: 'Amount Summary',
+                  title: s.detailsAmountSummary,
                   child: Column(
                     children: [
                       _SummaryRow(
-                        label: 'Subtotal',
+                        label: s.detailsSubtotal,
                         value: _currencyFormat.format(invoice.subtotal),
                       ),
                       const SizedBox(height: 10),
                       _SummaryRow(
-                        label: 'Discount',
+                        label: s.detailsDiscount,
                         value: invoice.hasDiscount
-                            ? '${_discountLabel(invoice)} (-${_currencyFormat.format(invoice.discountAmount)})'
+                            ? '${_discountLabel(invoice, s)} (-${_currencyFormat.format(invoice.discountAmount)})'
                             : _currencyFormat.format(0),
                       ),
                       const SizedBox(height: 10),
                       _SummaryRow(
-                        label: 'Items Count',
+                        label: s.detailsItemsCount,
                         value: invoice.items.length.toString(),
                       ),
                       const SizedBox(height: 10),
                       _SummaryRow(
-                        label: 'Status',
-                        value: _statusLabel(invoice.status),
+                        label: s.detailsStatus,
+                        value: _statusLabel(invoice.status, s),
                       ),
                       const Divider(height: 24),
                       _SummaryRow(
-                        label: 'Grand Total',
+                        label: s.createSummaryGrandTotal,
                         value: _currencyFormat.format(invoice.grandTotal),
                         isEmphasized: true,
                       ),
@@ -295,8 +355,9 @@ class InvoiceDetailsScreen extends StatelessWidget {
     BuildContext context,
     BusinessProfile? profile,
   ) async {
+    final language = AppStrings.of(context).language;
     try {
-      final bytes = await _buildPdfBytes(profile);
+      final bytes = await _buildPdfBytes(profile, language);
       await Printing.layoutPdf(
         name: InvoicePdfService().fileNameForInvoice(invoice),
         onLayout: (_) async => bytes,
@@ -313,8 +374,9 @@ class InvoiceDetailsScreen extends StatelessWidget {
     BuildContext context,
     BusinessProfile? profile,
   ) async {
+    final language = AppStrings.of(context).language;
     try {
-      final bytes = await _buildPdfBytes(profile);
+      final bytes = await _buildPdfBytes(profile, language);
       await Printing.sharePdf(
         bytes: bytes,
         filename: InvoicePdfService().fileNameForInvoice(invoice),
@@ -327,11 +389,15 @@ class InvoiceDetailsScreen extends StatelessWidget {
     }
   }
 
-  Future<Uint8List> _buildPdfBytes(BusinessProfile? profile) async {
+  Future<Uint8List> _buildPdfBytes(
+    BusinessProfile? profile,
+    AppLanguage language,
+  ) async {
     final resolvedProfile = await _resolveProfile(profile);
     return InvoicePdfService().buildInvoicePdf(
       invoice: invoice,
       profile: resolvedProfile,
+      language: language,
     );
   }
 
@@ -348,20 +414,21 @@ class InvoiceDetailsScreen extends StatelessWidget {
   }
 
   void _showExportError(BuildContext context, Object error) {
+    final s = AppStrings.of(context);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(content: Text('Unable to generate invoice PDF: $error')),
+        SnackBar(content: Text(s.detailsPdfError(error.toString()))),
       );
   }
 
-  String _sellerName(BusinessProfile? profile) {
+  String _sellerName(BusinessProfile? profile, AppStrings s) {
     final storeName = profile?.storeName.trim() ?? '';
     if (storeName.isNotEmpty) {
       return storeName;
     }
 
-    return 'Your Store';
+    return s.detailsYourStore;
   }
 
   String _profileValueOrFallback(String? value, String fallback) {
@@ -373,20 +440,20 @@ class InvoiceDetailsScreen extends StatelessWidget {
     return fallback;
   }
 
-  String _statusLabel(InvoiceStatus status) {
+  String _statusLabel(InvoiceStatus status, AppStrings s) {
     switch (status) {
       case InvoiceStatus.paid:
-        return 'Paid';
+        return s.statusPaid;
       case InvoiceStatus.pending:
-        return 'Pending';
+        return s.statusPending;
       case InvoiceStatus.overdue:
-        return 'Overdue';
+        return s.statusOverdue;
     }
   }
 
-  String _discountLabel(Invoice invoice) {
+  String _discountLabel(Invoice invoice, AppStrings s) {
     if (invoice.discountType == null || invoice.discountValue <= 0) {
-      return 'No discount';
+      return s.detailsNoDiscount;
     }
 
     switch (invoice.discountType!) {
@@ -395,9 +462,9 @@ class InvoiceDetailsScreen extends StatelessWidget {
         final formattedValue = value.truncateToDouble() == value
             ? value.toStringAsFixed(0)
             : value.toStringAsFixed(2);
-        return '$formattedValue% off';
+        return s.detailsPctOff(formattedValue);
       case InvoiceDiscountType.overall:
-        return 'Overall discount';
+        return s.detailsOverallDiscount;
     }
   }
 

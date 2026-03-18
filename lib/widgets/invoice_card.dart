@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -138,7 +139,7 @@ class InvoiceCard extends StatelessWidget {
                           ),
                         ),
                         child: Chip(
-                          label: Text(_statusLabel(invoice.status)),
+                          label: Text(_statusLabel(context, invoice.status)),
                           backgroundColor: _statusColor(invoice.status),
                           labelStyle: TextStyle(
                             color: _statusTextColor(invoice.status),
@@ -164,13 +165,14 @@ class InvoiceCard extends StatelessWidget {
     await showModalBottomSheet<void>(
       context: context,
       builder: (context) {
+        final s = AppStrings.of(context);
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               ListTile(
                 leading: const Icon(Icons.check_circle_outline),
-                title: const Text('Mark as Paid'),
+                title: Text(s.cardMarkPaid),
                 onTap: () {
                   Navigator.of(context).pop();
                   onStatusChange(InvoiceStatus.paid);
@@ -178,7 +180,7 @@ class InvoiceCard extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.warning_amber_rounded),
-                title: const Text('Mark as Overdue'),
+                title: Text(s.cardMarkOverdue),
                 onTap: () {
                   Navigator.of(context).pop();
                   onStatusChange(InvoiceStatus.overdue);
@@ -186,9 +188,9 @@ class InvoiceCard extends StatelessWidget {
               ),
               ListTile(
                 leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
+                title: Text(
+                  s.cardDelete,
+                  style: const TextStyle(color: Colors.red),
                 ),
                 onTap: () {
                   Navigator.of(context).pop();
@@ -212,14 +214,15 @@ class InvoiceCard extends StatelessWidget {
     return value[0].toUpperCase();
   }
 
-  String _statusLabel(InvoiceStatus status) {
+  String _statusLabel(BuildContext context, InvoiceStatus status) {
+    final s = AppStrings.of(context);
     switch (status) {
       case InvoiceStatus.paid:
-        return 'Paid';
+        return s.statusPaid;
       case InvoiceStatus.pending:
-        return 'Pending';
+        return s.statusPending;
       case InvoiceStatus.overdue:
-        return 'Overdue';
+        return s.statusOverdue;
     }
   }
 
