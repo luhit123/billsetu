@@ -1,6 +1,5 @@
 import 'dart:ui';
 
-import 'package:billeasy/screens/home_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -189,27 +188,30 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       if (user != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-        );
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Google sign-in was cancelled.')),
         );
       }
     } on FirebaseAuthException catch (error) {
+      debugPrint('[LoginScreen] FirebaseAuthException: ${error.code} — ${error.message}');
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message ?? 'Google sign-in failed.')),
+        SnackBar(content: Text('Firebase error [${error.code}]: ${error.message ?? 'Sign-in failed.'}')),
       );
-    } catch (error) {
+    } catch (error, stack) {
+      debugPrint('[LoginScreen] Exception: ${error.runtimeType} — $error');
+      debugPrint('[LoginScreen] Stack: $stack');
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Google sign-in failed: $error')),
+        SnackBar(content: Text('Sign-in failed [${error.runtimeType}]: $error')),
       );
     } finally {
       if (mounted) {

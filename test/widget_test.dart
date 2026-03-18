@@ -12,6 +12,7 @@ void main() {
     final sampleInvoices = [
       Invoice(
         id: 'test-1',
+        ownerId: 'owner-123',
         invoiceNumber: 'BE-2026-101',
         clientId: 'akash-traders-mumbai',
         clientName: 'Akash Traders',

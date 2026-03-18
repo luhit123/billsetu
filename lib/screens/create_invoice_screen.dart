@@ -1,6 +1,8 @@
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
+import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -14,6 +16,7 @@ class CreateInvoiceScreen extends StatefulWidget {
 class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController clientNameController = TextEditingController();
+  final TextEditingController _discountController = TextEditingController();
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
@@ -22,6 +25,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   DateTime? selectedDate;
   bool _isSaving = false;
+  InvoiceStatus _selectedStatus = InvoiceStatus.paid;
+  InvoiceDiscountType _selectedDiscountType = InvoiceDiscountType.percentage;
   late List<Map<String, TextEditingController>> itemRows;
 
   @override
@@ -33,6 +38,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   @override
   void dispose() {
     clientNameController.dispose();
+    _discountController.dispose();
     for (final row in itemRows) {
       _disposeRowControllers(row);
     }
@@ -41,12 +47,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final grandTotal = _calculateGrandTotal();
+    final subtotal = _calculateSubtotal();
+    final discountAmount = _calculateDiscountAmount(subtotal);
+    final grandTotal = subtotal - discountAmount;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Create Invoice'),
-      ),
+      appBar: AppBar(title: const Text('Create Invoice')),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -68,15 +74,113 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 },
               ),
               const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.calendar_today_outlined),
-                  label: Text(
-                    selectedDate == null
-                        ? 'Pick Invoice Date'
-                        : DateFormat('dd MMM yyyy').format(selectedDate!),
+              Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(20),
+                  child: Ink(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: selectedDate == null
+                            ? [const Color(0xFFFFF6DA), const Color(0xFFFFFBEF)]
+                            : [Colors.teal.shade100, Colors.teal.shade50],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: selectedDate == null
+                            ? const Color(0xFFF1C24F)
+                            : Colors.teal.shade300,
+                        width: 1.4,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color:
+                              (selectedDate == null
+                                      ? const Color(0xFFF1C24F)
+                                      : Colors.teal)
+                                  .withValues(alpha: 0.14),
+                          blurRadius: 18,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: selectedDate == null
+                                ? const Color(0xFFFFE8A3)
+                                : Colors.teal.shade600,
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            Icons.calendar_month_rounded,
+                            size: 22,
+                            color: selectedDate == null
+                                ? const Color(0xFF8A5A16)
+                                : Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Invoice Date',
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      color: const Color(0xFF123C85),
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                selectedDate == null
+                                    ? 'Pick Invoice Date'
+                                    : DateFormat(
+                                        'dd MMM yyyy',
+                                      ).format(selectedDate!),
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: selectedDate == null
+                                          ? const Color(0xFF8A5A16)
+                                          : Colors.teal.shade900,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                selectedDate == null
+                                    ? 'Tap here to choose the billing date before saving.'
+                                    : 'Tap to change the selected billing date.',
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Colors.blueGrey.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: selectedDate == null
+                              ? const Color(0xFF8A5A16)
+                              : Colors.teal.shade700,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -105,12 +209,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         child: TextFormField(
                           controller: row['desc'],
                           decoration: const InputDecoration(
-                            labelText: 'Description',
+                            labelText: 'Product / Description',
                             border: OutlineInputBorder(),
                           ),
                           validator: (value) {
                             if (value == null || value.trim().isEmpty) {
-                              return 'Enter item';
+                              return 'Enter product';
                             }
                             return null;
                           },
@@ -177,6 +281,149 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   label: const Text('+ Add Item'),
                 ),
               ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.teal.shade100),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Invoice Status',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.teal.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: InvoiceStatus.values.map((status) {
+                        final isSelected = _selectedStatus == status;
+
+                        return ChoiceChip(
+                          label: Text(_statusLabel(status)),
+                          selected: isSelected,
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedStatus = status;
+                            });
+                          },
+                          selectedColor: _statusBackgroundColor(status),
+                          backgroundColor: Colors.grey.shade100,
+                          side: BorderSide(
+                            color: isSelected
+                                ? _statusBorderColor(status)
+                                : Colors.grey.shade300,
+                          ),
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? _statusTextColor(status)
+                                : Colors.blueGrey.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: Colors.teal.shade100),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Discount',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.teal.shade900,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: InvoiceDiscountType.values.map((discountType) {
+                        final isSelected =
+                            _selectedDiscountType == discountType;
+
+                        return ChoiceChip(
+                          label: Text(_discountTypeLabel(discountType)),
+                          selected: isSelected,
+                          onSelected: (_) {
+                            setState(() {
+                              _selectedDiscountType = discountType;
+                            });
+                          },
+                          selectedColor: Colors.blue.shade50,
+                          backgroundColor: Colors.grey.shade100,
+                          side: BorderSide(
+                            color: isSelected
+                                ? Colors.blue.shade200
+                                : Colors.grey.shade300,
+                          ),
+                          labelStyle: TextStyle(
+                            color: isSelected
+                                ? Colors.blue.shade900
+                                : Colors.blueGrey.shade700,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _discountController,
+                      decoration: InputDecoration(
+                        labelText:
+                            _selectedDiscountType ==
+                                InvoiceDiscountType.percentage
+                            ? 'Discount Percentage'
+                            : 'Overall Discount',
+                        hintText:
+                            _selectedDiscountType ==
+                                InvoiceDiscountType.percentage
+                            ? 'Optional, e.g. 10'
+                            : 'Optional, e.g. 500',
+                        suffixText:
+                            _selectedDiscountType ==
+                                InvoiceDiscountType.percentage
+                            ? '%'
+                            : 'INR',
+                        border: const OutlineInputBorder(),
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _discountPreviewText(subtotal, discountAmount),
+                      style: TextStyle(
+                        color: Colors.blueGrey.shade700,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
               const SizedBox(height: 20),
               Container(
                 padding: const EdgeInsets.all(16),
@@ -188,30 +435,135 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Grand Total',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Subtotal',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(subtotal),
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    Text(
-                      _currencyFormat.format(grandTotal),
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w700,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          const Text(
+                            'Discount',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            discountAmount > 0
+                                ? '-${_currencyFormat.format(discountAmount)}'
+                                : _currencyFormat.format(0),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: discountAmount > 0
+                                  ? Colors.red.shade700
+                                  : Colors.black87,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          const Text(
+                            'Grand Total',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            _currencyFormat.format(grandTotal),
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isSaving ? null : _saveInvoice,
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.teal.withValues(alpha: 0.22),
+                      blurRadius: 24,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
                 ),
-                child: Text(_isSaving ? 'Saving...' : 'Save Invoice'),
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveInvoice,
+                  icon: _isSaving
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.check_circle_outline_rounded),
+                  label: Text(_isSaving ? 'Saving Invoice...' : 'Save Invoice'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal.shade700,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.teal.shade300,
+                    disabledForegroundColor: Colors.white,
+                    elevation: 0,
+                    minimumSize: const Size.fromHeight(60),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 18,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Review the invoice date and total, then save to generate the final bill.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.blueGrey.shade600,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -263,7 +615,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  double _calculateGrandTotal() {
+  double _calculateSubtotal() {
     var total = 0.0;
 
     for (final row in itemRows) {
@@ -273,6 +625,21 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
 
     return total;
+  }
+
+  double _calculateDiscountAmount(double subtotal) {
+    final rawDiscount = double.tryParse(_discountController.text.trim()) ?? 0;
+
+    if (rawDiscount <= 0 || subtotal <= 0) {
+      return 0;
+    }
+
+    switch (_selectedDiscountType) {
+      case InvoiceDiscountType.percentage:
+        return (subtotal * (rawDiscount / 100)).clamp(0, subtotal).toDouble();
+      case InvoiceDiscountType.overall:
+        return rawDiscount.clamp(0, subtotal).toDouble();
+    }
   }
 
   Future<void> _saveInvoice() async {
@@ -294,6 +661,17 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
+    final subtotal = _calculateSubtotal();
+    final discountValue = double.tryParse(_discountController.text.trim()) ?? 0;
+    final discountError = _validateDiscount(subtotal, discountValue);
+
+    if (discountError != null) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(discountError)));
+      return;
+    }
+
     final items = itemRows.map((row) {
       return LineItem(
         description: row['desc']!.text.trim(),
@@ -302,16 +680,27 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       );
     }).toList();
     final clientName = clientNameController.text.trim();
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    if (currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in before saving invoices.')),
+      );
+      return;
+    }
 
     final invoice = Invoice(
       id: '',
+      ownerId: currentUser.uid,
       invoiceNumber:
           'BE-${DateFormat('yyyyMMddHHmmss').format(DateTime.now())}',
       clientId: _buildClientId(clientName),
       clientName: clientName,
       items: items,
       createdAt: selectedDate!,
-      status: InvoiceStatus.pending,
+      status: _selectedStatus,
+      discountType: discountValue > 0 ? _selectedDiscountType : null,
+      discountValue: discountValue > 0 ? discountValue : 0,
     );
 
     setState(() {
@@ -319,18 +708,36 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     });
 
     try {
-      await FirebaseService().addInvoice(invoice);
+      final invoiceId = await FirebaseService().addInvoice(invoice);
       if (!mounted) {
         return;
       }
-      Navigator.pop(context);
+      final savedInvoice = Invoice(
+        id: invoiceId,
+        ownerId: invoice.ownerId,
+        invoiceNumber: invoice.invoiceNumber,
+        clientId: invoice.clientId,
+        clientName: invoice.clientName,
+        items: invoice.items,
+        createdAt: invoice.createdAt,
+        status: invoice.status,
+        discountType: invoice.discountType,
+        discountValue: invoice.discountValue,
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => InvoiceDetailsScreen(invoice: savedInvoice),
+        ),
+      );
     } catch (error) {
       if (!mounted) {
         return;
       }
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save invoice: $error')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Failed to save invoice: $error')));
     } finally {
       if (mounted) {
         setState(() {
@@ -348,5 +755,90 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         .replaceAll(RegExp(r'^-+|-+$'), '');
 
     return normalized.isEmpty ? 'client' : normalized;
+  }
+
+  String _statusLabel(InvoiceStatus status) {
+    switch (status) {
+      case InvoiceStatus.paid:
+        return 'Paid';
+      case InvoiceStatus.pending:
+        return 'Pending';
+      case InvoiceStatus.overdue:
+        return 'Overdue';
+    }
+  }
+
+  Color _statusBackgroundColor(InvoiceStatus status) {
+    switch (status) {
+      case InvoiceStatus.paid:
+        return Colors.green.shade100;
+      case InvoiceStatus.pending:
+        return Colors.amber.shade100;
+      case InvoiceStatus.overdue:
+        return Colors.red.shade100;
+    }
+  }
+
+  Color _statusBorderColor(InvoiceStatus status) {
+    switch (status) {
+      case InvoiceStatus.paid:
+        return Colors.green.shade300;
+      case InvoiceStatus.pending:
+        return Colors.amber.shade300;
+      case InvoiceStatus.overdue:
+        return Colors.red.shade300;
+    }
+  }
+
+  Color _statusTextColor(InvoiceStatus status) {
+    switch (status) {
+      case InvoiceStatus.paid:
+        return Colors.green.shade900;
+      case InvoiceStatus.pending:
+        return Colors.amber.shade900;
+      case InvoiceStatus.overdue:
+        return Colors.red.shade900;
+    }
+  }
+
+  String _discountTypeLabel(InvoiceDiscountType discountType) {
+    switch (discountType) {
+      case InvoiceDiscountType.percentage:
+        return 'Percentage';
+      case InvoiceDiscountType.overall:
+        return 'Overall';
+    }
+  }
+
+  String _discountPreviewText(double subtotal, double discountAmount) {
+    final rawDiscount = double.tryParse(_discountController.text.trim()) ?? 0;
+
+    if (rawDiscount <= 0 || subtotal <= 0) {
+      return 'Leave discount empty to keep the invoice at full subtotal.';
+    }
+
+    if (_selectedDiscountType == InvoiceDiscountType.percentage) {
+      return '${rawDiscount.toStringAsFixed(rawDiscount.truncateToDouble() == rawDiscount ? 0 : 2)}% discount will reduce ${_currencyFormat.format(subtotal)} by ${_currencyFormat.format(discountAmount)}.';
+    }
+
+    return 'Overall discount of ${_currencyFormat.format(discountAmount)} will be applied to ${_currencyFormat.format(subtotal)}.';
+  }
+
+  String? _validateDiscount(double subtotal, double discountValue) {
+    if (discountValue <= 0) {
+      return null;
+    }
+
+    if (_selectedDiscountType == InvoiceDiscountType.percentage &&
+        discountValue > 100) {
+      return 'Percentage discount cannot be more than 100.';
+    }
+
+    if (_selectedDiscountType == InvoiceDiscountType.overall &&
+        discountValue > subtotal) {
+      return 'Overall discount cannot be more than the subtotal.';
+    }
+
+    return null;
   }
 }

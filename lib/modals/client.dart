@@ -27,9 +27,14 @@ class Client {
     return {
       'id': id,
       'name': name,
+      'nameLower': _normalizeName(name),
       'phone': phone,
       'email': email,
       'address': address,
     };
+  }
+
+  static String _normalizeName(String value) {
+    return value.trim().toLowerCase();
   }
 }

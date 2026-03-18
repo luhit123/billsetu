@@ -1,6 +1,13 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/login_screen.dart';
+import 'package:billeasy/screens/language_selection_screen.dart';
+import 'package:billeasy/screens/onboarding_screen.dart';
+import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/services/profile_service.dart';
 import 'package:flutter/material.dart';
 import 'package:billeasy/screens/home_screen.dart';
 
@@ -35,27 +42,154 @@ class BillEasyApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  late final StreamSubscription<User?> _authSubscription;
+  User? _currentUser;
+  User? _previousUser;
+  bool _isAuthResolved = false;
+  bool _shouldRunPostLoginFlow = false;
+  int _postLoginFlowSession = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentUser = FirebaseAuth.instance.currentUser;
+    _previousUser = _currentUser;
+    _isAuthResolved = _currentUser != null;
+
+    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (!mounted) {
+        return;
+      }
+
+      final isFreshLogin = _previousUser == null && user != null;
+
+      setState(() {
+        _currentUser = user;
+        _previousUser = user;
+        _isAuthResolved = true;
+
+        if (user == null) {
+          _shouldRunPostLoginFlow = false;
+          return;
+        }
+
+        if (isFreshLogin) {
+          _shouldRunPostLoginFlow = true;
+          _postLoginFlowSession++;
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    if (!_isAuthResolved) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_currentUser == null) {
+      return const LoginScreen();
+    }
+
+    if (_shouldRunPostLoginFlow) {
+      return PostLoginFlow(
+        key: ValueKey(_postLoginFlowSession),
+        onCompleted: _completePostLoginFlow,
+      );
+    }
+
+    return const SignedInHomeGate();
+  }
+
+  void _completePostLoginFlow() {
+    if (!mounted || !_shouldRunPostLoginFlow) {
+      return;
+    }
+
+    setState(() {
+      _shouldRunPostLoginFlow = false;
+    });
+  }
+}
+
+/// Fresh logins: language selection → onboarding.
+class PostLoginFlow extends StatefulWidget {
+  const PostLoginFlow({super.key, required this.onCompleted});
+
+  final VoidCallback onCompleted;
+
+  @override
+  State<PostLoginFlow> createState() => _PostLoginFlowState();
+}
+
+class _PostLoginFlowState extends State<PostLoginFlow> {
+  AppLanguage? _language;
+
+  @override
+  Widget build(BuildContext context) {
+    if (_language == null) {
+      return LanguageSelectionScreen(
+        onLanguageSelected: (lang) => setState(() => _language = lang),
+      );
+    }
+
+    return OnboardingScreen(
+      language: _language!,
+      onCompleted: widget.onCompleted,
+    );
+  }
+}
+
+/// Restored sessions go straight to profile completion or home.
+class SignedInHomeGate extends StatelessWidget {
+  const SignedInHomeGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<BusinessProfile?>(
+      stream: ProfileService().watchCurrentProfile(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            !snapshot.hasData) {
           return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
             body: Center(
-              child: CircularProgressIndicator(),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Unable to load your profile right now. Please try again.',
+                  style: Theme.of(context).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
           );
         }
 
-        if (snapshot.hasData) {
-          return const HomeScreen();
+        if (snapshot.data == null) {
+          return const ProfileSetupScreen(isRequiredSetup: true);
         }
 
-        return const LoginScreen();
+        return const HomeScreen();
       },
     );
   }
