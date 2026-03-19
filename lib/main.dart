@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:billeasy/firebase_options.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:billeasy/l10n/app_strings.dart';
@@ -9,43 +11,77 @@ import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/screens/onboarding_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/services/app_check_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:flutter/material.dart';
 import 'package:billeasy/screens/home_screen.dart';
+import 'package:billeasy/theme/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  FlutterError.onError = (FlutterErrorDetails details) {
+    debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[PlatformError] $error\n$stack');
+    return true;
+  };
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
-  runApp(const BillEasyApp());
+
+  // ── Enable Firestore offline persistence ──────────────────────────────────
+  // After the first load, all data is served instantly from the on-device
+  // cache. The app works offline and syncs when reconnected.
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: 104857600, // 100 MB — prevents device storage abuse
+  );
+
+  await AppCheckService.activate();
+  runApp(const BillRajaApp());
 }
 
-class BillEasyApp extends StatelessWidget {
-  const BillEasyApp({super.key});
+class BillRajaApp extends StatelessWidget {
+  const BillRajaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return LanguageProvider(
       child: Builder(
         builder: (context) => MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'BillEasy',
-      theme: ThemeData(
-        useMaterial3: true,
-        primaryColor: Colors.teal,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.teal,
-          foregroundColor: Colors.white,
-          centerTitle: true,
-          elevation: 0,
-        ),
-      ),
-      home: const AuthGate(),
+          debugShowCheckedModeBanner: false,
+          title: 'BillRaja',
+          theme: ThemeData(
+            useMaterial3: true,
+            primaryColor: kPrimary,
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: kPrimary,
+              brightness: Brightness.light,
+            ),
+            scaffoldBackgroundColor: Colors.white,
+            appBarTheme: const AppBarTheme(
+              backgroundColor: kPrimary,
+              foregroundColor: Colors.white,
+              centerTitle: false,
+              elevation: 0,
+            ),
+            floatingActionButtonTheme: const FloatingActionButtonThemeData(
+              backgroundColor: kPrimary,
+              foregroundColor: Colors.white,
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimary,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ),
+          home: const AuthGate(),
         ),
       ),
     );

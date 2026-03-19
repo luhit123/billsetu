@@ -1,18 +1,12 @@
 import 'package:billeasy/utils/number_utils.dart' as nu;
+import 'package:billeasy/utils/invoice_search.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'line_item.dart';
 
-enum InvoiceStatus {
-  paid,
-  pending,
-  overdue,
-}
+enum InvoiceStatus { paid, pending, overdue }
 
-enum InvoiceDiscountType {
-  percentage,
-  overall,
-}
+enum InvoiceDiscountType { percentage, overall }
 
 class Invoice {
   const Invoice({
@@ -24,8 +18,22 @@ class Invoice {
     required this.items,
     required this.createdAt,
     required this.status,
+    this.dueDate,
     this.discountType,
     this.discountValue = 0,
+    this.gstEnabled = false,
+    this.gstRate = 18.0,
+    this.gstType = 'cgst_sgst',
+    this.placeOfSupply = '',
+    this.customerGstin = '',
+    this.storedSubtotal,
+    this.storedDiscountAmount,
+    this.storedTaxableAmount,
+    this.storedCgstAmount,
+    this.storedSgstAmount,
+    this.storedIgstAmount,
+    this.storedTotalTax,
+    this.storedGrandTotal,
   });
 
   final String id;
@@ -36,30 +44,80 @@ class Invoice {
   final List<LineItem> items;
   final DateTime createdAt;
   final InvoiceStatus status;
+  final DateTime? dueDate;
   final InvoiceDiscountType? discountType;
   final double discountValue;
+  // GST fields (optional, defaults to disabled)
+  final bool gstEnabled;
+  final double gstRate; // 5, 12, 18, or 28
+  final String gstType; // 'cgst_sgst' (intrastate) or 'igst' (interstate)
+  final String placeOfSupply;
+  final String customerGstin;
+  final double? storedSubtotal;
+  final double? storedDiscountAmount;
+  final double? storedTaxableAmount;
+  final double? storedCgstAmount;
+  final double? storedSgstAmount;
+  final double? storedIgstAmount;
+  final double? storedTotalTax;
+  final double? storedGrandTotal;
 
   double get subtotal {
-    return items.fold(0, (runningTotal, item) => runningTotal + item.total);
+    return storedSubtotal ??
+        _roundCurrency(
+          items.fold(0, (runningTotal, item) => runningTotal + item.total),
+        );
   }
 
   double get discountAmount {
+    if (storedDiscountAmount != null) {
+      return storedDiscountAmount!;
+    }
+
     if (discountType == null || discountValue <= 0) {
       return 0;
     }
 
     switch (discountType!) {
       case InvoiceDiscountType.percentage:
-        return (subtotal * (discountValue / 100)).clamp(0, subtotal);
+        return _roundCurrency(
+          (subtotal * (discountValue / 100)).clamp(0, subtotal),
+        );
       case InvoiceDiscountType.overall:
-        return discountValue.clamp(0, subtotal);
+        return _roundCurrency(discountValue.clamp(0, subtotal));
     }
   }
 
   bool get hasDiscount => discountAmount > 0;
 
+  /// Amount on which GST is applied = subtotal minus any discount.
+  double get taxableAmount =>
+      storedTaxableAmount ?? _roundCurrency(subtotal - discountAmount);
+
+  /// CGST = half of the GST rate on taxable amount (intrastate only).
+  double get cgstAmount =>
+      storedCgstAmount ??
+      ((gstEnabled && gstType == 'cgst_sgst' && gstRate > 0)
+          ? _roundCurrency(taxableAmount * gstRate / 200)
+          : 0);
+
+  /// SGST = equal to CGST (intrastate).
+  double get sgstAmount => storedSgstAmount ?? cgstAmount;
+
+  /// IGST = full GST rate on taxable amount (interstate only).
+  double get igstAmount =>
+      storedIgstAmount ??
+      ((gstEnabled && gstType == 'igst' && gstRate > 0)
+          ? _roundCurrency(taxableAmount * gstRate / 100)
+          : 0);
+
+  double get totalTax =>
+      storedTotalTax ?? _roundCurrency(cgstAmount + sgstAmount + igstAmount);
+
+  bool get hasGst => gstEnabled && totalTax > 0;
+
   double get grandTotal {
-    return subtotal - discountAmount;
+    return storedGrandTotal ?? _roundCurrency(taxableAmount + totalTax);
   }
 
   factory Invoice.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -71,15 +129,32 @@ class Invoice {
       invoiceNumber: map['invoiceNumber'] as String? ?? '',
       clientId: map['clientId'] as String? ?? '',
       clientName:
-          map['clientName'] as String? ??
-          (map['clientId'] as String? ?? ''),
+          map['clientName'] as String? ?? (map['clientId'] as String? ?? ''),
       items: rawItems
-          .map((item) => LineItem.fromMap(Map<String, dynamic>.from(item as Map)))
+          .map(
+            (item) => LineItem.fromMap(Map<String, dynamic>.from(item as Map)),
+          )
           .toList(),
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       status: _statusFromMapValue(map['status']),
+      dueDate: _nullableDateTimeFromMapValue(map['dueDate'] ?? map['dueAt']),
       discountType: _discountTypeFromMapValue(map['discountType']),
       discountValue: _doubleFromMapValue(map['discountValue']),
+      gstEnabled: map['gstEnabled'] as bool? ?? false,
+      gstRate: _doubleFromMapValue(map['gstRate']) > 0
+          ? _doubleFromMapValue(map['gstRate'])
+          : 18.0,
+      gstType: map['gstType'] as String? ?? 'cgst_sgst',
+      placeOfSupply: map['placeOfSupply'] as String? ?? '',
+      customerGstin: map['customerGstin'] as String? ?? '',
+      storedSubtotal: _nullableDoubleFromMapValue(map['subtotal']),
+      storedDiscountAmount: _nullableDoubleFromMapValue(map['discountAmount']),
+      storedTaxableAmount: _nullableDoubleFromMapValue(map['taxableAmount']),
+      storedCgstAmount: _nullableDoubleFromMapValue(map['cgstAmount']),
+      storedSgstAmount: _nullableDoubleFromMapValue(map['sgstAmount']),
+      storedIgstAmount: _nullableDoubleFromMapValue(map['igstAmount']),
+      storedTotalTax: _nullableDoubleFromMapValue(map['totalTax']),
+      storedGrandTotal: _nullableDoubleFromMapValue(map['grandTotal']),
     );
   }
 
@@ -91,11 +166,30 @@ class Invoice {
       'clientId': clientId,
       'clientName': clientName,
       'clientNameLower': _normalizeClientName(clientName),
+      'searchPrefixes': buildInvoiceSearchPrefixes(
+        clientName: clientName,
+        invoiceNumber: invoiceNumber,
+      ),
       'items': items.map((item) => item.toMap()).toList(),
       'createdAt': Timestamp.fromDate(createdAt),
+      'dueDate': dueDate == null ? null : Timestamp.fromDate(dueDate!),
       'status': status.name,
       'discountType': discountType?.name,
       'discountValue': discountValue,
+      'gstEnabled': gstEnabled,
+      'gstRate': gstRate,
+      'gstType': gstType,
+      'placeOfSupply': placeOfSupply,
+      'customerGstin': customerGstin,
+      'subtotal': subtotal,
+      'discountAmount': discountAmount,
+      'taxableAmount': taxableAmount,
+      'cgstAmount': cgstAmount,
+      'sgstAmount': sgstAmount,
+      'igstAmount': igstAmount,
+      'totalTax': totalTax,
+      'grandTotal': grandTotal,
+      'hasGst': hasGst,
     };
   }
 
@@ -117,6 +211,14 @@ class Invoice {
     }
 
     return DateTime.now();
+  }
+
+  static DateTime? _nullableDateTimeFromMapValue(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    return _dateTimeFromMapValue(value);
   }
 
   static InvoiceStatus _statusFromMapValue(Object? value) {
@@ -159,5 +261,17 @@ class Invoice {
     }
 
     return 0;
+  }
+
+  static double? _nullableDoubleFromMapValue(Object? value) {
+    if (value == null) {
+      return null;
+    }
+
+    return _doubleFromMapValue(value);
+  }
+
+  static double _roundCurrency(num value) {
+    return (value * 100).roundToDouble() / 100;
   }
 }

@@ -1,11 +1,11 @@
 {
-    "name": "billeasy",
-    "short_name": "billeasy",
+    "name": "BillRaja",
+    "short_name": "BillRaja",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "BillRaja is a calm billing workspace for invoices, GST, and customers.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

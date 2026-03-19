@@ -23,11 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            colors: [
-              Color(0xFF0B234F),
-              Color(0xFF123C85),
-              Color(0xFF0F7D83),
-            ],
+            colors: [Color(0xFF0B234F), Color(0xFF123C85), Color(0xFF0F7D83)],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
           ),
@@ -39,10 +35,7 @@ class _LoginScreenState extends State<LoginScreen> {
               right: -40,
               child: _GlowOrb(
                 size: 220,
-                colors: [
-                  Color(0x66BDEBFF),
-                  Color(0x00BDEBFF),
-                ],
+                colors: [Color(0x66BDEBFF), Color(0x00BDEBFF)],
               ),
             ),
             const Positioned(
@@ -50,10 +43,7 @@ class _LoginScreenState extends State<LoginScreen> {
               bottom: -30,
               child: _GlowOrb(
                 size: 260,
-                colors: [
-                  Color(0x55A8FFE8),
-                  Color(0x00A8FFE8),
-                ],
+                colors: [Color(0x55A8FFE8), Color(0x00A8FFE8)],
               ),
             ),
             SafeArea(
@@ -66,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'BillEasy',
+                          'BillRaja',
                           style: TextStyle(
                             color: Colors.white,
                             fontSize: 42,
@@ -157,8 +147,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                   const SizedBox(height: 28),
                                   _GoogleSignInButton(
                                     isLoading: _isSigningIn,
-                                    onPressed:
-                                        _isSigningIn ? null : _handleGoogleSignIn,
+                                    onPressed: _isSigningIn
+                                        ? null
+                                        : _handleGoogleSignIn,
                                   ),
                                 ],
                               ),
@@ -199,12 +190,18 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } on FirebaseAuthException catch (error) {
-      debugPrint('[LoginScreen] FirebaseAuthException: ${error.code} — ${error.message}');
+      debugPrint(
+        '[LoginScreen] FirebaseAuthException: ${error.code} — ${error.message}',
+      );
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Firebase error [${error.code}]: ${error.message ?? 'Sign-in failed.'}')),
+        SnackBar(
+          content: Text(
+            'Firebase error [${error.code}]: ${error.message ?? 'Sign-in failed.'}',
+          ),
+        ),
       );
     } catch (error, stack) {
       debugPrint('[LoginScreen] Exception: ${error.runtimeType} — $error');
@@ -213,7 +210,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Sign-in failed [${error.runtimeType}]: $error')),
+        SnackBar(
+          content: Text('Sign-in failed [${error.runtimeType}]: $error'),
+        ),
       );
     } finally {
       if (mounted) {
@@ -226,10 +225,7 @@ class _LoginScreenState extends State<LoginScreen> {
 }
 
 class _GoogleSignInButton extends StatelessWidget {
-  const _GoogleSignInButton({
-    required this.isLoading,
-    required this.onPressed,
-  });
+  const _GoogleSignInButton({required this.isLoading, required this.onPressed});
 
   final bool isLoading;
   final VoidCallback? onPressed;
@@ -277,10 +273,7 @@ class _GoogleSignInButton extends StatelessWidget {
 }
 
 class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({
-    required this.size,
-    required this.colors,
-  });
+  const _GlowOrb({required this.size, required this.colors});
 
   final double size;
   final List<Color> colors;
@@ -307,10 +300,7 @@ class _GoogleLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: Size.square(size),
-      painter: _GoogleLogoPainter(),
-    );
+    return CustomPaint(size: Size.square(size), painter: _GoogleLogoPainter());
   }
 }
 

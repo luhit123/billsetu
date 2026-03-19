@@ -1,6 +1,6 @@
-# billeasy
+# BillRaja
 
-A new Flutter project.
+BillRaja is a Flutter billing workspace for invoices, customers, GST, and business profiles.
 
 ## Getting Started
 

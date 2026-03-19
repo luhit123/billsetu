@@ -10,6 +10,7 @@ class Client {
     this.notes = '',
     this.groupId = '',
     this.groupName = '',
+    this.gstin = '',
     this.createdAt,
     this.updatedAt,
   });
@@ -22,6 +23,7 @@ class Client {
   final String notes;
   final String groupId;
   final String groupName;
+  final String gstin;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -67,6 +69,7 @@ class Client {
     String? notes,
     String? groupId,
     String? groupName,
+    String? gstin,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -79,6 +82,7 @@ class Client {
       notes: notes ?? this.notes,
       groupId: groupId ?? this.groupId,
       groupName: groupName ?? this.groupName,
+      gstin: gstin ?? this.gstin,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -94,6 +98,7 @@ class Client {
       notes: map['notes'] as String? ?? '',
       groupId: map['groupId'] as String? ?? '',
       groupName: map['groupName'] as String? ?? '',
+      gstin: map['gstin'] as String? ?? '',
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
     );
@@ -110,6 +115,7 @@ class Client {
       'notes': notes,
       'groupId': groupId,
       'groupName': groupName,
+      'gstin': gstin,
       'createdAt': createdAt == null ? null : Timestamp.fromDate(createdAt!),
       'updatedAt': updatedAt == null ? null : Timestamp.fromDate(updatedAt!),
     };

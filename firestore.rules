@@ -10,16 +10,206 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isNumber(value) {
+      return value is int || value is float;
+    }
+
+    function isNonNegativeNumber(value) {
+      return isNumber(value) && value >= 0;
+    }
+
+    function isValidInvoiceStatus(value) {
+      return value == 'paid' || value == 'pending' || value == 'overdue';
+    }
+
+    function isValidDiscountType(value) {
+      return value == null ||
+          value == 'percentage' ||
+          value == 'overall';
+    }
+
+    function isValidGstType(value) {
+      return value == 'cgst_sgst' || value == 'igst';
+    }
+
+    function isAllowedGstRate(value) {
+      return isNumber(value) &&
+          (value == 0 || value == 5 || value == 12 || value == 18 || value == 28);
+    }
+
+    function hasValidInvoiceShape() {
+      return request.resource.data.keys().hasOnly([
+            'id',
+            'ownerId',
+            'invoiceNumber',
+            'clientId',
+            'clientName',
+            'clientNameLower',
+            'searchPrefixes',
+            'items',
+            'createdAt',
+            'dueDate',
+            'status',
+            'discountType',
+            'discountValue',
+            'gstEnabled',
+            'gstRate',
+            'gstType',
+            'placeOfSupply',
+            'customerGstin',
+            'subtotal',
+            'discountAmount',
+            'taxableAmount',
+            'cgstAmount',
+            'sgstAmount',
+            'igstAmount',
+            'totalTax',
+            'grandTotal',
+            'hasGst',
+          ]) &&
+          request.resource.data.keys().hasAll([
+            'id',
+            'ownerId',
+            'invoiceNumber',
+            'clientId',
+            'clientName',
+            'clientNameLower',
+            'searchPrefixes',
+            'items',
+            'createdAt',
+            'dueDate',
+            'status',
+            'discountType',
+            'discountValue',
+            'gstEnabled',
+            'gstRate',
+            'gstType',
+            'placeOfSupply',
+            'customerGstin',
+            'subtotal',
+            'discountAmount',
+            'taxableAmount',
+            'cgstAmount',
+            'sgstAmount',
+            'igstAmount',
+            'totalTax',
+            'grandTotal',
+            'hasGst',
+          ]);
+    }
+
+    function hasValidInvoiceFinancials() {
+      return isNonNegativeNumber(request.resource.data.discountValue) &&
+          isNonNegativeNumber(request.resource.data.subtotal) &&
+          isNonNegativeNumber(request.resource.data.discountAmount) &&
+          isNonNegativeNumber(request.resource.data.taxableAmount) &&
+          isNonNegativeNumber(request.resource.data.cgstAmount) &&
+          isNonNegativeNumber(request.resource.data.sgstAmount) &&
+          isNonNegativeNumber(request.resource.data.igstAmount) &&
+          isNonNegativeNumber(request.resource.data.totalTax) &&
+          isNonNegativeNumber(request.resource.data.grandTotal) &&
+          request.resource.data.taxableAmount ==
+              request.resource.data.subtotal - request.resource.data.discountAmount &&
+          request.resource.data.totalTax ==
+              request.resource.data.cgstAmount +
+                  request.resource.data.sgstAmount +
+                  request.resource.data.igstAmount &&
+          request.resource.data.grandTotal ==
+              request.resource.data.taxableAmount + request.resource.data.totalTax &&
+          (
+            !request.resource.data.gstEnabled
+                ? request.resource.data.totalTax == 0 &&
+                    request.resource.data.cgstAmount == 0 &&
+                    request.resource.data.sgstAmount == 0 &&
+                    request.resource.data.igstAmount == 0 &&
+                    request.resource.data.hasGst == false
+                : request.resource.data.hasGst ==
+                    (request.resource.data.totalTax > 0)
+          ) &&
+          (
+            request.resource.data.gstType == 'igst'
+                ? request.resource.data.cgstAmount == 0 &&
+                    request.resource.data.sgstAmount == 0
+                : request.resource.data.igstAmount == 0 &&
+                    request.resource.data.cgstAmount == request.resource.data.sgstAmount
+          );
+    }
+
+    function hasValidInvoiceSearchPrefixes() {
+      return request.resource.data.searchPrefixes is list &&
+          request.resource.data.searchPrefixes.size() > 0 &&
+          request.resource.data.searchPrefixes.size() <= 60;
+    }
+
+    function isValidInvoiceCreate() {
+      return hasValidInvoiceShape() &&
+          request.resource.id == request.resource.data.id &&
+          request.resource.data.ownerId == request.auth.uid &&
+          request.resource.data.invoiceNumber is string &&
+          request.resource.data.invoiceNumber.matches('^BR-[0-9]{4}-[0-9]{5}$') &&
+          request.resource.data.clientId is string &&
+          request.resource.data.clientId.size() > 0 &&
+          request.resource.data.clientName is string &&
+          request.resource.data.clientName.size() > 0 &&
+          request.resource.data.clientNameLower is string &&
+          hasValidInvoiceSearchPrefixes() &&
+          request.resource.data.items is list &&
+          request.resource.data.items.size() > 0 &&
+          request.resource.data.items.size() <= 100 &&
+          request.resource.data.createdAt is timestamp &&
+          request.resource.data.dueDate is timestamp &&
+          request.resource.data.dueDate >= request.resource.data.createdAt &&
+          isValidInvoiceStatus(request.resource.data.status) &&
+          isValidDiscountType(request.resource.data.discountType) &&
+          request.resource.data.gstEnabled is bool &&
+          isAllowedGstRate(request.resource.data.gstRate) &&
+          isValidGstType(request.resource.data.gstType) &&
+          request.resource.data.placeOfSupply is string &&
+          request.resource.data.customerGstin is string &&
+          hasValidInvoiceFinancials();
+    }
+
+    function isValidInvoiceStatusUpdate() {
+      return request.resource.data.diff(resource.data).changedKeys().hasOnly([
+            'status',
+          ]) &&
+          request.resource.data.id == resource.data.id &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.invoiceNumber == resource.data.invoiceNumber &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.dueDate == resource.data.dueDate &&
+          request.resource.data.clientId == resource.data.clientId &&
+          request.resource.data.clientName == resource.data.clientName &&
+          request.resource.data.searchPrefixes == resource.data.searchPrefixes &&
+          request.resource.data.items == resource.data.items &&
+          request.resource.data.gstEnabled == resource.data.gstEnabled &&
+          request.resource.data.gstRate == resource.data.gstRate &&
+          request.resource.data.gstType == resource.data.gstType &&
+          request.resource.data.subtotal == resource.data.subtotal &&
+          request.resource.data.discountAmount == resource.data.discountAmount &&
+          request.resource.data.taxableAmount == resource.data.taxableAmount &&
+          request.resource.data.cgstAmount == resource.data.cgstAmount &&
+          request.resource.data.sgstAmount == resource.data.sgstAmount &&
+          request.resource.data.igstAmount == resource.data.igstAmount &&
+          request.resource.data.totalTax == resource.data.totalTax &&
+          request.resource.data.grandTotal == resource.data.grandTotal &&
+          request.resource.data.hasGst == resource.data.hasGst &&
+          isValidInvoiceStatus(request.resource.data.status);
+    }
+
     match /invoices/{invoiceId} {
-      allow create: if isSignedIn() &&
-          request.resource.data.ownerId == request.auth.uid;
+      allow create: if isSignedIn() && isValidInvoiceCreate();
       allow read, delete: if isOwner(resource.data.ownerId);
       allow update: if isOwner(resource.data.ownerId) &&
-          request.resource.data.ownerId == resource.data.ownerId;
+          isValidInvoiceStatusUpdate();
     }
 
     match /users/{userId} {
       allow read, write: if isOwner(userId);
+
+      match /analytics/{document=**} {
+        allow read: if isOwner(userId);
+      }
 
       match /clients/{clientId} {
         allow read, write: if isOwner(userId);
@@ -27,6 +217,34 @@ service cloud.firestore {
 
       match /customerGroups/{groupId} {
         allow read, write: if isOwner(userId);
+      }
+
+      match /products/{productId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /purchaseOrders/{orderId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /stockMovements/{movementId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /poCounters/{year} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /subscriptionPlans/{planId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /subscriptions/{subscriptionId} {
+        allow read, write: if isOwner(userId);
+
+        match /payments/{paymentId} {
+          allow read, write: if request.auth != null && request.auth.uid == userId;
+        }
       }
     }
   }

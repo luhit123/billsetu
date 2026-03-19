@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
@@ -7,13 +9,33 @@ import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
-import 'package:billeasy/widgets/invoice_card.dart';
+import 'package:billeasy/widgets/error_retry_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+// ─── Brand colours (same across all redesigned screens) ──────────────────────
+const _kPrimary = Color(0xFF0F4A75);
+const _kBg = Color(0xFFEFF6FF);
+const _kCard = Colors.white;
+const _kTextPrimary = Color(0xFF0B234F);
+const _kTextSecondary = Color(0xFF5B7A9A);
+const _kBorder = Color(0xFFBDD5F0);
+const _kPaid = Color(0xFF22C55E);
+const _kPaidBg = Color(0xFFDCFCE7);
+const _kPending = Color(0xFFF59E0B);
+const _kPendingBg = Color(0xFFFEF3C7);
+const _kOverdue = Color(0xFFEF4444);
+const _kOverdueBg = Color(0xFFFEE2E2);
+
+const _kGradient = LinearGradient(
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+);
+
 class CustomerDetailsScreen extends StatefulWidget {
   const CustomerDetailsScreen({super.key, required this.client});
-
   final Client client;
 
   @override
@@ -23,222 +45,419 @@ class CustomerDetailsScreen extends StatefulWidget {
 class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   final ClientService _clientService = ClientService();
   final FirebaseService _firebaseService = FirebaseService();
-  final NumberFormat _currencyFormat = NumberFormat.currency(
+  final NumberFormat _currency = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
     decimalDigits: 0,
   );
-  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
+  final DateFormat _dateFmt = DateFormat('dd MMM yyyy');
+  static const int _invoicePageSize = 12;
+
+  // Stream subscriptions replacing nested StreamBuilders
+  StreamSubscription<Client?>? _clientSub;
+  StreamSubscription<List<Invoice>>? _statsSub;
+
+  // State driven by subscriptions
+  Client? _client;
+  String? _clientError;
+  List<Invoice> _statsInvoices = const [];
+
+  List<Invoice> _invoices = [];
+  QueryDocumentSnapshot<Map<String, dynamic>>? _invoiceCursor;
+  bool _hasMoreInvoices = true;
+  bool _isLoadingInvoices = true;
+  bool _isLoadingMoreInvoices = false;
+  Object? _invoiceLoadError;
 
   @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<Client?>(
-      stream: _clientService.watchClient(widget.client.id),
-      initialData: widget.client,
-      builder: (context, clientSnapshot) {
-        final client = clientSnapshot.data ?? widget.client;
+  void initState() {
+    super.initState();
+    _subscribeToStreams(widget.client.id);
+    _loadInvoicePage(reset: true);
+  }
 
-        return StreamBuilder<List<Invoice>>(
-          stream: _firebaseService.getInvoicesForClientStream(client.id),
-          builder: (context, invoiceSnapshot) {
-            if (invoiceSnapshot.connectionState == ConnectionState.waiting &&
-                !invoiceSnapshot.hasData) {
-              return const Scaffold(
-                body: Center(child: CircularProgressIndicator()),
-              );
-            }
+  @override
+  void didUpdateWidget(covariant CustomerDetailsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.client.id != widget.client.id) {
+      _cancelSubscriptions();
+      _subscribeToStreams(widget.client.id);
+      _resetInvoices();
+      _loadInvoicePage(reset: true);
+    }
+  }
 
-            final invoices = invoiceSnapshot.data ?? const <Invoice>[];
-            final totalBilled = invoices.fold<double>(
-              0,
-              (runningTotal, invoice) => runningTotal + invoice.grandTotal,
-            );
-            final outstanding = invoices
-                .where((invoice) => invoice.status != InvoiceStatus.paid)
-                .fold<double>(
-                  0,
-                  (runningTotal, invoice) => runningTotal + invoice.grandTotal,
-                );
-
-            final s = AppStrings.of(context);
-            return Scaffold(
-              appBar: AppBar(
-                title: Text(s.customerDetailsTitle),
-                actions: [
-                  IconButton(
-                    onPressed: () => _editCustomer(client),
-                    tooltip: s.customerDetailsEditTooltip,
-                    icon: const Icon(Icons.edit_outlined),
-                  ),
-                  IconButton(
-                    onPressed: () => _moveCustomerToGroup(client),
-                    tooltip: client.groupId.isEmpty
-                        ? s.customerDetailsMoveGroup
-                        : s.customerDetailsChangeGroup,
-                    icon: const Icon(Icons.folder_open_rounded),
-                  ),
-                ],
-              ),
-              bottomNavigationBar: SafeArea(
-                minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: FilledButton.icon(
-                  onPressed: () => _createInvoiceForCustomer(client),
-                  icon: const Icon(Icons.receipt_long_outlined),
-                  label: Text(s.customerDetailsCreateInvoice),
-                ),
-              ),
-              body: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Color(0xFFEAF8FF),
-                      Color(0xFFF4FBFF),
-                      Color(0xFFFFFFFF),
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                child: SafeArea(
-                  child: ListView(
-                    padding: const EdgeInsets.all(16),
-                    children: [
-                      _CustomerHeroCard(client: client),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatCard(
-                              label: s.customerDetailsStatInvoices,
-                              value: invoices.length.toString(),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _StatCard(
-                              label: s.customerDetailsStatTotalBilled,
-                              value: _currencyFormat.format(totalBilled),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      _StatCard(
-                        label: s.customerDetailsStatOutstanding,
-                        value: _currencyFormat.format(outstanding),
-                        accentColor: outstanding > 0
-                            ? const Color(0xFFB3261E)
-                            : const Color(0xFF0F7D83),
-                      ),
-                      const SizedBox(height: 18),
-                      _DetailSection(
-                        title: s.customerDetailsContact,
-                        children: [
-                          _InfoRow(
-                            label: s.customerDetailsGroup,
-                            value: _valueOrFallback(client.groupName),
-                          ),
-                          _InfoRow(
-                            label: s.customerDetailsPhone,
-                            value: _valueOrFallback(client.phone),
-                          ),
-                          if (client.email.trim().isNotEmpty)
-                            _InfoRow(
-                              label: s.customerDetailsEmail,
-                              value: client.email.trim(),
-                            ),
-                          _InfoRow(
-                            label: s.customerDetailsAddress,
-                            value: _valueOrFallback(client.address),
-                          ),
-                        ],
-                      ),
-                      if (client.notes.trim().isNotEmpty) ...[
-                        const SizedBox(height: 18),
-                        _DetailSection(
-                          title: s.customerDetailsNotes,
-                          children: [
-                            Text(
-                              client.notes.trim(),
-                              style: TextStyle(
-                                color: Colors.blueGrey.shade700,
-                                fontSize: 14.5,
-                                height: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 18),
-                      _DetailSection(
-                        title: s.customerDetailsHistory,
-                        children: [
-                          if (invoiceSnapshot.hasError)
-                            Text(
-                              s.customerDetailsHistoryError,
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.error,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            )
-                          else if (invoices.isEmpty)
-                            Text(
-                              s.customerDetailsHistoryEmpty,
-                              style: TextStyle(
-                                color: Colors.blueGrey.shade700,
-                                height: 1.5,
-                              ),
-                            )
-                          else
-                            ...invoices.map((invoice) {
-                              return InvoiceCard(
-                                invoice: invoice,
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => InvoiceDetailsScreen(
-                                        invoice: invoice,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                onStatusChange: (status) {
-                                  _firebaseService.updateInvoiceStatus(
-                                    invoice.id,
-                                    status,
-                                  );
-                                },
-                                onDelete: () {
-                                  _firebaseService.deleteInvoice(invoice.id);
-                                },
-                              );
-                            }),
-                        ],
-                      ),
-                      if (client.updatedAt != null) ...[
-                        const SizedBox(height: 12),
-                        Center(
-                          child: Text(
-                            s.customerDetailsLastUpdated(_dateFormat.format(client.updatedAt!)),
-                            style: TextStyle(
-                              color: Colors.blueGrey.shade500,
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
+  void _subscribeToStreams(String clientId) {
+    _clientSub = _clientService.watchClient(clientId).listen(
+      (client) {
+        if (mounted) setState(() { _client = client; _clientError = null; });
+      },
+      onError: (e) {
+        if (mounted) setState(() => _clientError = e.toString());
+      },
+    );
+    _statsSub = _firebaseService
+        .getInvoicesForClientStream(clientId)
+        .listen(
+      (invoices) {
+        if (mounted) setState(() => _statsInvoices = invoices);
+      },
+      onError: (e) {
+        // Stats stream errors are non-fatal; log via debugPrint so the UI
+        // keeps showing the last known values rather than clearing them.
+        debugPrint('[CustomerDetailsScreen] Stats stream error: $e');
       },
     );
   }
+
+  void _cancelSubscriptions() {
+    _clientSub?.cancel();
+    _clientSub = null;
+    _statsSub?.cancel();
+    _statsSub = null;
+  }
+
+  @override
+  void dispose() {
+    _cancelSubscriptions();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final client = _client ?? widget.client;
+    final s = AppStrings.of(context);
+    final historyInvoices = _invoices;
+    final isLoadingInvoices = _isLoadingInvoices && historyInvoices.isEmpty;
+
+    final totalBilled = _statsInvoices.fold<double>(
+      0,
+      (total, invoice) => total + invoice.grandTotal,
+    );
+    final outstanding = _statsInvoices
+        .where((invoice) => invoice.status != InvoiceStatus.paid)
+        .fold<double>(0, (total, invoice) => total + invoice.grandTotal);
+
+    return Scaffold(
+      backgroundColor: _kBg,
+      appBar: _buildAppBar(s, client),
+      bottomNavigationBar: _buildBottomBar(s, client),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+          children: [
+            if (_clientError != null && _client == null)
+              ErrorRetryWidget(
+                message: 'Could not load customer details.',
+                onRetry: () {
+                  _cancelSubscriptions();
+                  _subscribeToStreams(widget.client.id);
+                },
+              ),
+            _HeroCard(client: client),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _MiniStatCard(
+                    label: s.customerDetailsStatInvoices,
+                    value: _statsInvoices.length.toString(),
+                    icon: Icons.receipt_long_rounded,
+                    color: _kPrimary,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _MiniStatCard(
+                    label: s.customerDetailsStatTotalBilled,
+                    value: _currency.format(totalBilled),
+                    icon: Icons.payments_rounded,
+                    color: _kPaid,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _MiniStatCard(
+                    label: s.customerDetailsStatOutstanding,
+                    value: _currency.format(outstanding),
+                    icon: Icons.account_balance_wallet_rounded,
+                    color: outstanding > 0 ? _kOverdue : _kPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: s.customerDetailsContact,
+              children: [
+                _ContactRow(
+                  icon: Icons.folder_rounded,
+                  label: s.customerDetailsGroup,
+                  value: _valueOrFallback(client.groupName, s),
+                ),
+                _ContactRow(
+                  icon: Icons.phone_rounded,
+                  label: s.customerDetailsPhone,
+                  value: _valueOrFallback(client.phone, s),
+                ),
+                if (client.email.trim().isNotEmpty)
+                  _ContactRow(
+                    icon: Icons.email_rounded,
+                    label: s.customerDetailsEmail,
+                    value: client.email.trim(),
+                  ),
+                _ContactRow(
+                  icon: Icons.location_on_rounded,
+                  label: s.customerDetailsAddress,
+                  value: _valueOrFallback(client.address, s),
+                ),
+              ],
+            ),
+            if (client.notes.trim().isNotEmpty) ...[
+              const SizedBox(height: 12),
+              _SectionCard(
+                title: s.customerDetailsNotes,
+                children: [
+                  Text(
+                    client.notes.trim(),
+                    style: const TextStyle(
+                      color: _kTextSecondary,
+                      fontSize: 14,
+                      height: 1.6,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            if (client.updatedAt != null) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: Text(
+                  s.customerDetailsLastUpdated(
+                    _dateFmt.format(client.updatedAt!),
+                  ),
+                  style: const TextStyle(
+                    color: _kTextSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 12),
+            _SectionCard(
+              title: s.customerDetailsHistory,
+              children: [
+                if (_invoiceLoadError != null && historyInvoices.isEmpty)
+                  ErrorRetryWidget(
+                    message: s.customerDetailsHistoryError,
+                    onRetry: () => _loadInvoicePage(reset: true),
+                  )
+                else if (isLoadingInvoices)
+                  const Center(child: CircularProgressIndicator())
+                else if (historyInvoices.isEmpty)
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.inbox_rounded,
+                        color: Colors.grey.shade300,
+                        size: 32,
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        s.customerDetailsHistoryEmpty,
+                        style: const TextStyle(
+                          color: _kTextSecondary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  )
+                else ...[
+                  ...historyInvoices.map(
+                    (invoice) => _HistoryInvoiceTile(
+                      invoice: invoice,
+                      currency: _currency,
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              InvoiceDetailsScreen(invoice: invoice),
+                        ),
+                      ),
+                      onStatusChange: (status) =>
+                          _firebaseService.updateInvoiceStatus(invoice.id, status),
+                      onDelete: () =>
+                          _firebaseService.deleteInvoice(invoice.id),
+                    ),
+                  ),
+                  if (_hasMoreInvoices || _isLoadingMoreInvoices) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton(
+                        onPressed:
+                            _isLoadingMoreInvoices || !_hasMoreInvoices
+                            ? null
+                            : () => _loadInvoicePage(reset: false),
+                        child: Text(
+                          _isLoadingMoreInvoices
+                              ? 'Loading more...'
+                              : 'Load more invoices',
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─── AppBar ───────────────────────────────────────────────────────────────
+
+  void _resetInvoices() {
+    _invoices = [];
+    _invoiceCursor = null;
+    _hasMoreInvoices = true;
+    _isLoadingInvoices = true;
+    _isLoadingMoreInvoices = false;
+    _invoiceLoadError = null;
+  }
+
+  Future<void> _loadInvoicePage({required bool reset}) async {
+    if (_isLoadingMoreInvoices) {
+      return;
+    }
+
+    if (!reset && !_hasMoreInvoices) {
+      return;
+    }
+
+    final clientId = widget.client.id;
+    if (clientId.trim().isEmpty) {
+      return;
+    }
+
+    if (reset) {
+      setState(() {
+        _resetInvoices();
+      });
+    } else {
+      setState(() {
+        _isLoadingMoreInvoices = true;
+      });
+    }
+
+    try {
+      final page = await _firebaseService.getInvoicesForClientPage(
+        clientId,
+        limit: _invoicePageSize,
+        startAfterDocument: reset ? null : _invoiceCursor,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        if (reset) {
+          _invoices = page.items;
+        } else {
+          _invoices = [..._invoices, ...page.items];
+        }
+        _invoiceCursor = page.cursor;
+        _hasMoreInvoices = page.hasMore;
+        _invoiceLoadError = null;
+        _isLoadingInvoices = false;
+        _isLoadingMoreInvoices = false;
+      });
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _invoiceLoadError = error;
+        _isLoadingInvoices = false;
+        _isLoadingMoreInvoices = false;
+      });
+    }
+  }
+
+  PreferredSizeWidget _buildAppBar(AppStrings s, Client client) {
+    return AppBar(
+      backgroundColor: Colors.transparent,
+      foregroundColor: Colors.white,
+      elevation: 0,
+      scrolledUnderElevation: 2,
+      shadowColor: Colors.black26,
+      surfaceTintColor: Colors.transparent,
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(gradient: _kGradient),
+      ),
+      title: Text(
+        s.customerDetailsTitle,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 18,
+          color: Colors.white,
+        ),
+      ),
+      actions: [
+        IconButton(
+          onPressed: () => _editCustomer(client),
+          tooltip: s.customerDetailsEditTooltip,
+          icon: const Icon(Icons.edit_outlined, color: Colors.white),
+        ),
+        IconButton(
+          onPressed: () => _moveCustomerToGroup(client),
+          tooltip: client.groupId.isEmpty
+              ? s.customerDetailsMoveGroup
+              : s.customerDetailsChangeGroup,
+          icon: const Icon(Icons.folder_open_rounded, color: Colors.white),
+        ),
+      ],
+    );
+  }
+
+  // ─── Bottom CTA ───────────────────────────────────────────────────────────
+
+  Widget _buildBottomBar(AppStrings s, Client client) {
+    return Container(
+      color: _kCard,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      child: SafeArea(
+        top: false,
+        child: SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton.icon(
+            onPressed: () => _createInvoiceForCustomer(client),
+            icon: const Icon(Icons.receipt_long_outlined, size: 18),
+            label: Text(s.customerDetailsCreateInvoice),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _kPrimary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              textStyle: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Actions (logic unchanged) ────────────────────────────────────────────
 
   Future<void> _editCustomer(Client client) async {
     await Navigator.push<Client>(
@@ -263,55 +482,53 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       context,
       initialGroupId: client.groupId,
     );
-
     if (!mounted || selection == null) {
       return;
     }
-
     if (selection.groupId == client.groupId &&
         selection.groupName == client.groupName) {
       return;
     }
 
     try {
-      final updatedClient = await _clientService.updateClientGroup(
+      final updated = await _clientService.updateClientGroup(
         client: client,
         groupId: selection.groupId,
         groupName: selection.groupName,
       );
-
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       final s = AppStrings.of(context);
-      final message = updatedClient.groupName.trim().isEmpty
-          ? s.customerDetailsNowUngrouped(updatedClient.name)
-          : s.customerDetailsMovedToGroup(updatedClient.name, updatedClient.groupName);
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      final msg = updated.groupName.trim().isEmpty
+          ? s.customerDetailsNowUngrouped(updated.name)
+          : s.customerDetailsMovedToGroup(updated.name, updated.groupName);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).customerDetailsFailedUpdateGroup(error.toString()))),
+        SnackBar(
+          content: Text(
+            AppStrings.of(
+              context,
+            ).customerDetailsFailedUpdateGroup(error.toString()),
+          ),
+        ),
       );
     }
   }
 
-  String _valueOrFallback(String value) {
-    final trimmedValue = value.trim();
-    return trimmedValue.isEmpty ? AppStrings.of(context).customerDetailsNotAdded : trimmedValue;
+  String _valueOrFallback(String value, AppStrings s) {
+    final t = value.trim();
+    return t.isEmpty ? s.customerDetailsNotAdded : t;
   }
 }
 
-class _CustomerHeroCard extends StatelessWidget {
-  const _CustomerHeroCard({required this.client});
+// ═══════════════════════════════════════════════════════════════════════════
+// Widgets
+// ═══════════════════════════════════════════════════════════════════════════
 
+/// Large avatar + name + subtitle on a clean white card.
+class _HeroCard extends StatelessWidget {
+  const _HeroCard({required this.client});
   final Client client;
 
   @override
@@ -319,32 +536,28 @@ class _CustomerHeroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF123C85), Color(0xFF0F7D83)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: _kCard,
+        borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 22,
-            offset: Offset(0, 14),
+            color: Color(0x0A000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
           CircleAvatar(
-            radius: 28,
-            backgroundColor: Colors.white24,
+            radius: 32,
+            backgroundColor: _kPrimary,
             foregroundColor: Colors.white,
             child: Text(
               client.initials,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,18 +565,208 @@ class _CustomerHeroCard extends StatelessWidget {
                 Text(
                   client.name,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
+                    color: _kTextPrimary,
+                    fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 6),
+                if (client.subtitle.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    client.subtitle,
+                    style: const TextStyle(
+                      color: _kTextSecondary,
+                      fontSize: 13,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+                if (client.groupName.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _kPrimary.withAlpha(18),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      client.groupName,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: _kPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Compact stat card used in the 3-column row.
+class _MiniStatCard extends StatelessWidget {
+  const _MiniStatCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.color,
+  });
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withAlpha(22),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: color),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
+              color: _kTextSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: _kTextPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// White card with a section title and arbitrary children.
+class _SectionCard extends StatelessWidget {
+  const _SectionCard({required this.title, required this.children});
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _kCard,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 8,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: _kTextPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: _kBorder),
+          const SizedBox(height: 12),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+/// A single contact info row with icon + label + value.
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: _kPrimary.withAlpha(15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 15, color: _kPrimary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Text(
-                  client.subtitle,
+                  label,
                   style: const TextStyle(
-                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                    color: _kTextSecondary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  value,
+                  style: const TextStyle(
                     fontSize: 14,
-                    height: 1.4,
+                    fontWeight: FontWeight.w600,
+                    color: _kTextPrimary,
                   ),
                 ),
               ],
@@ -375,125 +778,170 @@ class _CustomerHeroCard extends StatelessWidget {
   }
 }
 
-class _StatCard extends StatelessWidget {
-  const _StatCard({
-    required this.label,
-    required this.value,
-    this.accentColor = const Color(0xFF123C85),
+/// Invoice tile inside the history section.
+class _HistoryInvoiceTile extends StatelessWidget {
+  const _HistoryInvoiceTile({
+    required this.invoice,
+    required this.currency,
+    required this.onTap,
+    required this.onStatusChange,
+    required this.onDelete,
   });
+  final Invoice invoice;
+  final NumberFormat currency;
+  final VoidCallback onTap;
+  final void Function(InvoiceStatus) onStatusChange;
+  final VoidCallback onDelete;
 
-  final String label;
-  final String value;
-  final Color accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(220),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.blueGrey.shade700,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              color: accentColor,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _DetailSection extends StatelessWidget {
-  const _DetailSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white.withAlpha(220),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w700,
-              color: Color(0xFF123C85),
-            ),
-          ),
-          const SizedBox(height: 14),
-          ..._withSpacing(children),
-        ],
-      ),
-    );
-  }
-
-  List<Widget> _withSpacing(List<Widget> widgets) {
-    final spacedWidgets = <Widget>[];
-    for (var index = 0; index < widgets.length; index++) {
-      spacedWidgets.add(widgets[index]);
-      if (index < widgets.length - 1) {
-        spacedWidgets.add(const SizedBox(height: 12));
-      }
+  String _timeAgo(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inDays >= 7) {
+      final w = (diff.inDays / 7).floor();
+      return '$w week${w > 1 ? 's' : ''} ago';
+    } else if (diff.inDays >= 1) {
+      return '${diff.inDays} day${diff.inDays > 1 ? 's' : ''} ago';
+    } else if (diff.inHours >= 1) {
+      return '${diff.inHours}h ago';
     }
-    return spacedWidgets;
+    return 'Just now';
   }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({required this.label, required this.value});
-
-  final String label;
-  final String value;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 84,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.blueGrey.shade700,
+    final (badgeColor, badgeBg, label) = switch (invoice.status) {
+      InvoiceStatus.paid => (_kPaid, _kPaidBg, 'PAID'),
+      InvoiceStatus.pending => (_kPending, _kPendingBg, 'PENDING'),
+      InvoiceStatus.overdue => (_kOverdue, _kOverdueBg, 'OVERDUE'),
+    };
+    final s = AppStrings.of(context);
+
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: () => _showActions(context, s),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF9FAFB),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _kBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: _kPrimary.withAlpha(15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.description_rounded,
+                size: 16,
+                color: _kPrimary,
+              ),
             ),
-          ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    invoice.invoiceNumber,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: _kTextPrimary,
+                    ),
+                  ),
+                  Text(
+                    _timeAgo(invoice.createdAt),
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: _kTextSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  currency.format(invoice.grandTotal),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: _kTextPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: badgeColor,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w600),
-          ),
+      ),
+    );
+  }
+
+  void _showActions(BuildContext context, AppStrings s) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (invoice.status != InvoiceStatus.paid)
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline, color: _kPaid),
+                title: Text(s.cardMarkPaid),
+                onTap: () {
+                  Navigator.pop(context);
+                  onStatusChange(InvoiceStatus.paid);
+                },
+              ),
+            if (invoice.status != InvoiceStatus.overdue)
+              ListTile(
+                leading: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: _kOverdue,
+                ),
+                title: Text(s.cardMarkOverdue),
+                onTap: () {
+                  Navigator.pop(context);
+                  onStatusChange(InvoiceStatus.overdue);
+                },
+              ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline, color: _kOverdue),
+              title: Text(s.cardDelete),
+              onTap: () {
+                Navigator.pop(context);
+                onDelete();
+              },
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

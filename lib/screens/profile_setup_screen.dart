@@ -24,6 +24,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController _storeNameController = TextEditingController();
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _gstinController = TextEditingController();
   final ProfileService _profileService = ProfileService();
 
   bool _isLoading = true;
@@ -41,6 +42,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _storeNameController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
+    _gstinController.dispose();
     super.dispose();
   }
 
@@ -190,6 +192,16 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       icon: Icons.call_outlined,
                                     ),
                                   ),
+                                  const SizedBox(height: 16),
+                                  TextField(
+                                    controller: _gstinController,
+                                    textCapitalization: TextCapitalization.characters,
+                                    decoration: _inputDecoration(
+                                      label: s.profileGstinLabel,
+                                      hint: s.profileGstinHint,
+                                      icon: Icons.receipt_long_outlined,
+                                    ),
+                                  ),
                                   const SizedBox(height: 26),
                                   SizedBox(
                                     width: double.infinity,
@@ -269,6 +281,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         _storeNameController.text = profile.storeName;
         _addressController.text = profile.address;
         _phoneController.text = profile.phoneNumber;
+        _gstinController.text = profile.gstin;
         _didPrefill = true;
       }
     } catch (_) {
@@ -303,6 +316,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       storeName: _storeNameController.text.trim(),
       address: _addressController.text.trim(),
       phoneNumber: _phoneController.text.trim(),
+      gstin: _gstinController.text.trim(),
     );
 
     try {

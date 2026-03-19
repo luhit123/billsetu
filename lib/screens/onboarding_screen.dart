@@ -16,6 +16,12 @@ class _Strings {
   final String feat2a;
   final String feat2b;
   final String feat2c;
+  final String step3Badge;
+  final String screen3Title;
+  final String screen3Subtitle;
+  final String feat3a;
+  final String feat3b;
+  final String feat3c;
   final String skip;
   final String next;
   final String getStarted;
@@ -33,6 +39,12 @@ class _Strings {
     required this.feat2a,
     required this.feat2b,
     required this.feat2c,
+    required this.step3Badge,
+    required this.screen3Title,
+    required this.screen3Subtitle,
+    required this.feat3a,
+    required this.feat3b,
+    required this.feat3c,
     required this.skip,
     required this.next,
     required this.getStarted,
@@ -40,60 +52,81 @@ class _Strings {
 }
 
 const _english = _Strings(
-  step1Badge: '✦  Step 1 of 2',
+  step1Badge: '✦  Step 1 of 3',
   screen1Title: 'Create Invoices\nin Seconds',
   screen1Subtitle:
       'Fill in client details, add your products or services, set a price — and your professional invoice is ready to share.',
   feat1a: 'Add client info',
   feat1b: 'Add line items with prices',
   feat1c: 'Apply % or flat discounts',
-  step2Badge: '✦  Step 2 of 2',
+  step2Badge: '✦  Step 2 of 3',
   screen2Title: 'Track Everything,\nStress Nothing',
   screen2Subtitle:
       'Your dashboard gives you a live overview of revenue, outstanding payments, and discounts — filtered any way you need.',
   feat2a: 'Live revenue & collection stats',
   feat2b: 'Filter by status & date range',
   feat2c: 'Export & share as PDF',
+  step3Badge: '✦  Step 3 of 3',
+  screen3Title: 'Smart Customer\nManagement',
+  screen3Subtitle:
+      'Organise customers into groups — Retail, Wholesale, VIP — and instantly view their invoice history, total billed, and outstanding dues from one place.',
+  feat3a: 'Create & assign customer groups',
+  feat3b: 'Full invoice history per customer',
+  feat3c: 'Track outstanding dues instantly',
   skip: 'Skip',
   next: 'Next',
   getStarted: 'Get Started',
 );
 
 const _hindi = _Strings(
-  step1Badge: '✦  चरण 1 / 2',
+  step1Badge: '✦  चरण 1 / 3',
   screen1Title: 'पलों में बनाएं\nइनवॉइस',
   screen1Subtitle:
       'ग्राहक की जानकारी भरें, सामान जोड़ें, कीमत सेट करें — और आपका इनवॉइस शेयर के लिए तैयार।',
   feat1a: 'ग्राहक की जानकारी जोड़ें',
   feat1b: 'आइटम और कीमत जोड़ें',
   feat1c: '% या फ्लैट छूट लगाएं',
-  step2Badge: '✦  चरण 2 / 2',
+  step2Badge: '✦  चरण 2 / 3',
   screen2Title: 'सब ट्रैक करें,\nचिंता न करें',
   screen2Subtitle:
       'डैशबोर्ड आय, बकाया भुगतान और छूट का लाइव अवलोकन देता है — जैसे चाहें फ़िल्टर करें।',
   feat2a: 'लाइव आय और संग्रह आँकड़े',
   feat2b: 'स्थिति और तारीख से फ़िल्टर',
   feat2c: 'PDF में निर्यात करें',
+  step3Badge: '✦  चरण 3 / 3',
+  screen3Title: 'स्मार्ट ग्राहक\nप्रबंधन',
+  screen3Subtitle:
+      'ग्राहकों को समूहों में बाँटें — रिटेल, थोक, VIP — और उनके इनवॉइस इतिहास, कुल बिल व बकाया एक ही जगह से देखें।',
+  feat3a: 'ग्राहक समूह बनाएं और असाइन करें',
+  feat3b: 'हर ग्राहक का पूरा इनवॉइस इतिहास',
+  feat3c: 'बकाया राशि तुरंत ट्रैक करें',
   skip: 'छोड़ें',
   next: 'आगे',
   getStarted: 'शुरू करें',
 );
 
 const _assamese = _Strings(
-  step1Badge: '✦  পদক্ষেপ ১ / ২',
+  step1Badge: '✦  পদক্ষেপ ১ / ৩',
   screen1Title: 'মুহূর্তত বনাওক\nবিল',
   screen1Subtitle:
       'গ্ৰাহকৰ তথ্য পূৰণ কৰক, সামগ্ৰী যোগ কৰক, মূল্য নিৰ্ধাৰণ কৰক — আৰু আপোনাৰ বিল শ্বেয়াৰৰ বাবে প্ৰস্তুত।',
   feat1a: 'গ্ৰাহকৰ তথ্য যোগ কৰক',
   feat1b: 'সামগ্ৰী আৰু মূল্য যোগ কৰক',
   feat1c: '% বা সমতল ছাড় প্ৰয়োগ কৰক',
-  step2Badge: '✦  পদক্ষেপ ২ / ২',
+  step2Badge: '✦  পদক্ষেপ ২ / ৩',
   screen2Title: 'সকলো ট্ৰেক কৰক,\nচিন্তা নকৰিব',
   screen2Subtitle:
       'ড্যাশব\'ৰ্ডে আয়, বকেয়া পৰিশোধ আৰু ছাড়ৰ লাইভ সংক্ষিপ্তসাৰ দিয়ে — যিদৰে বিচাৰে ফিল্টাৰ কৰক।',
   feat2a: 'লাইভ আয় আৰু সংগ্ৰহৰ পৰিসংখ্যা',
   feat2b: 'স্থিতি আৰু তাৰিখ অনুসৰি ফিল্টাৰ',
   feat2c: 'PDF ৰূপত ৰপ্তানি কৰক',
+  step3Badge: '✦  পদক্ষেপ ৩ / ৩',
+  screen3Title: 'স্মাৰ্ট গ্ৰাহক\nপৰিচালনা',
+  screen3Subtitle:
+      'গ্ৰাহকসকলক গোটত ভাগ কৰক — খুচুৰা, পাইকাৰী, VIP — আৰু তেওঁলোকৰ বিলৰ ইতিহাস, মুঠ বিল আৰু বকেয়া এঠাইৰ পৰাই চাওক।',
+  feat3a: 'গ্ৰাহক গোট বনাওক আৰু নিযুক্ত কৰক',
+  feat3b: 'প্ৰতিজন গ্ৰাহকৰ সম্পূৰ্ণ বিলৰ ইতিহাস',
+  feat3c: 'বকেয়া পৰিমাণ তৎক্ষণাৎ ট্ৰেক কৰক',
   skip: 'এৰক',
   next: 'পৰৱৰ্তী',
   getStarted: 'আৰম্ভ কৰক',
@@ -187,7 +220,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _nextPage() {
-    if (_currentPage == 0) {
+    if (_currentPage < 2) {
       _slideController.reset();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 500),
@@ -207,7 +240,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           PageView(
             controller: _pageController,
             onPageChanged: (page) => setState(() => _currentPage = page),
-            children: [_buildPage1(), _buildPage2()],
+            children: [_buildPage1(), _buildPage2(), _buildPage3()],
           ),
           // Bottom controls overlay
           Positioned(
@@ -472,29 +505,485 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  Widget _buildPage3() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1A0533), Color(0xFF4527A0), Color(0xFF6A1B9A)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Ambient orbs
+          _buildOrb(top: -70, right: -50, size: 240, opacity: 0.09),
+          _buildOrb(bottom: 150, left: -60, size: 200, opacity: 0.07),
+          _buildOrb(top: 220, right: -20, size: 130, opacity: 0.05),
+
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 140),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Skip button
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: TextButton(
+                      onPressed: _completeOnboarding,
+                      child: Text(
+                        _s.skip,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Illustration
+                  Expanded(
+                    flex: 5,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AnimatedBuilder(
+                          animation: _floatAnimation,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(0, _floatAnimation.value * 0.8),
+                            child: child,
+                          ),
+                          child: _buildCustomerGroupsIllustration(),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Text content
+                  SlideTransition(
+                    position: _slideAnimation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.25),
+                            ),
+                          ),
+                          child: Text(
+                            _s.step3Badge,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _s.screen3Title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                            letterSpacing: -1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          _s.screen3Subtitle,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.72),
+                            fontSize: 15.5,
+                            height: 1.55,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        _buildFeatureRow(
+                          Icons.folder_special_rounded,
+                          _s.feat3a,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(
+                          Icons.history_rounded,
+                          _s.feat3b,
+                        ),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(
+                          Icons.account_balance_wallet_rounded,
+                          _s.feat3c,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCustomerGroupsIllustration() {
+    return SizedBox(
+      width: 310,
+      height: 290,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Central hub card
+          _buildGroupHubCard(),
+
+          // Floating "VIP" group badge — top right
+          Positioned(
+            top: 10,
+            right: 4,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(_floatAnimation.value * 0.5, 0),
+                child: child,
+              ),
+              child: _buildGroupBadge(
+                label: 'VIP',
+                icon: Icons.star_rounded,
+                color: const Color(0xFFFFD740),
+              ),
+            ),
+          ),
+
+          // Floating "Wholesale" badge — top left
+          Positioned(
+            top: 20,
+            left: 0,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(_floatAnimation.value * -0.4, 0),
+                child: child,
+              ),
+              child: _buildGroupBadge(
+                label: 'Wholesale',
+                icon: Icons.inventory_2_rounded,
+                color: const Color(0xFF69F0AE),
+              ),
+            ),
+          ),
+
+          // Floating "Retail" badge — bottom left
+          Positioned(
+            bottom: 26,
+            left: 4,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(0, _floatAnimation.value * 0.5),
+                child: child,
+              ),
+              child: _buildGroupBadge(
+                label: 'Retail',
+                icon: Icons.storefront_rounded,
+                color: const Color(0xFF80D8FF),
+              ),
+            ),
+          ),
+
+          // Floating "Outstanding" stat — bottom right
+          Positioned(
+            bottom: 18,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (_, child) =>
+                  Transform.scale(scale: _pulseAnimation.value, child: child),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEF5350).withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFEF5350).withOpacity(0.45),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.account_balance_wallet_rounded,
+                        color: Colors.white, size: 11),
+                    SizedBox(width: 4),
+                    Text(
+                      '₹4,200 due',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupHubCard() {
+    return Container(
+      width: 240,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: Colors.white.withOpacity(0.25), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 30,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFCE93D8), Color(0xFF7B1FA2)],
+                  ),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.groups_2_rounded,
+                    color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'CUSTOMERS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  Text(
+                    '3 Groups · 12 clients',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.5),
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Customer row 1
+          _customerRow('Rajesh Kumar', 'VIP', const Color(0xFFFFD740)),
+          const SizedBox(height: 6),
+          _customerRow('Priya Stores', 'Retail', const Color(0xFF80D8FF)),
+          const SizedBox(height: 6),
+          _customerRow('Mehta Traders', 'Wholesale', const Color(0xFF69F0AE)),
+          const SizedBox(height: 10),
+
+          Divider(color: Colors.white.withOpacity(0.2), height: 1),
+          const SizedBox(height: 10),
+
+          // Stats row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _groupStat('Total Billed', '₹1,24,500',
+                  const Color(0xFFCE93D8)),
+              _groupStat(
+                  'Collected', '₹98,200', const Color(0xFF69F0AE)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _customerRow(String name, String group, Color groupColor) {
+    return Row(
+      children: [
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: groupColor.withOpacity(0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: groupColor.withOpacity(0.4)),
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            name[0],
+            style: TextStyle(
+              color: groupColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.85),
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+          decoration: BoxDecoration(
+            color: groupColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: groupColor.withOpacity(0.3)),
+          ),
+          child: Text(
+            group,
+            style: TextStyle(
+              color: groupColor,
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _groupStat(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          value,
+          style: TextStyle(
+            color: color,
+            fontSize: 13,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withOpacity(0.5),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGroupBadge({
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withOpacity(0.4)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.2),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomControls() {
-    final isLast = _currentPage == 1;
+    final isLast = _currentPage == 2;
+    final pageBottomColor = switch (_currentPage) {
+      0 => const Color(0xFF0F7D83),
+      1 => const Color(0xFF00897B),
+      _ => const Color(0xFF4527A0),
+    };
+    final buttonTextColor = switch (_currentPage) {
+      0 => const Color(0xFF0B234F),
+      1 => const Color(0xFF00695C),
+      _ => const Color(0xFF4527A0),
+    };
+
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [
-            Colors.transparent,
-            (_currentPage == 0
-                    ? const Color(0xFF0F7D83)
-                    : const Color(0xFF00897B))
-                .withOpacity(0.95),
-          ],
+          colors: [Colors.transparent, pageBottomColor.withOpacity(0.95)],
         ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Page dots
+          // Page dots (3)
           Row(
-            children: List.generate(2, (index) {
+            children: List.generate(3, (index) {
               final isActive = index == _currentPage;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -543,9 +1032,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     Text(
                       isLast ? _s.getStarted : _s.next,
                       style: TextStyle(
-                        color: isLast
-                            ? const Color(0xFF00695C)
-                            : const Color(0xFF0B234F),
+                        color: buttonTextColor,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         letterSpacing: 0.2,
@@ -556,9 +1043,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       isLast
                           ? Icons.rocket_launch_rounded
                           : Icons.arrow_forward_rounded,
-                      color: isLast
-                          ? const Color(0xFF00695C)
-                          : const Color(0xFF0B234F),
+                      color: buttonTextColor,
                       size: 18,
                     ),
                   ],

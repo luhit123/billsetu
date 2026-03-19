@@ -1,6 +1,7 @@
 import 'package:billeasy/modals/client.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:billeasy/services/firestore_page.dart';
 
 class ClientService {
   ClientService({FirebaseFirestore? firestore, FirebaseAuth? firebaseAuth})
@@ -14,17 +15,22 @@ class ClientService {
     return _firestore.collection('users').doc(ownerId).collection('clients');
   }
 
-  Stream<List<Client>> getClientsStream({
+  Query<Map<String, dynamic>> _buildClientsQuery({
+    required String ownerId,
     String searchQuery = '',
-    String? groupId,
+    String groupId = '',
   }) {
-    final ownerId = _requireOwnerId();
     final normalizedQuery = searchQuery.trim().toLowerCase();
-    final normalizedGroupId = groupId?.trim() ?? '';
 
     Query<Map<String, dynamic>> query = _clientsCollection(
       ownerId,
     ).orderBy('nameLower');
+
+    // Push non-ungrouped groupId filtering to Firestore to avoid
+    // client-side filtering after pagination.
+    if (groupId.isNotEmpty && groupId != '__ungrouped__') {
+      query = query.where('groupId', isEqualTo: groupId);
+    }
 
     if (normalizedQuery.isNotEmpty) {
       query = query.startAt([normalizedQuery]).endAt([
@@ -32,22 +38,74 @@ class ClientService {
       ]);
     }
 
-    return query.snapshots().map((snapshot) {
+    return query;
+  }
+
+  Stream<List<Client>> getClientsStream({
+    String searchQuery = '',
+    String? groupId,
+    int limit = 50,
+  }) {
+    final ownerId = _requireOwnerId();
+    final normalizedGroupId = groupId?.trim() ?? '';
+
+    Query<Map<String, dynamic>> query = _buildClientsQuery(
+      ownerId: ownerId,
+      searchQuery: searchQuery,
+      groupId: normalizedGroupId,
+    );
+
+    return query.limit(limit).snapshots().map((snapshot) {
       return snapshot.docs
           .map((doc) => Client.fromMap(doc.data(), docId: doc.id))
           .where((client) {
-            if (normalizedGroupId.isEmpty) {
-              return true;
-            }
-
+            // Only __ungrouped__ needs client-side filtering since Firestore
+            // cannot query documents where groupId is empty/absent.
             if (normalizedGroupId == '__ungrouped__') {
               return client.groupId.trim().isEmpty;
             }
 
-            return client.groupId == normalizedGroupId;
+            return true;
           })
           .toList();
     });
+  }
+
+  Future<FirestorePage<Client>> getClientsPage({
+    String searchQuery = '',
+    String? groupId,
+    int limit = 25,
+    QueryDocumentSnapshot<Map<String, dynamic>>? startAfterDocument,
+  }) async {
+    final ownerId = _requireOwnerId();
+    final normalizedGroupId = groupId?.trim() ?? '';
+    final query = _buildClientsQuery(
+      ownerId: ownerId,
+      searchQuery: searchQuery,
+      groupId: normalizedGroupId,
+    );
+
+    final page = await query.fetchPage<Client>(
+      limit: limit,
+      startAfterDocument: startAfterDocument,
+      fromMap: (data, docId) => Client.fromMap(data, docId: docId),
+    );
+
+    // __ungrouped__ requires client-side filtering because Firestore cannot
+    // efficiently query documents where groupId is empty/absent.
+    if (normalizedGroupId != '__ungrouped__') {
+      return page;
+    }
+
+    final filteredItems = page.items
+        .where((client) => client.groupId.trim().isEmpty)
+        .toList(growable: false);
+
+    return FirestorePage<Client>(
+      items: filteredItems,
+      hasMore: page.hasMore,
+      cursor: page.cursor,
+    );
   }
 
   Stream<Client?> watchClient(String clientId) {

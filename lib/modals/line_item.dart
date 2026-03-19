@@ -4,12 +4,14 @@ class LineItem {
     required this.quantity,
     required this.unitPrice,
     this.unit = '',
+    this.hsnCode = '',
   });
 
   final String description;
   final double quantity;
   final double unitPrice;
   final String unit;
+  final String hsnCode;
 
   double get total => quantity * unitPrice;
 
@@ -30,6 +32,7 @@ class LineItem {
       quantity: (map['quantity'] as num? ?? 0).toDouble(),
       unitPrice: (map['unitPrice'] as num? ?? 0).toDouble(),
       unit: map['unit'] as String? ?? '',
+      hsnCode: map['hsnCode'] as String? ?? '',
     );
   }
 
@@ -39,6 +42,7 @@ class LineItem {
       'quantity': quantity,
       'unitPrice': unitPrice,
       'unit': unit,
+      'hsnCode': hsnCode,
     };
   }
 

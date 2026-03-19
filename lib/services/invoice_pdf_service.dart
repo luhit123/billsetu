@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/modals/invoice.dart';
@@ -6,6 +8,9 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+
+/// Available PDF invoice templates.
+enum InvoiceTemplate { classic, modern, compact }
 
 class InvoicePdfService {
   // Brand palette
@@ -35,8 +40,15 @@ class InvoicePdfService {
   pw.Font? _fontRegular;
   pw.Font? _fontBold;
 
+  static Completer<void>? _fontLoadCompleter;
+
   Future<void> _loadFonts(AppLanguage language) async {
-    if (_fontRegular != null) return;
+    if (_fontRegular != null) return; // already loaded
+    if (_fontLoadCompleter != null) {
+      await _fontLoadCompleter!.future; // wait for in-progress load
+      return;
+    }
+    _fontLoadCompleter = Completer<void>();
     try {
       switch (language) {
         case AppLanguage.hindi:
@@ -55,9 +67,11 @@ class InvoicePdfService {
           _fontRegular = pw.Font.helvetica();
           _fontBold = pw.Font.helveticaBold();
       }
-    } catch (_) {
+      _fontLoadCompleter!.complete();
+    } catch (e) {
       _fontRegular = pw.Font.helvetica();
       _fontBold = pw.Font.helveticaBold();
+      _fontLoadCompleter!.complete();
     }
   }
 
@@ -66,6 +80,9 @@ class InvoicePdfService {
     BusinessProfile? profile,
     AppLanguage language = AppLanguage.english,
   }) async {
+    if (invoice.items.isEmpty) {
+      throw ArgumentError('Cannot generate PDF for invoice with no items');
+    }
     await _loadFonts(language);
     // PDF structural labels are always English — the pdf package cannot do
     // Indic script shaping (Devanagari / Bengali conjuncts, vowel marks) so
@@ -76,8 +93,8 @@ class InvoicePdfService {
     final document = pw.Document(
       title: invoice.invoiceNumber,
       author: _sellerName(profile, s),
-      subject: 'BillEasy invoice ${invoice.invoiceNumber}',
-      creator: 'BillEasy',
+      subject: 'BillRaja invoice ${invoice.invoiceNumber}',
+      creator: 'BillRaja',
     );
 
     final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
@@ -110,7 +127,7 @@ class InvoicePdfService {
   String fileNameForInvoice(Invoice invoice) {
     final invoicePart = _sanitize(invoice.invoiceNumber, 'invoice');
     final clientPart = _sanitize(invoice.clientName, 'customer');
-    return 'BillEasy_${invoicePart}_$clientPart.pdf';
+    return 'BillRaja_${invoicePart}_$clientPart.pdf';
   }
 
   // -------------------------------------------------------------------------
@@ -147,7 +164,7 @@ class InvoicePdfService {
                       borderRadius: pw.BorderRadius.circular(6),
                     ),
                     child: pw.Text(
-                      'BillEasy',
+                      'BillRaja',
                       style: pw.TextStyle(
                         color: _navyLight,
                         fontSize: 10,
@@ -231,6 +248,10 @@ class InvoicePdfService {
                           s.pdfInvoiceDate,
                           _dateFormat.format(invoice.createdAt),
                         ),
+                        if (invoice.placeOfSupply.isNotEmpty) ...[
+                          pw.Divider(color: _border, height: 14, thickness: 0.6),
+                          _metaRow('Place of Supply', invoice.placeOfSupply),
+                        ],
                         pw.Divider(color: _border, height: 14, thickness: 0.6),
                         _metaRow(
                           s.detailsGrandTotal,
@@ -272,6 +293,8 @@ class InvoicePdfService {
             lines: [
               _profileVal(profile?.address, s.pdfAddressNotAdded),
               _profileVal(profile?.phoneNumber, s.pdfPhoneNotAdded),
+              if (profile?.gstin != null && profile!.gstin.isNotEmpty)
+                'GSTIN: ${profile.gstin}',
             ],
           ),
         ),
@@ -284,6 +307,8 @@ class InvoicePdfService {
               if (invoice.clientId.trim().isNotEmpty)
                 '${s.detailsReference}: ${invoice.clientId.trim()}',
               '${s.detailsStatus}: ${_statusLabel(invoice.status, s)}',
+              if (invoice.customerGstin.isNotEmpty)
+                'GSTIN: ${invoice.customerGstin}',
             ],
           ),
         ),
@@ -352,6 +377,8 @@ class InvoicePdfService {
   // -------------------------------------------------------------------------
 
   pw.Widget _itemsTable(Invoice invoice, AppStrings s) {
+    final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
+
     final headerCells = [
       _cell(s.pdfItem, header: true),
       _cell(s.detailsItemQty, header: true, align: pw.Alignment.center),
@@ -361,6 +388,8 @@ class InvoicePdfService {
         align: pw.Alignment.centerRight,
       ),
       _cell(s.pdfAmount, header: true, align: pw.Alignment.centerRight),
+      if (hasHsn)
+        _cell('HSN/SAC', header: true, align: pw.Alignment.center),
     ];
 
     final rows = <pw.TableRow>[
@@ -389,6 +418,11 @@ class InvoicePdfService {
               color: _bodyText,
               bold: true,
             ),
+            if (hasHsn)
+              _cell(
+                item.hsnCode.isEmpty ? '-' : item.hsnCode,
+                align: pw.Alignment.center,
+              ),
           ],
         ),
       );
@@ -409,11 +443,12 @@ class InvoicePdfService {
               right: pw.BorderSide(color: _border, width: 0.6),
               bottom: pw.BorderSide(color: _border, width: 0.6),
             ),
-            columnWidths: const {
-              0: pw.FlexColumnWidth(4.5),
-              1: pw.FlexColumnWidth(1.1),
-              2: pw.FlexColumnWidth(1.9),
-              3: pw.FlexColumnWidth(1.9),
+            columnWidths: {
+              0: pw.FlexColumnWidth(hasHsn ? 3.5 : 4.5),
+              1: const pw.FlexColumnWidth(1.1),
+              2: const pw.FlexColumnWidth(1.9),
+              3: const pw.FlexColumnWidth(1.9),
+              if (hasHsn) 4: const pw.FlexColumnWidth(1.5),
             },
             children: rows,
           ),
@@ -428,6 +463,14 @@ class InvoicePdfService {
 
   pw.Widget _totalsSection(Invoice invoice, AppStrings s) {
     final discLabel = _discountLabel(invoice, s);
+    final halfRate = (invoice.gstRate / 2)
+        .truncateToDouble() == (invoice.gstRate / 2)
+        ? (invoice.gstRate / 2).toStringAsFixed(0)
+        : (invoice.gstRate / 2).toStringAsFixed(1);
+    final fullRate = invoice.gstRate.truncateToDouble() == invoice.gstRate
+        ? invoice.gstRate.toStringAsFixed(0)
+        : invoice.gstRate.toStringAsFixed(1);
+
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -463,6 +506,20 @@ class InvoicePdfService {
                     lineSpacing: 2,
                   ),
                 ),
+                if (invoice.hasGst) ...[
+                  pw.SizedBox(height: 8),
+                  pw.Text(
+                    invoice.gstType == 'igst'
+                        ? 'IGST @ $fullRate%  =  ${_fmt(invoice.igstAmount)}'
+                        : 'CGST @ $halfRate% + SGST @ $halfRate%  =  ${_fmt(invoice.totalTax)}',
+                    style: pw.TextStyle(
+                      color: _navy,
+                      fontSize: 10,
+                      fontWeight: pw.FontWeight.bold,
+                      lineSpacing: 2,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -497,6 +554,27 @@ class InvoicePdfService {
                   ),
                 ),
               ],
+              if (invoice.hasGst) ...[
+                pw.SizedBox(height: 10),
+                if (invoice.gstType == 'cgst_sgst') ...[
+                  _summaryRow(
+                    'CGST @ $halfRate%',
+                    _fmt(invoice.cgstAmount),
+                    valueColor: _navy,
+                  ),
+                  pw.SizedBox(height: 6),
+                  _summaryRow(
+                    'SGST @ $halfRate%',
+                    _fmt(invoice.sgstAmount),
+                    valueColor: _navy,
+                  ),
+                ] else
+                  _summaryRow(
+                    'IGST @ $fullRate%',
+                    _fmt(invoice.igstAmount),
+                    valueColor: _navy,
+                  ),
+              ],
               pw.SizedBox(height: 2),
               pw.Divider(color: _border, height: 20, thickness: 0.6),
               _summaryRow(
@@ -523,7 +601,7 @@ class InvoicePdfService {
         color: const PdfColor(0.94, 0.99, 0.99),
       ),
       child: pw.Text(
-        '${_statusLabel(invoice.status, s)} · BillEasy',
+        '${_statusLabel(invoice.status, s)} · BillRaja',
         style: pw.TextStyle(color: _mutedText, fontSize: 10, lineSpacing: 2),
       ),
     );
