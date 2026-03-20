@@ -9,15 +9,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF0F4A75);
+const _kPrimary = Color(0xFF4361EE);
 const _kBackground = Color(0xFFEFF6FF);
-const _kTextPrimary = Color(0xFF0B234F);
+const _kTextPrimary = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 // Status colours
@@ -30,7 +30,7 @@ const _kReceivedBg = Color(0xFFDCFCE7);
 const _kCancelled = Color(0xFFEF4444);
 const _kCancelledBg = Color(0xFFFEE2E2);
 
-enum _Filter { all, draft, confirmed, received }
+enum _Filter { all, draft, sent, received, cancelled }
 
 class PurchaseOrdersScreen extends StatefulWidget {
   const PurchaseOrdersScreen({super.key});
@@ -66,10 +66,12 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       _Filter.all => list,
       _Filter.draft =>
         list.where((o) => o.status == PurchaseOrderStatus.draft).toList(),
-      _Filter.confirmed =>
+      _Filter.sent =>
         list.where((o) => o.status == PurchaseOrderStatus.confirmed).toList(),
       _Filter.received =>
         list.where((o) => o.status == PurchaseOrderStatus.received).toList(),
+      _Filter.cancelled =>
+        list.where((o) => o.status == PurchaseOrderStatus.cancelled).toList(),
     };
     final q = _query.toLowerCase();
     if (q.isEmpty) return list;
@@ -151,9 +153,11 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                       const SizedBox(width: 6),
                       _chip(_Filter.draft, 'Draft'),
                       const SizedBox(width: 6),
-                      _chip(_Filter.confirmed, 'Confirmed'),
+                      _chip(_Filter.sent, 'Sent'),
                       const SizedBox(width: 6),
                       _chip(_Filter.received, 'Received'),
+                      const SizedBox(width: 6),
+                      _chip(_Filter.cancelled, 'Cancelled'),
                     ],
                   ),
                 ),
@@ -374,10 +378,10 @@ class _SummaryStrip extends StatelessWidget {
     final draft = orders
         .where((o) => o.status == PurchaseOrderStatus.draft)
         .length;
-    final confirmed = orders
+    final sent = orders
         .where((o) => o.status == PurchaseOrderStatus.confirmed)
         .length;
-    final received = orders
+    final receivedValue = orders
         .where((o) => o.status == PurchaseOrderStatus.received)
         .fold<double>(0, (s, o) => s + o.subtotal);
 
@@ -400,14 +404,14 @@ class _SummaryStrip extends StatelessWidget {
           _SummaryCell(label: 'Draft', value: '$draft POs', color: _kDraft),
           _VertDivider(),
           _SummaryCell(
-            label: 'Confirmed',
-            value: '$confirmed POs',
+            label: 'Sent',
+            value: '$sent POs',
             color: _kConfirmed,
           ),
           _VertDivider(),
           _SummaryCell(
             label: 'Received',
-            value: currency.format(received),
+            value: currency.format(receivedValue),
             color: _kReceived,
           ),
         ],
@@ -485,11 +489,7 @@ class _POTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final (badgeColor, badgeBg, statusLabel) = switch (order.status) {
       PurchaseOrderStatus.draft => (_kDraft, _kDraftBg, 'DRAFT'),
-      PurchaseOrderStatus.confirmed => (
-          _kConfirmed,
-          _kConfirmedBg,
-          'CONFIRMED'
-        ),
+      PurchaseOrderStatus.confirmed => (_kConfirmed, _kConfirmedBg, 'SENT'),
       PurchaseOrderStatus.received => (_kReceived, _kReceivedBg, 'RECEIVED'),
       PurchaseOrderStatus.cancelled => (
           _kCancelled,

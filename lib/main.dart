@@ -12,6 +12,8 @@ import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/screens/onboarding_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:flutter/material.dart';
 import 'package:billeasy/screens/home_screen.dart';
@@ -43,6 +45,7 @@ Future<void> main() async {
   );
 
   await AppCheckService.activate();
+  await PlanService.instance.loadPlan();
   runApp(const BillRajaApp());
 }
 

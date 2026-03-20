@@ -9,6 +9,8 @@ import 'package:billeasy/screens/feature_placeholder_screen.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
+import 'package:billeasy/screens/referral_screen.dart';
+import 'package:billeasy/screens/reports_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/screens/purchase_orders_screen.dart';
 import 'package:billeasy/screens/create_purchase_order_screen.dart';
@@ -18,6 +20,8 @@ import 'package:billeasy/screens/settings_screen.dart';
 import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -31,11 +35,11 @@ enum InvoiceFilter { all, paid, pending, overdue }
 enum InvoicePeriodFilter { allTime, today, thisWeek, currentMonth, customRange }
 
 // ─── Primary brand colours (onboarding-inspired palette) ─────────────────────
-const _kPrimary = Color(0xFF0F4A75);
-const _kNavy = Color(0xFF0B234F);
+const _kPrimary = Color(0xFF4361EE);
+const _kNavy = Color(0xFF1E3A8A);
 const _kBackground = Color(0xFFEFF6FF);
 const _kBorder = Color(0xFFBDD5F0);
-const _kTextPrimary = Color(0xFF0B234F);
+const _kTextPrimary = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 const _kPaid = Color(0xFF22C55E);
 const _kPaidBg = Color(0xFFDCFCE7);
@@ -46,7 +50,7 @@ const _kOverdueBg = Color(0xFFFEE2E2);
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 // ─── Shell: manages tab index + bottom nav ────────────────────────────────────
@@ -340,6 +344,44 @@ class _DashboardPageState extends State<_DashboardPage> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const CreatePurchaseOrderScreen(),
+                  ),
+                ),
+                onViewReports: () {
+                  if (!PlanService.instance.hasReports) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const UpgradeScreen(featureName: 'Reports'),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ReportsScreen(),
+                    ),
+                  );
+                },
+                onReferral: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ReferralScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Referral Banner ────────────────────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+              child: _ReferralBanner(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const ReferralScreen(),
                   ),
                 ),
               ),
@@ -853,8 +895,8 @@ class _DashboardPageState extends State<_DashboardPage> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              const Color(0xFF0B234F),
-              const Color(0xFF0F4A75),
+              const Color(0xFF1E3A8A),
+              const Color(0xFF4361EE),
               Colors.white,
             ],
             begin: Alignment.topLeft,
@@ -1002,10 +1044,10 @@ class _DashboardPageState extends State<_DashboardPage> {
                 ? const Color(0xFFC7DAFF)
                 : const Color(0xFFFFD1D1),
             iconColor: user == null
-                ? const Color(0xFF0F4A75)
+                ? const Color(0xFF4361EE)
                 : const Color(0xFFB3261E),
             textColor: user == null
-                ? const Color(0xFF0F4A75)
+                ? const Color(0xFF4361EE)
                 : const Color(0xFFB3261E),
             onTap: () => _handleDrawerAuthAction(user),
           ),
@@ -1498,8 +1540,8 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                                     gradient: isSelected
                                         ? const LinearGradient(
                                             colors: [
-                                              Color(0xFF0F7D83),
-                                              Color(0xFF0F4A75),
+                                              Color(0xFF6366F1),
+                                              Color(0xFF4361EE),
                                             ],
                                             begin: Alignment.topCenter,
                                             end: Alignment.bottomCenter,
@@ -1545,17 +1587,21 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
   }
 }
 
-/// Quick Actions: Create Invoice + Add Client + New Purchase Order.
+/// Quick Actions: Create Invoice + Add Client + New Purchase Order + Reports.
 class _QuickActionsSection extends StatelessWidget {
   const _QuickActionsSection({
     required this.onCreateInvoice,
     required this.onAddClient,
     required this.onNewPurchase,
+    required this.onViewReports,
+    required this.onReferral,
   });
 
   final VoidCallback onCreateInvoice;
   final VoidCallback onAddClient;
   final VoidCallback onNewPurchase;
+  final VoidCallback onViewReports;
+  final VoidCallback onReferral;
 
   @override
   Widget build(BuildContext context) {
@@ -1602,6 +1648,19 @@ class _QuickActionsSection extends StatelessWidget {
             ),
           ],
         ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _ActionButton(
+                icon: Icons.bar_chart_rounded,
+                label: 'Financial Reports',
+                filled: false,
+                onTap: onViewReports,
+              ),
+            ),
+          ],
+        ),
       ],
     );
   }
@@ -1634,7 +1693,7 @@ class _ActionButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             gradient: filled
                 ? const LinearGradient(
-                    colors: [Color(0xFF0F4A75), Color(0xFF0B234F)],
+                    colors: [Color(0xFF4361EE), Color(0xFF1E3A8A)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   )
@@ -1671,6 +1730,82 @@ class _ActionButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Referral banner shown on the dashboard.
+class _ReferralBanner extends StatelessWidget {
+  const _ReferralBanner({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF6D00), Color(0xFFFFA000)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x30FF6D00),
+              blurRadius: 12,
+              offset: Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.people_alt_rounded,
+                color: Colors.white,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Invite friends, get 1 month free',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  SizedBox(height: 2),
+                  Text(
+                    'Share your referral code and earn Pro rewards',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white,
+              size: 20,
+            ),
+          ],
         ),
       ),
     );
@@ -1827,7 +1962,7 @@ class _AvatarWidget extends StatelessWidget {
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          colors: [Color(0xFF0F4A75), Color(0xFF0B234F)],
+          colors: [Color(0xFF4361EE), Color(0xFF1E3A8A)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1922,7 +2057,7 @@ class _DrawerMenuTile extends StatelessWidget {
     required this.onTap,
     this.backgroundColor = const Color(0xFFF4F8FF),
     this.borderColor = const Color(0xFFD5E4FF),
-    this.iconColor = const Color(0xFF0F4A75),
+    this.iconColor = const Color(0xFF4361EE),
     this.textColor = Colors.black87,
   });
 

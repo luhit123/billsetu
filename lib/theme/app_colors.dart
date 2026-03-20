@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 // ── Gradient (matches onboarding page 1: navy → deep blue → teal) ─────────────
 const kGradientColors = [
-  Color(0xFF0B234F), // Deep navy
-  Color(0xFF0F4A75), // Deep blue
-  Color(0xFF0F7D83), // Teal
+  Color(0xFF1E3A8A), // Deep navy
+  Color(0xFF4361EE), // Deep blue
+  Color(0xFF6366F1), // Teal
 ];
 
 const kGradient = LinearGradient(
@@ -14,16 +14,16 @@ const kGradient = LinearGradient(
 );
 
 // ── Primary ───────────────────────────────────────────────────────────────────
-const kPrimary = Color(0xFF0F4A75);   // Deep blue (mid-gradient)
-const kTeal    = Color(0xFF0F7D83);   // Teal (end of gradient)
-const kNavy    = Color(0xFF0B234F);   // Deep navy (start of gradient)
+const kPrimary = Color(0xFF4361EE);   // Deep blue (mid-gradient)
+const kTeal    = Color(0xFF6366F1);   // Teal (end of gradient)
+const kNavy    = Color(0xFF1E3A8A);   // Deep navy (start of gradient)
 
 // ── Backgrounds ───────────────────────────────────────────────────────────────
 const kBackground = Color(0xFFEFF6FF); // Very light blue
 const kCardBg     = Colors.white;
 
 // ── Text ──────────────────────────────────────────────────────────────────────
-const kTextPrimary   = Color(0xFF0B234F); // Deep navy
+const kTextPrimary   = Color(0xFF1E3A8A); // Deep navy
 const kTextSecondary = Color(0xFF5B7A9A); // Blue-gray
 
 // ── Borders ───────────────────────────────────────────────────────────────────

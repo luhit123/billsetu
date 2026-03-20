@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:billeasy/modals/product.dart';
+import 'package:billeasy/widgets/empty_state_widget.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:billeasy/screens/product_form_screen.dart';
 import 'package:billeasy/screens/product_movements_screen.dart';
@@ -9,15 +10,15 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF0F4A75);
+const _kPrimary    = Color(0xFF4361EE);
 const _kBackground = Color(0xFFEFF6FF);
 const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
+const _kTitle      = Color(0xFF1E3A8A);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 class ProductsScreen extends StatefulWidget {
@@ -126,7 +127,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
             if (products.isEmpty) {
               return ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                children: [_buildEmptyState()],
+                children: [
+                  EmptyStateWidget(
+                    icon: Icons.inventory_2_outlined,
+                    title: _query.isEmpty ? 'No products yet' : 'No matching products',
+                    subtitle: _query.isEmpty
+                        ? 'Add products to use them in invoices'
+                        : 'Try a different search term',
+                    actionLabel: _query.isEmpty && !widget.selectionMode ? 'Add Product' : null,
+                    iconColor: _kPrimary,
+                    onAction: _query.isEmpty && !widget.selectionMode ? _openAddProduct : null,
+                  ),
+                ],
               );
             }
 
@@ -216,67 +228,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
             tooltip: 'Add Product',
           ),
       ],
-    );
-  }
-
-  // ── Empty state ───────────────────────────────────────────────────────────
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFF6FF),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Icon(
-                Icons.inventory_2_outlined,
-                color: _kPrimary,
-                size: 36,
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'No products yet',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: _kTitle,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Add your products once and reuse\nthem when creating invoices.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: _kLabel, fontSize: 14, height: 1.5),
-            ),
-            const SizedBox(height: 24),
-            if (!widget.selectionMode)
-              ElevatedButton.icon(
-                onPressed: _openAddProduct,
-                icon: const Icon(Icons.add_rounded),
-                label: const Text('Add First Product'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPrimary,
-                  foregroundColor: Colors.white,
-                  elevation: 3,
-                  shadowColor: const Color(0x400F4A75),
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -387,7 +338,7 @@ class _ProductCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: isPreselected
-                ? const Color(0xFF0F4A75).withValues(alpha: 0.5)
+                ? const Color(0xFF4361EE).withValues(alpha: 0.5)
                 : const Color(0xFFBDD5F0),
             width: isPreselected ? 1.5 : 1.2,
           ),

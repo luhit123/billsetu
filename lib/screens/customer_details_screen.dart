@@ -15,10 +15,10 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // ─── Brand colours (same across all redesigned screens) ──────────────────────
-const _kPrimary = Color(0xFF0F4A75);
+const _kPrimary = Color(0xFF4361EE);
 const _kBg = Color(0xFFEFF6FF);
 const _kCard = Colors.white;
-const _kTextPrimary = Color(0xFF0B234F);
+const _kTextPrimary = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 const _kBorder = Color(0xFFBDD5F0);
 const _kPaid = Color(0xFF22C55E);
@@ -31,7 +31,7 @@ const _kOverdueBg = Color(0xFFFEE2E2);
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 class CustomerDetailsScreen extends StatefulWidget {

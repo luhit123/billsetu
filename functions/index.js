@@ -1021,3 +1021,424 @@ function getIndianDateParts(date) {
     day: lookup.day || date.getDate(),
   };
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SUBSCRIPTION & PAYMENT MANAGEMENT
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Demo Razorpay key for testing - replace with real keys in production
+const RAZORPAY_KEY_ID = 'rzp_test_demo';
+const RAZORPAY_KEY_SECRET = 'demo_secret';
+
+// Plan pricing in paise (₹1 = 100 paise)
+const PLAN_PRICING = {
+  raja: {
+    monthly: 14900,   // ₹149/mo (₹126.27 + 18% GST)
+    annual: 119900,    // ₹1,199/yr
+    launchAnnual: 79900, // ₹799/yr (first 500 users)
+  },
+  maharaja: {
+    monthly: 39900,    // ₹399/mo (₹338.14 + 18% GST)
+    annual: 299900,    // ₹2,999/yr
+    launchAnnual: 199900, // ₹1,999/yr (first 500 users)
+  },
+};
+
+/**
+ * Creates a subscription for the user.
+ * In DEMO mode, this creates a Firestore subscription directly.
+ * In production, this would call Razorpay API to create a subscription
+ * and return the subscription ID for client-side checkout.
+ */
+exports.createSubscription = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const { planId, billingCycle } = request.data || {};
+  if (!planId || !['raja', 'maharaja'].includes(planId)) {
+    throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja or maharaja.');
+  }
+  if (!billingCycle || !['monthly', 'annual'].includes(billingCycle)) {
+    throw new HttpsError('invalid-argument', 'Invalid billing cycle.');
+  }
+
+  // Check for existing active subscription
+  const existingDoc = await db.collection('subscriptions').doc(uid).get();
+  if (existingDoc.exists) {
+    const existing = existingDoc.data();
+    if (existing.status === 'active' && existing.plan === planId) {
+      throw new HttpsError('already-exists', 'You already have this plan active.');
+    }
+  }
+
+  const pricing = PLAN_PRICING[planId];
+  const priceInPaise = pricing[billingCycle];
+
+  // Check launch offer availability
+  let isLaunchOffer = false;
+  let launchSlot = null;
+  if (billingCycle === 'annual') {
+    const launchRef = db.collection('config').doc('launchOffer');
+    const launchDoc = await launchRef.get();
+    const claimed = launchDoc.exists ? (launchDoc.data().claimedSlots || 0) : 0;
+    if (claimed < 500) {
+      isLaunchOffer = true;
+      launchSlot = claimed + 1;
+      await launchRef.set({
+        totalSlots: 500,
+        claimedSlots: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }
+
+  const now = new Date();
+  const periodEnd = billingCycle === 'annual'
+    ? new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+    : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+
+  const finalPrice = isLaunchOffer ? pricing.launchAnnual : priceInPaise;
+  const demoSubId = `demo_sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+  // In DEMO mode, activate immediately
+  await db.collection('subscriptions').doc(uid).set({
+    id: demoSubId,
+    userId: uid,
+    plan: planId,
+    billingCycle,
+    status: 'active',
+    razorpaySubscriptionId: demoSubId,
+    currentPeriodStart: Timestamp.fromDate(now),
+    currentPeriodEnd: Timestamp.fromDate(periodEnd),
+    cancelAtPeriodEnd: false,
+    createdAt: Timestamp.fromDate(now),
+    updatedAt: Timestamp.fromDate(now),
+    priceInPaise: finalPrice,
+    launchOffer: isLaunchOffer,
+    launchOfferSlot: launchSlot,
+    demoMode: true,
+  });
+
+  // Record payment
+  const demoPayId = `demo_pay_${Date.now()}`;
+  const gstAmount = Math.round(finalPrice * 18 / 118);
+  await db.collection('subscriptions').doc(uid).collection('payments').doc(demoPayId).set({
+    id: demoPayId,
+    userId: uid,
+    subscriptionId: demoSubId,
+    razorpayPaymentId: demoPayId,
+    amount: finalPrice,
+    currency: 'INR',
+    status: 'captured',
+    method: 'demo',
+    createdAt: Timestamp.fromDate(now),
+    gstAmount,
+    baseAmount: finalPrice - gstAmount,
+  });
+
+  logger.info('Subscription created (demo mode)', { uid, planId, billingCycle, isLaunchOffer });
+
+  return {
+    success: true,
+    subscriptionId: demoSubId,
+    plan: planId,
+    billingCycle,
+    priceInPaise: finalPrice,
+    isLaunchOffer,
+    launchSlot,
+    demoMode: true,
+  };
+});
+
+/**
+ * Cancel subscription — sets cancelAtPeriodEnd or immediately cancels.
+ */
+exports.cancelSubscription = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const cancelImmediately = request.data && request.data.immediate === true;
+  const subRef = db.collection('subscriptions').doc(uid);
+  const subDoc = await subRef.get();
+
+  if (!subDoc.exists) {
+    throw new HttpsError('not-found', 'No active subscription found.');
+  }
+
+  const sub = subDoc.data();
+  if (sub.status !== 'active' && sub.status !== 'pending') {
+    throw new HttpsError('failed-precondition', 'Subscription is not active.');
+  }
+
+  if (cancelImmediately) {
+    await subRef.update({
+      status: 'cancelled',
+      cancelledAt: Timestamp.fromDate(new Date()),
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+  } else {
+    await subRef.update({
+      cancelAtPeriodEnd: true,
+      updatedAt: Timestamp.fromDate(new Date()),
+    });
+  }
+
+  logger.info('Subscription cancelled', { uid, immediate: cancelImmediately });
+  return { success: true, cancelledImmediately: cancelImmediately };
+});
+
+/**
+ * Razorpay webhook handler (HTTP endpoint).
+ * In production, this verifies the webhook signature and processes events.
+ * In DEMO mode, this is a placeholder.
+ */
+const { onRequest } = require('firebase-functions/v2/https');
+
+exports.razorpayWebhook = onRequest(async (req, res) => {
+  if (req.method !== 'POST') {
+    res.status(405).send('Method not allowed');
+    return;
+  }
+
+  try {
+    const event = req.body;
+    const eventType = event && event.event;
+
+    // In production: verify signature with crypto.createHmac('sha256', webhookSecret)
+    // const expectedSignature = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET)
+    //   .update(JSON.stringify(req.body))
+    //   .digest('hex');
+    // if (req.headers['x-razorpay-signature'] !== expectedSignature) {
+    //   res.status(401).send('Invalid signature');
+    //   return;
+    // }
+
+    logger.info('Razorpay webhook received', { eventType });
+
+    // Idempotency check
+    const eventId = event && event.id;
+    if (eventId) {
+      const eventRef = db.collection('razorpayEvents').doc(eventId);
+      const eventDoc = await eventRef.get();
+      if (eventDoc.exists && eventDoc.data().processed) {
+        res.status(200).json({ status: 'already_processed' });
+        return;
+      }
+      await eventRef.set({ processed: true, processedAt: FieldValue.serverTimestamp() });
+    }
+
+    // Handle different event types
+    const payload = event && event.payload;
+    switch (eventType) {
+      case 'subscription.activated':
+      case 'subscription.charged': {
+        const subscription = payload && payload.subscription && payload.subscription.entity;
+        if (subscription) {
+          const userId = subscription.notes && subscription.notes.userId;
+          if (userId) {
+            const periodEnd = subscription.current_end
+              ? Timestamp.fromDate(new Date(subscription.current_end * 1000))
+              : null;
+            await db.collection('subscriptions').doc(userId).update({
+              status: 'active',
+              currentPeriodEnd: periodEnd,
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        }
+        break;
+      }
+      case 'subscription.pending': {
+        const subscription = payload && payload.subscription && payload.subscription.entity;
+        if (subscription) {
+          const userId = subscription.notes && subscription.notes.userId;
+          if (userId) {
+            await db.collection('subscriptions').doc(userId).update({
+              status: 'pending',
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        }
+        break;
+      }
+      case 'subscription.halted': {
+        const subscription = payload && payload.subscription && payload.subscription.entity;
+        if (subscription) {
+          const userId = subscription.notes && subscription.notes.userId;
+          if (userId) {
+            const graceDate = new Date();
+            graceDate.setDate(graceDate.getDate() + 7);
+            await db.collection('subscriptions').doc(userId).update({
+              status: 'halted',
+              graceExpiresAt: Timestamp.fromDate(graceDate),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        }
+        break;
+      }
+      case 'subscription.cancelled': {
+        const subscription = payload && payload.subscription && payload.subscription.entity;
+        if (subscription) {
+          const userId = subscription.notes && subscription.notes.userId;
+          if (userId) {
+            await db.collection('subscriptions').doc(userId).update({
+              status: 'cancelled',
+              cancelledAt: FieldValue.serverTimestamp(),
+              updatedAt: FieldValue.serverTimestamp(),
+            });
+          }
+        }
+        break;
+      }
+      case 'payment.captured': {
+        const payment = payload && payload.payment && payload.payment.entity;
+        if (payment) {
+          const userId = payment.notes && payment.notes.userId;
+          const subId = payment.notes && payment.notes.subscriptionId;
+          if (userId && subId) {
+            const gstAmount = Math.round(payment.amount * 18 / 118);
+            await db.collection('subscriptions').doc(userId)
+              .collection('payments').doc(payment.id).set({
+                id: payment.id,
+                userId,
+                subscriptionId: subId,
+                razorpayPaymentId: payment.id,
+                amount: payment.amount,
+                currency: payment.currency || 'INR',
+                status: 'captured',
+                method: payment.method,
+                createdAt: FieldValue.serverTimestamp(),
+                gstAmount,
+                baseAmount: payment.amount - gstAmount,
+              });
+          }
+        }
+        break;
+      }
+      default:
+        logger.info('Unhandled webhook event', { eventType });
+    }
+
+    res.status(200).json({ status: 'ok' });
+  } catch (err) {
+    logger.error('Webhook error', { error: err && err.message });
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+/**
+ * Daily job: check for expired grace periods and downgrade to free.
+ * Also catches missed webhooks where subscription period has ended.
+ */
+exports.checkSubscriptionExpiry = onSchedule(
+  {
+    schedule: 'every day 03:00',
+    timeZone: INDIA_TIME_ZONE,
+  },
+  async () => {
+    const now = Timestamp.fromDate(new Date());
+
+    // 1. Expired grace periods → downgrade to free
+    const haltedSnapshot = await db.collection('subscriptions')
+      .where('status', '==', 'halted')
+      .get();
+
+    const writer = db.bulkWriter();
+    let expiredCount = 0;
+
+    haltedSnapshot.forEach((doc) => {
+      const data = doc.data();
+      const graceExpires = data.graceExpiresAt;
+      if (graceExpires && graceExpires.toDate() < new Date()) {
+        expiredCount++;
+        writer.update(doc.ref, {
+          status: 'expired',
+          plan: 'free',
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    // 2. Active subs past currentPeriodEnd with no recent webhook → mark halted
+    const activeSnapshot = await db.collection('subscriptions')
+      .where('status', '==', 'active')
+      .get();
+
+    let haltedCount = 0;
+
+    activeSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.demoMode) return; // Skip demo subscriptions
+      const periodEnd = data.currentPeriodEnd;
+      if (periodEnd && periodEnd.toDate() < new Date()) {
+        haltedCount++;
+        const graceDate = new Date();
+        graceDate.setDate(graceDate.getDate() + 7);
+        writer.update(doc.ref, {
+          status: 'halted',
+          graceExpiresAt: Timestamp.fromDate(graceDate),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    // 3. Handle cancelAtPeriodEnd
+    activeSnapshot.forEach((doc) => {
+      const data = doc.data();
+      if (!data.cancelAtPeriodEnd) return;
+      const periodEnd = data.currentPeriodEnd;
+      if (periodEnd && periodEnd.toDate() < new Date()) {
+        writer.update(doc.ref, {
+          status: 'cancelled',
+          plan: 'free',
+          cancelledAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    });
+
+    await writer.close();
+
+    logger.info('Subscription expiry check completed', { expiredCount, haltedCount });
+  }
+);
+
+/**
+ * Get subscription status for current user.
+ */
+exports.getSubscriptionStatus = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const subDoc = await db.collection('subscriptions').doc(uid).get();
+  if (!subDoc.exists) {
+    return { plan: 'free', status: 'none', features: PLAN_PRICING };
+  }
+
+  const data = subDoc.data();
+
+  // Get launch offer availability
+  const launchRef = db.collection('config').doc('launchOffer');
+  const launchDoc = await launchRef.get();
+  const claimedSlots = launchDoc.exists ? (launchDoc.data().claimedSlots || 0) : 0;
+
+  return {
+    plan: data.plan,
+    status: data.status,
+    billingCycle: data.billingCycle,
+    currentPeriodEnd: data.currentPeriodEnd,
+    cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
+    priceInPaise: data.priceInPaise,
+    launchOffer: data.launchOffer || false,
+    demoMode: data.demoMode || false,
+    launchOfferAvailable: claimedSlots < 500,
+    launchOfferSlotsRemaining: Math.max(0, 500 - claimedSlots),
+  };
+});

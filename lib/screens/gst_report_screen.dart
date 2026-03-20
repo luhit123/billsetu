@@ -9,18 +9,18 @@ import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 
 // ─── Brand colours ─────────────────────────────────────────────────────────────
-const _kNavy = Color(0xFF0B234F);
-const _kPrimary = Color(0xFF0F4A75);
-const _kTeal = Color(0xFF0F7D83);
+const _kNavy = Color(0xFF1E3A8A);
+const _kPrimary = Color(0xFF4361EE);
+const _kTeal = Color(0xFF6366F1);
 const _kBg = Color(0xFFEFF6FF);
 const _kBorder = Color(0xFFBDD5F0);
-const _kTextPrimary = Color(0xFF0B234F);
+const _kTextPrimary = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 // ─── Status colours ────────────────────────────────────────────────────────────

@@ -25,11 +25,17 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController _addressController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _gstinController = TextEditingController();
+  final TextEditingController _bankAccountNameController = TextEditingController();
+  final TextEditingController _bankAccountNumberController = TextEditingController();
+  final TextEditingController _bankIfscController = TextEditingController();
+  final TextEditingController _bankNameController = TextEditingController();
+  final TextEditingController _upiIdController = TextEditingController();
   final ProfileService _profileService = ProfileService();
 
   bool _isLoading = true;
   bool _isSaving = false;
   bool _didPrefill = false;
+  bool _showBankDetails = false;
 
   @override
   void initState() {
@@ -43,6 +49,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _addressController.dispose();
     _phoneController.dispose();
     _gstinController.dispose();
+    _bankAccountNameController.dispose();
+    _bankAccountNumberController.dispose();
+    _bankIfscController.dispose();
+    _bankNameController.dispose();
+    _upiIdController.dispose();
     super.dispose();
   }
 
@@ -162,6 +173,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                     ),
                                   ),
                                   const SizedBox(height: 26),
+
+                                  // ── Business Info ──────────────────────────
                                   TextField(
                                     controller: _storeNameController,
                                     textCapitalization: TextCapitalization.words,
@@ -202,6 +215,97 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                       icon: Icons.receipt_long_outlined,
                                     ),
                                   ),
+                                  const SizedBox(height: 26),
+
+                                  // ── UPI ID ─────────────────────────────────
+                                  TextField(
+                                    controller: _upiIdController,
+                                    decoration: _inputDecoration(
+                                      label: 'UPI ID',
+                                      hint: 'e.g. yourname@upi',
+                                      icon: Icons.payment_outlined,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+
+                                  // ── Bank Details Toggle ────────────────────
+                                  InkWell(
+                                    onTap: () => setState(() => _showBankDetails = !_showBankDetails),
+                                    borderRadius: BorderRadius.circular(14),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFEAF3FF),
+                                        borderRadius: BorderRadius.circular(14),
+                                        border: Border.all(color: const Color(0xFFD4E2F8)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.account_balance_outlined, color: Color(0xFF123C85)),
+                                          const SizedBox(width: 12),
+                                          const Expanded(
+                                            child: Text(
+                                              'Bank Account Details',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w600,
+                                                color: Color(0xFF123C85),
+                                              ),
+                                            ),
+                                          ),
+                                          Icon(
+                                            _showBankDetails
+                                                ? Icons.keyboard_arrow_up_rounded
+                                                : Icons.keyboard_arrow_down_rounded,
+                                            color: const Color(0xFF123C85),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (_showBankDetails) ...[
+                                    const SizedBox(height: 16),
+                                    TextField(
+                                      controller: _bankAccountNameController,
+                                      textCapitalization: TextCapitalization.words,
+                                      decoration: _inputDecoration(
+                                        label: 'Account Holder Name',
+                                        hint: s.profileOptionalHint,
+                                        icon: Icons.person_outline,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    TextField(
+                                      controller: _bankAccountNumberController,
+                                      keyboardType: TextInputType.number,
+                                      decoration: _inputDecoration(
+                                        label: 'Account Number',
+                                        hint: s.profileOptionalHint,
+                                        icon: Icons.credit_card_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    TextField(
+                                      controller: _bankIfscController,
+                                      textCapitalization: TextCapitalization.characters,
+                                      decoration: _inputDecoration(
+                                        label: 'IFSC Code',
+                                        hint: 'e.g. SBIN0001234',
+                                        icon: Icons.code_outlined,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    TextField(
+                                      controller: _bankNameController,
+                                      textCapitalization: TextCapitalization.words,
+                                      decoration: _inputDecoration(
+                                        label: 'Bank Name',
+                                        hint: s.profileOptionalHint,
+                                        icon: Icons.account_balance_outlined,
+                                      ),
+                                    ),
+                                  ],
+
                                   const SizedBox(height: 26),
                                   SizedBox(
                                     width: double.infinity,
@@ -282,6 +386,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         _addressController.text = profile.address;
         _phoneController.text = profile.phoneNumber;
         _gstinController.text = profile.gstin;
+        _bankAccountNameController.text = profile.bankAccountName;
+        _bankAccountNumberController.text = profile.bankAccountNumber;
+        _bankIfscController.text = profile.bankIfsc;
+        _bankNameController.text = profile.bankName;
+        _upiIdController.text = profile.upiId;
+
+        // Auto-expand bank section if any bank field has data
+        if (profile.bankAccountName.isNotEmpty ||
+            profile.bankAccountNumber.isNotEmpty ||
+            profile.bankIfsc.isNotEmpty ||
+            profile.bankName.isNotEmpty) {
+          _showBankDetails = true;
+        }
+
         _didPrefill = true;
       }
     } catch (_) {
@@ -317,6 +435,11 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       address: _addressController.text.trim(),
       phoneNumber: _phoneController.text.trim(),
       gstin: _gstinController.text.trim(),
+      bankAccountName: _bankAccountNameController.text.trim(),
+      bankAccountNumber: _bankAccountNumberController.text.trim(),
+      bankIfsc: _bankIfscController.text.trim(),
+      bankName: _bankNameController.text.trim(),
+      upiId: _upiIdController.text.trim(),
     );
 
     try {

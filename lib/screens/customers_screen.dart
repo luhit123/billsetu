@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/widgets/empty_state_widget.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/customer_group.dart';
@@ -13,16 +14,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const _kPrimary       = Color(0xFF0F4A75);
+const _kPrimary       = Color(0xFF4361EE);
 const _kBackground    = Color(0xFFEFF6FF);
-const _kTextPrimary   = Color(0xFF0B234F);
+const _kTextPrimary   = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 const _kCardShadow    = Color(0x0C0F4A75);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 class CustomersScreen extends StatefulWidget {
@@ -184,13 +185,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
                       ),
                     ] else if (_clients.isEmpty) ...[
                       const SizedBox(height: 16),
-                      _EmptyCustomersState(
-                        selectionMode: widget.selectionMode,
-                        hasSearchQuery: _searchQuery.isNotEmpty,
-                        searchQuery: _searchQuery,
-                        hasGroupFilter: _selectedGroupFilterId.isNotEmpty,
-                        onAddCustomer: _openCustomerForm,
-                      ),
+                      if (!_searchQuery.isNotEmpty && !_selectedGroupFilterId.isNotEmpty && !widget.selectionMode)
+                        EmptyStateWidget(
+                          icon: Icons.people_outline,
+                          title: 'No customers yet',
+                          subtitle: 'Add your first customer to get started',
+                          actionLabel: 'Add Customer',
+                          iconColor: _kPrimary,
+                          onAction: _openCustomerForm,
+                        )
+                      else
+                        _EmptyCustomersState(
+                          selectionMode: widget.selectionMode,
+                          hasSearchQuery: _searchQuery.isNotEmpty,
+                          searchQuery: _searchQuery,
+                          hasGroupFilter: _selectedGroupFilterId.isNotEmpty,
+                          onAddCustomer: _openCustomerForm,
+                        ),
                     ] else ...[
                       const SizedBox(height: 16),
                       ..._clients.map((client) {

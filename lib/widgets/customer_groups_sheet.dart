@@ -142,7 +142,7 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                           child: ListTile(
                             leading: CircleAvatar(
                               backgroundColor: const Color(0xFFE4F7F8),
-                              foregroundColor: const Color(0xFF0F7D83),
+                              foregroundColor: const Color(0xFF6366F1),
                               child: Text(
                                 group.name.trim().isEmpty
                                     ? '?'
@@ -448,7 +448,7 @@ class _GroupPickerTile extends StatelessWidget {
             children: [
               CircleAvatar(
                 backgroundColor: const Color(0xFFE4F7F8),
-                foregroundColor: const Color(0xFF0F7D83),
+                foregroundColor: const Color(0xFF6366F1),
                 child: Icon(icon),
               ),
               const SizedBox(width: 14),

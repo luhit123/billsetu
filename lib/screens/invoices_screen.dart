@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/widgets/empty_state_widget.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
@@ -10,9 +11,9 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 // ─── Shared brand colours (onboarding-inspired palette) ──────────────────────
-const _kPrimary = Color(0xFF0F4A75);
+const _kPrimary = Color(0xFF4361EE);
 const _kBackground = Color(0xFFEFF6FF);
-const _kTextPrimary = Color(0xFF0B234F);
+const _kTextPrimary = Color(0xFF1E3A8A);
 const _kTextSecondary = Color(0xFF5B7A9A);
 const _kCardBg = Colors.white;
 const _kPaid = Color(0xFF22C55E);
@@ -24,7 +25,7 @@ const _kOverdueBg = Color(0xFFFEE2E2);
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 enum _Filter { all, paid, pending, overdue }
@@ -218,33 +219,26 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               else if (filtered.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(32),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.receipt_long_outlined,
-                            size: 56,
-                            color: Colors.grey.shade300,
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _allInvoices.isEmpty
-                                ? s.homeNoInvoicesYet
-                                : s.homeNoInvoicesFilter,
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: Colors.grey.shade500,
+                  child: _allInvoices.isEmpty
+                      ? EmptyStateWidget(
+                          icon: Icons.receipt_long_outlined,
+                          title: 'No invoices yet',
+                          subtitle: 'Create your first invoice to get started',
+                          actionLabel: 'Create Invoice',
+                          iconColor: _kPrimary,
+                          onAction: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CreateInvoiceScreen(),
                             ),
-                            textAlign: TextAlign.center,
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
+                        )
+                      : EmptyStateWidget(
+                          icon: Icons.filter_list_off_rounded,
+                          title: 'No matching invoices',
+                          subtitle: s.homeNoInvoicesFilter,
+                          iconColor: _kPrimary,
+                        ),
                 )
               else
                 SliverPadding(

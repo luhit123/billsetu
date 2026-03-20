@@ -10,22 +10,25 @@ import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/invoice_number_service.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/usage_tracking_service.dart';
+import 'package:billeasy/widgets/limit_reached_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Brand tokens ────────────────────────────────────────────────────────────
-const _kPrimary     = Color(0xFF0F4A75);
+const _kPrimary     = Color(0xFF4361EE);
 const _kBackground  = Color(0xFFEFF6FF);
 const _kBorder      = Color(0xFFBDD5F0);
 const _kLabel       = Color(0xFF5B7A9A);
-const _kTitle       = Color(0xFF0B234F);
+const _kTitle       = Color(0xFF1E3A8A);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 BoxDecoration _cardDecoration({bool error = false}) => BoxDecoration(
@@ -76,7 +79,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     decimalDigits: 0,
   );
 
-  DateTime? selectedDate;
+  DateTime selectedDate = DateTime.now();
   Client? _selectedClient;
   bool _isSaving = false;
   bool _showClientValidationError = false;
@@ -194,6 +197,63 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(top: BorderSide(color: Color(0xFFBDD5F0))),
+          boxShadow: [BoxShadow(color: Color(0x120F4A75), blurRadius: 20, offset: Offset(0, -4))],
+        ),
+        child: SafeArea(
+          child: Row(
+            children: [
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Total', style: TextStyle(fontSize: 11, color: Color(0xFF5B7A9A))),
+                  Text(
+                    _currencyFormat.format(grandTotal),
+                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1E3A8A)),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: _isSaving ? null : const LinearGradient(
+                        colors: [Color(0xFF1E3A8A), Color(0xFF6366F1)],
+                      ),
+                      color: _isSaving ? const Color(0xFF5B7A9A) : null,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: _isSaving ? null : _saveInvoice,
+                      icon: _isSaving
+                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+                          : const Icon(Icons.check_circle_rounded, size: 20),
+                      label: Text(_isSaving ? s.createSavingInvoice : s.createSaveInvoice),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        shadowColor: Colors.transparent,
+                        disabledBackgroundColor: Colors.transparent,
+                        disabledForegroundColor: Colors.white70,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: SafeArea(
         child: Form(
           key: _formKey,
@@ -206,23 +266,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               const SizedBox(height: 16),
 
               // ── Invoice Date ──────────────────────────────────────────
+              _sectionLabel(s.createInvoiceDate, step: 2),
               _buildDateCard(context, s),
-              if (selectedDate == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, left: 12),
-                  child: Text(
-                    s.createDateRequired,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.error,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
               const SizedBox(height: 16),
 
               // ── Section label – Items ─────────────────────────────────
-              _sectionLabel('Items'),
-              const SizedBox(height: 8),
+              _sectionLabel('Items', step: 3),
 
               // ── Item rows ─────────────────────────────────────────────
               ...List.generate(itemRows.length, (index) {
@@ -230,23 +279,30 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               }),
 
               // ── Add item button ───────────────────────────────────────
-              TextButton.icon(
-                onPressed: _addItemRow,
-                icon: const Icon(Icons.add_circle_outline,
-                    color: _kPrimary, size: 18),
-                label: Text(
-                  s.createAddItem,
-                  style: const TextStyle(
-                    color: _kPrimary,
-                    fontWeight: FontWeight.w600,
+              GestureDetector(
+                onTap: _addItemRow,
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFF4361EE), width: 1.5),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add_circle_rounded, color: Color(0xFF4361EE), size: 20),
+                      SizedBox(width: 8),
+                      Text('Add Item', style: TextStyle(color: Color(0xFF4361EE), fontWeight: FontWeight.w700, fontSize: 14)),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
 
               // ── Status ────────────────────────────────────────────────
-              _sectionLabel(s.createInvoiceStatus),
-              const SizedBox(height: 8),
+              _sectionLabel(s.createInvoiceStatus, step: 4),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: _cardDecoration(),
@@ -270,8 +326,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               const SizedBox(height: 16),
 
               // ── Discount ──────────────────────────────────────────────
-              _sectionLabel(s.createDiscountTitle),
-              const SizedBox(height: 8),
+              _sectionLabel(s.createDiscountTitle, step: 5),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: _cardDecoration(),
@@ -341,56 +396,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               // ── Summary ───────────────────────────────────────────────
               _buildSummaryCard(subtotal, discountAmount, totalTax, cgstAmount, sgstAmount, igstAmount, grandTotal, s),
               const SizedBox(height: 24),
-
-              // ── Save button ───────────────────────────────────────────
-              SizedBox(
-                height: 56,
-                child: ElevatedButton.icon(
-                  onPressed: _isSaving ? null : _saveInvoice,
-                  icon: _isSaving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Icon(Icons.check_circle_outline_rounded),
-                  label: Text(
-                    _isSaving
-                        ? s.createSavingInvoice
-                        : s.createSaveInvoice,
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        _kPrimary.withValues(alpha: 0.45),
-                    disabledForegroundColor: Colors.white,
-                    elevation: 3,
-                    shadowColor: const Color(0x400F4A75),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                s.createSaveHint,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: _kLabel,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 8),
             ],
           ),
         ),
@@ -400,32 +405,36 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
 
   // ── Section label helper ──────────────────────────────────────────────────
 
-  Widget _sectionLabel(String text) => Row(
-        children: [
+  Widget _sectionLabel(String text, {int? step}) => Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(
+      children: [
+        if (step != null) ...[
           Container(
-            width: 3,
-            height: 16,
-            decoration: BoxDecoration(
-              color: _kPrimary,
-              borderRadius: BorderRadius.circular(2),
+            width: 24,
+            height: 24,
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF6366F1)]),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text('$step', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700)),
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              color: Color(0xFF0B234F),
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+        ] else ...[
+          Container(width: 3, height: 16, decoration: BoxDecoration(color: const Color(0xFF4361EE), borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 8),
         ],
-      );
+        Text(text, style: const TextStyle(color: Color(0xFF1E3A8A), fontSize: 14, fontWeight: FontWeight.w700)),
+      ],
+    ),
+  );
 
   // ── Date card ─────────────────────────────────────────────────────────────
 
   Widget _buildDateCard(BuildContext context, AppStrings s) {
-    final hasDate = selectedDate != null;
+    final dayName = DateFormat('EEEE').format(selectedDate);
     return InkWell(
       onTap: _pickDate,
       borderRadius: BorderRadius.circular(16),
@@ -435,20 +444,28 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         child: Row(
           children: [
             Container(
-              width: 44,
-              height: 44,
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
-                color: hasDate
-                    ? const Color(0xFFEFF6FF)
-                    : const Color(0xFFFEF3C7),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Icon(
-                Icons.calendar_month_rounded,
-                size: 22,
-                color: hasDate
-                    ? _kPrimary
-                    : const Color(0xFFD97706),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    DateFormat('dd').format(selectedDate),
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, height: 1),
+                  ),
+                  Text(
+                    DateFormat('MMM').format(selectedDate).toUpperCase(),
+                    style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5),
+                  ),
+                ],
               ),
             ),
             const SizedBox(width: 14),
@@ -458,35 +475,28 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 children: [
                   Text(
                     s.createInvoiceDate,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: _kLabel,
-                    ),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF5B7A9A)),
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    hasDate
-                        ? DateFormat('dd MMM yyyy').format(selectedDate!)
-                        : s.createPickDate,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: hasDate ? _kTitle : const Color(0xFFD97706),
-                    ),
+                    DateFormat('dd MMM yyyy').format(selectedDate),
+                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1E3A8A)),
                   ),
-                  const SizedBox(height: 2),
                   Text(
-                    hasDate
-                        ? s.createDateHintSelected
-                        : s.createDateHintEmpty,
-                    style: const TextStyle(fontSize: 12, color: _kLabel),
+                    dayName,
+                    style: const TextStyle(fontSize: 12, color: Color(0xFF5B7A9A)),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: _kLabel, size: 20),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Text('Change', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF4361EE))),
+            ),
           ],
         ),
       ),
@@ -498,200 +508,251 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   Widget _buildItemCard(
       BuildContext context, int index, AppStrings s) {
     final row = itemRows[index];
+    final qty = nu.parseDouble(row['qty']!.text) ?? 0;
+    final price = nu.parseDouble(row['price']!.text) ?? 0;
+    final rowTotal = qty * price;
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _cardDecoration(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header row
-            Row(
+      child: Stack(
+        children: [
+          // Main card
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFBDD5F0), width: 1.2),
+              boxShadow: const [BoxShadow(color: Color(0x0E0F4A75), blurRadius: 16, offset: Offset(0, 4))],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Center(
+                // Header row
+                Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF1E3A8A), Color(0xFF6366F1)],
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${index + 1}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        s.createItemNumber(index + 1),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: _kTitle,
+                        ),
+                      ),
+                    ),
+                    // ── From Products quick-fill ──────────────────────
+                    GestureDetector(
+                      onTap: () => _pickProduct(index),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                              color: const Color(0xFF4361EE).withValues(alpha: 0.3)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2_outlined,
+                                size: 13, color: _kPrimary),
+                            SizedBox(width: 4),
+                            Text(
+                              'Products',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: _kPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    IconButton(
+                      onPressed: () => _removeItemRow(index),
+                      icon: const Icon(Icons.delete_outline,
+                          color: Color(0xFFEF4444), size: 20),
+                      tooltip: s.createDeleteItem,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                          minWidth: 36, minHeight: 36),
+                    ),
+                  ],
+                ),
+                // Live total row
+                if (rowTotal > 0) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Text(
-                      '${index + 1}',
+                      'Line total: ${_currencyFormat.format(rowTotal)}',
                       style: const TextStyle(
-                        color: _kPrimary,
+                        fontSize: 12,
                         fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                        color: Color(0xFF6366F1),
                       ),
                     ),
                   ),
+                ],
+                const SizedBox(height: 12),
+                // Description
+                TextFormField(
+                  controller: row['desc'],
+                  decoration: _inputDecoration(s.createProductLabel),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return s.createEnterProduct;
+                    }
+                    return null;
+                  },
+                  onChanged: (_) => setState(() {}),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    s.createItemNumber(index + 1),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                      color: _kTitle,
-                    ),
+                const SizedBox(height: 8),
+                // HSN / SAC code (optional)
+                TextField(
+                  controller: row['hsn'],
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: _inputDecoration(s.hsnCodeLabel).copyWith(
+                    hintText: s.hsnCodeHint,
                   ),
                 ),
-                // ── From Products quick-fill ──────────────────────
-                GestureDetector(
-                  onTap: () => _pickProduct(index),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                          color: const Color(0xFF0F4A75).withValues(alpha: 0.3)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.inventory_2_outlined,
-                            size: 13, color: _kPrimary),
-                        SizedBox(width: 4),
-                        Text(
-                          'Products',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: _kPrimary,
+                const SizedBox(height: 12),
+                // Qty / Unit / Price
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isCompact = constraints.maxWidth < 360;
+
+                    final qtyField = TextFormField(
+                      controller: row['qty'],
+                      decoration: _inputDecoration(s.createQtyLabel),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: (value) {
+                        final qty = nu.parseDouble(value);
+                        if (qty == null || qty <= 0) {
+                          return s.createQtyLabel;
+                        }
+                        return null;
+                      },
+                      onChanged: (_) => setState(() {}),
+                    );
+
+                    final unitField = DropdownButtonFormField<String>(
+                      initialValue:
+                          _normalizeItemUnit(row['unit']!.text),
+                      isExpanded: true,
+                      decoration: _inputDecoration(s.createUnitLabel),
+                      items: _itemUnitOptions.map((unit) {
+                        return DropdownMenuItem(
+                          value: unit,
+                          child: Text(unit,
+                              overflow: TextOverflow.ellipsis),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        row['unit']!.text =
+                            _normalizeItemUnit(value);
+                        setState(() {});
+                      },
+                    );
+
+                    final priceField = TextFormField(
+                      controller: row['price'],
+                      decoration:
+                          _inputDecoration(s.createUnitPriceLabel),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      validator: (value) {
+                        final price = nu.parseDouble(value);
+                        if (price == null || price <= 0) {
+                          return s.createUnitPriceLabel;
+                        }
+                        return null;
+                      },
+                      onChanged: (_) => setState(() {}),
+                    );
+
+                    if (isCompact) {
+                      return Column(
+                        children: [
+                          Row(
+                            crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                            children: [
+                              Expanded(child: qtyField),
+                              const SizedBox(width: 8),
+                              Expanded(child: unitField),
+                            ],
                           ),
-                        ),
+                          const SizedBox(height: 12),
+                          priceField,
+                        ],
+                      );
+                    }
+
+                    return Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(flex: 2, child: qtyField),
+                        const SizedBox(width: 8),
+                        Expanded(flex: 2, child: unitField),
+                        const SizedBox(width: 8),
+                        Expanded(flex: 3, child: priceField),
                       ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                IconButton(
-                  onPressed: () => _removeItemRow(index),
-                  icon: const Icon(Icons.delete_outline,
-                      color: Color(0xFFEF4444), size: 20),
-                  tooltip: s.createDeleteItem,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                      minWidth: 36, minHeight: 36),
+                    );
+                  },
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            // Description
-            TextFormField(
-              controller: row['desc'],
-              decoration: _inputDecoration(s.createProductLabel),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return s.createEnterProduct;
-                }
-                return null;
-              },
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: 8),
-            // HSN / SAC code (optional)
-            TextField(
-              controller: row['hsn'],
-              textCapitalization: TextCapitalization.characters,
-              decoration: _inputDecoration(s.hsnCodeLabel).copyWith(
-                hintText: s.hsnCodeHint,
+          ),
+          // Left accent bar
+          Positioned(
+            left: 0,
+            top: 8,
+            bottom: 8,
+            child: Container(
+              width: 5,
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF1E3A8A), Color(0xFF6366F1)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
+                borderRadius: BorderRadius.circular(3),
               ),
             ),
-            const SizedBox(height: 12),
-            // Qty / Unit / Price
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isCompact = constraints.maxWidth < 360;
-
-                final qtyField = TextFormField(
-                  controller: row['qty'],
-                  decoration: _inputDecoration(s.createQtyLabel),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  validator: (value) {
-                    final qty = nu.parseDouble(value);
-                    if (qty == null || qty <= 0) {
-                      return s.createQtyLabel;
-                    }
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                );
-
-                final unitField = DropdownButtonFormField<String>(
-                  initialValue:
-                      _normalizeItemUnit(row['unit']!.text),
-                  isExpanded: true,
-                  decoration: _inputDecoration(s.createUnitLabel),
-                  items: _itemUnitOptions.map((unit) {
-                    return DropdownMenuItem(
-                      value: unit,
-                      child: Text(unit,
-                          overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
-                  onChanged: (value) {
-                    row['unit']!.text =
-                        _normalizeItemUnit(value);
-                    setState(() {});
-                  },
-                );
-
-                final priceField = TextFormField(
-                  controller: row['price'],
-                  decoration:
-                      _inputDecoration(s.createUnitPriceLabel),
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  validator: (value) {
-                    final price = nu.parseDouble(value);
-                    if (price == null || price <= 0) {
-                      return s.createUnitPriceLabel;
-                    }
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                );
-
-                if (isCompact) {
-                  return Column(
-                    children: [
-                      Row(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: qtyField),
-                          const SizedBox(width: 8),
-                          Expanded(child: unitField),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      priceField,
-                    ],
-                  );
-                }
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 2, child: qtyField),
-                    const SizedBox(width: 8),
-                    Expanded(flex: 2, child: unitField),
-                    const SizedBox(width: 8),
-                    Expanded(flex: 3, child: priceField),
-                  ],
-                );
-              },
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -703,8 +764,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel('GST'),
-        const SizedBox(height: 8),
+        _sectionLabel('GST', step: 6),
         Container(
           padding: const EdgeInsets.all(16),
           decoration: _cardDecoration(),
@@ -899,102 +959,62 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       double grandTotal,
       AppStrings s) {
     return Container(
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFFEFF6FF), Color(0xFFE8F4FF)],
+          colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFBDD5F0), width: 1.2),
-        boxShadow: const [
-          BoxShadow(color: Color(0x0E0F4A75), blurRadius: 16, offset: Offset(0, 4)),
-        ],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: const [BoxShadow(color: Color(0x300B234F), blurRadius: 20, offset: Offset(0, 8))],
       ),
-      child: Column(
-        children: [
-          _summaryRow(
-            s.createSummarySubtotal,
-            _currencyFormat.format(subtotal),
-            isTotal: false,
-          ),
-          if (discountAmount > 0) ...[
-            const SizedBox(height: 6),
-            _summaryRow(
-              s.createSummaryDiscount,
-              '-${_currencyFormat.format(discountAmount)}',
-              valueColor: const Color(0xFFEF4444),
-              isTotal: false,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            // Grand total at top (big)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Grand Total', style: TextStyle(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w500)),
+                Text(
+                  _currencyFormat.format(grandTotal),
+                  style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800),
+                ),
+              ],
             ),
+            const SizedBox(height: 16),
+            // Divider
+            Container(height: 1, color: Colors.white.withValues(alpha: 0.2)),
+            const SizedBox(height: 14),
+            // Breakdown rows
+            _summaryRowWhite(s.createSummarySubtotal, _currencyFormat.format(subtotal)),
+            if (discountAmount > 0) ...[
+              const SizedBox(height: 8),
+              _summaryRowWhite(s.createSummaryDiscount, '-${_currencyFormat.format(discountAmount)}', valueColor: const Color(0xFFFFB3B3)),
+            ],
+            if (_gstEnabled && totalTax > 0) ...[
+              const SizedBox(height: 8),
+              if (_gstType == 'cgst_sgst') ...[
+                _summaryRowWhite('CGST (${(_gstRate / 2).toStringAsFixed(1)}%)', '+${_currencyFormat.format(cgst)}', valueColor: const Color(0xFF86EFAC)),
+                const SizedBox(height: 6),
+                _summaryRowWhite('SGST (${(_gstRate / 2).toStringAsFixed(1)}%)', '+${_currencyFormat.format(sgst)}', valueColor: const Color(0xFF86EFAC)),
+              ] else
+                _summaryRowWhite('IGST (${_gstRate.toStringAsFixed(0)}%)', '+${_currencyFormat.format(igst)}', valueColor: const Color(0xFF86EFAC)),
+            ],
           ],
-          if (_gstEnabled && totalTax > 0) ...[
-            const SizedBox(height: 6),
-            if (_gstType == 'cgst_sgst') ...[
-              _summaryRow(
-                'CGST (${(_gstRate / 2).toStringAsFixed(1)}%)',
-                '+${_currencyFormat.format(cgst)}',
-                valueColor: const Color(0xFF059669),
-                isTotal: false,
-              ),
-              const SizedBox(height: 4),
-              _summaryRow(
-                'SGST (${(_gstRate / 2).toStringAsFixed(1)}%)',
-                '+${_currencyFormat.format(sgst)}',
-                valueColor: const Color(0xFF059669),
-                isTotal: false,
-              ),
-            ] else
-              _summaryRow(
-                'IGST (${_gstRate.toStringAsFixed(0)}%)',
-                '+${_currencyFormat.format(igst)}',
-                valueColor: const Color(0xFF059669),
-                isTotal: false,
-              ),
-          ],
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(color: Color(0xFFBDD5F0), height: 1),
-          ),
-          _summaryRow(
-            s.createSummaryGrandTotal,
-            _currencyFormat.format(grandTotal),
-            isTotal: true,
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _summaryRow(
-    String label,
-    String value, {
-    Color? valueColor,
-    required bool isTotal,
-  }) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: isTotal ? 14 : 13,
-            fontWeight:
-                isTotal ? FontWeight.w700 : FontWeight.w500,
-            color: isTotal ? _kTitle : _kLabel,
-          ),
-        ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: isTotal ? 20 : 14,
-            fontWeight: FontWeight.w700,
-            color: valueColor ?? (isTotal ? _kPrimary : _kTitle),
-          ),
-        ),
-      ],
-    );
-  }
+  Widget _summaryRowWhite(String label, String value, {Color? valueColor}) => Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+      Text(value, style: TextStyle(color: valueColor ?? Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+    ],
+  );
 
   // ── Customer section ──────────────────────────────────────────────────────
 
@@ -1007,57 +1027,71 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(s.createCustomerLabel),
-        const SizedBox(height: 8),
+        _sectionLabel(s.createCustomerLabel, step: 1),
         Container(
-          padding: const EdgeInsets.all(16),
-          decoration: _cardDecoration(error: hasError),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              CircleAvatar(
-                radius: 22,
-                backgroundColor: const Color(0xFFEFF6FF),
-                child: Text(
-                  selectedClient?.initials ?? '+',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    color: _kPrimary,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      selectedClient?.name ??
-                          s.createSelectCustomer,
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: selectedClient == null
-                            ? _kLabel
-                            : _kTitle,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      selectedClient == null
-                          ? s.createCustomerHint
-                          : selectedClient.subtitle,
-                      style: const TextStyle(
-                        color: _kLabel,
-                        fontSize: 13,
-                        height: 1.4,
-                      ),
-                    ),
-                  ],
-                ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: selectedClient != null
+                ? Border.all(color: const Color(0xFF6366F1), width: 1.5)
+                : Border.all(color: hasError ? const Color(0xFFEF4444) : const Color(0xFFBDD5F0), width: 1.2),
+            boxShadow: [
+              BoxShadow(
+                color: hasError ? const Color(0x10EF4444) : const Color(0x0E0F4A75),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
               ),
             ],
+          ),
+          child: InkWell(
+            onTap: _pickCustomer,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 24,
+                    backgroundColor: selectedClient != null
+                        ? const Color(0xFF6366F1).withValues(alpha: 0.12)
+                        : const Color(0xFFEFF6FF),
+                    child: Text(
+                      selectedClient?.initials ?? '+',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: selectedClient != null ? const Color(0xFF6366F1) : const Color(0xFF4361EE),
+                        fontSize: 17,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          selectedClient?.name ?? s.createSelectCustomer,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: selectedClient != null ? const Color(0xFF1E3A8A) : const Color(0xFF5B7A9A),
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          selectedClient == null ? s.createCustomerHint : selectedClient.subtitle,
+                          style: const TextStyle(color: Color(0xFF5B7A9A), fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    selectedClient != null ? Icons.check_circle_rounded : Icons.chevron_right_rounded,
+                    color: selectedClient != null ? const Color(0xFF6366F1) : const Color(0xFF5B7A9A),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
         if (_selectedClient != null &&
@@ -1170,7 +1204,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   Future<void> _pickDate() async {
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: selectedDate ?? DateTime.now(),
+      initialDate: selectedDate,
       firstDate: DateTime(2020),
       lastDate: DateTime(2100),
     );
@@ -1320,11 +1354,6 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
-    if (selectedDate == null) {
-      setState(() {});
-      return;
-    }
-
     if (itemRows.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -1345,7 +1374,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       return;
     }
 
-    final invoiceDate = selectedDate!;
+    final invoiceDate = selectedDate;
     final dueDate = invoiceDate.add(_defaultPaymentTerm);
 
     final items = itemRows.map((row) {
@@ -1366,6 +1395,19 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         SnackBar(
             content:
                 Text(AppStrings.of(context).createSignInRequired)),
+      );
+      return;
+    }
+
+    // ── Plan gate: check invoice limit ──
+    final invoiceCount = await UsageTrackingService.instance.getInvoiceCount();
+    if (!PlanService.instance.canCreateInvoice(invoiceCount)) {
+      if (!mounted) return;
+      await LimitReachedDialog.show(
+        context,
+        title: 'Invoice Limit Reached',
+        message: 'You\'ve used $invoiceCount/${PlanService.instance.currentLimits.maxInvoicesPerMonth} invoices this month. Upgrade to create more.',
+        featureName: 'more invoices',
       );
       return;
     }
@@ -1400,6 +1442,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       );
 
       final invoiceId = await FirebaseService().addInvoice(invoice);
+      await UsageTrackingService.instance.incrementInvoiceCount();
       if (!mounted) {
         return;
       }

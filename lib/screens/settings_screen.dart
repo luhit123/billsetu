@@ -6,6 +6,7 @@ import 'package:billeasy/screens/invoices_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/screens/subscription_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -101,6 +102,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     subtitle: strings.drawerGstDesc,
                     onTap: _openGstReport,
                   ),
+                  const _ActionDivider(),
+                  _ShortcutTile(
+                    icon: Icons.workspace_premium_outlined,
+                    title: 'Subscription & Plans',
+                    subtitle: 'Manage your plan, usage & billing',
+                    onTap: _openSubscription,
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -134,6 +142,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     isBusy: _isUpdatingLanguage,
                     onTap: () => _changeLanguage(AppLanguage.assamese),
                   ),
+                  const _ActionDivider(),
+                  _LanguageOptionTile(
+                    nativeLabel: 'ગુજરાતી',
+                    helperLabel: 'Gujarati',
+                    isSelected: currentLanguage == AppLanguage.gujarati,
+                    isBusy: _isUpdatingLanguage,
+                    onTap: () => _changeLanguage(AppLanguage.gujarati),
+                  ),
+                  const _ActionDivider(),
+                  _LanguageOptionTile(
+                    nativeLabel: 'தமிழ்',
+                    helperLabel: 'Tamil',
+                    isSelected: currentLanguage == AppLanguage.tamil,
+                    isBusy: _isUpdatingLanguage,
+                    onTap: () => _changeLanguage(AppLanguage.tamil),
+                  ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -154,7 +178,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       height: 46,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF0B234F), Color(0xFF0F7D83)],
+                          colors: [Color(0xFF1E3A8A), Color(0xFF6366F1)],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
@@ -169,7 +193,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       strings.settingsHelpTitle,
                       style: const TextStyle(
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0B234F),
+                        color: Color(0xFF1E3A8A),
                       ),
                     ),
                     subtitle: Text(
@@ -335,6 +359,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ).push(MaterialPageRoute(builder: (_) => const GstReportScreen()));
   }
 
+  void _openSubscription() {
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const SubscriptionScreen()));
+  }
+
   String _displayNameFor(User? user, AppStrings strings) {
     final displayName = user?.displayName?.trim();
     if (displayName != null && displayName.isNotEmpty) {
@@ -363,6 +393,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       AppLanguage.english => 'English',
       AppLanguage.hindi => 'हिन्दी',
       AppLanguage.assamese => 'অসমীয়া',
+      AppLanguage.gujarati => 'ગુજરાતી',
+      AppLanguage.tamil => 'தமிழ்',
     };
   }
 }
@@ -398,7 +430,7 @@ class _HeroCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         gradient: const LinearGradient(
-          colors: [Color(0xFF123C85), Color(0xFF0F7D83)],
+          colors: [Color(0xFF123C85), Color(0xFF6366F1)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -584,7 +616,7 @@ class _SectionHeader extends StatelessWidget {
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF0B234F),
+              color: Color(0xFF1E3A8A),
             ),
           ),
           const SizedBox(height: 6),
@@ -680,7 +712,7 @@ class _ShortcutTile extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: Color(0xFF0B234F),
+                        color: Color(0xFF1E3A8A),
                       ),
                     ),
                     const SizedBox(height: 5),
@@ -748,7 +780,7 @@ class _LanguageOptionTile extends StatelessWidget {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: const Color(0xFFE4F7F8),
-                foregroundColor: const Color(0xFF0F7D83),
+                foregroundColor: const Color(0xFF6366F1),
                 child: const Icon(Icons.language_rounded),
               ),
               const SizedBox(width: 14),

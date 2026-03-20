@@ -4,7 +4,7 @@ import 'package:billeasy/services/client_service.dart';
 import 'package:flutter/material.dart';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
-const _kPrimary       = Color(0xFF0F4A75);
+const _kPrimary       = Color(0xFF4361EE);
 const _kBackground    = Color(0xFFEFF6FF);
 const _kTextSecondary = Color(0xFF5B7A9A);
 const _kBorder        = Color(0xFFBDD5F0);
@@ -12,7 +12,7 @@ const _kBorder        = Color(0xFFBDD5F0);
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 class CustomerFormScreen extends StatefulWidget {
@@ -105,7 +105,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       ),
                       child: const Icon(
                         Icons.person_add_alt_1_rounded,
-                        color: Color(0xFF0F4A75),
+                        color: Color(0xFF4361EE),
                         size: 26,
                       ),
                     ),
@@ -119,7 +119,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF0B234F),
+                              color: Color(0xFF1E3A8A),
                               letterSpacing: -0.3,
                             ),
                           ),
@@ -300,7 +300,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF0F4A75), width: 1.8),
+        borderSide: const BorderSide(color: Color(0xFF4361EE), width: 1.8),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

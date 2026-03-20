@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum AppLanguage { english, hindi, assamese }
+enum AppLanguage { english, hindi, assamese, gujarati, tamil }
 
 class LanguageSelectionScreen extends StatefulWidget {
   const LanguageSelectionScreen({super.key, required this.onLanguageSelected});
@@ -50,9 +50,9 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFF0B234F),
-              Color(0xFF0F4A75),
-              Color(0xFF0F7D83),
+              Color(0xFF1E3A8A),
+              Color(0xFF4361EE),
+              Color(0xFF6366F1),
             ],
           ),
         ),
@@ -110,45 +110,72 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'ভাষা বাছক  •  भाषा चुनें',
+                        'ভাষা বাছক  •  भाषा चुनें  •  ભાષા પસંદ કરો  •  மொழி தேர்ந்தெடு',
                         style: TextStyle(
                           color: Colors.white60,
-                          fontSize: 14,
+                          fontSize: 13,
                           fontWeight: FontWeight.w500,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+
+                      const SizedBox(height: 36),
+
+                      // Language cards
+                      Expanded(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            children: [
+                              _LanguageCard(
+                                nativeLabel: 'English',
+                                subLabel: 'English',
+                                emoji: '🇬🇧',
+                                isSelected: _selected == AppLanguage.english,
+                                onTap: () =>
+                                    setState(() => _selected = AppLanguage.english),
+                              ),
+                              const SizedBox(height: 14),
+                              _LanguageCard(
+                                nativeLabel: 'हिन्दी',
+                                subLabel: 'Hindi',
+                                emoji: '🇮🇳',
+                                isSelected: _selected == AppLanguage.hindi,
+                                onTap: () =>
+                                    setState(() => _selected = AppLanguage.hindi),
+                              ),
+                              const SizedBox(height: 14),
+                              _LanguageCard(
+                                nativeLabel: 'অসমীয়া',
+                                subLabel: 'Assamese',
+                                emoji: '🌿',
+                                isSelected: _selected == AppLanguage.assamese,
+                                onTap: () =>
+                                    setState(() => _selected = AppLanguage.assamese),
+                              ),
+                              const SizedBox(height: 14),
+                              _LanguageCard(
+                                nativeLabel: 'ગુજરાતી',
+                                subLabel: 'Gujarati',
+                                emoji: '🏛️',
+                                isSelected: _selected == AppLanguage.gujarati,
+                                onTap: () =>
+                                    setState(() => _selected = AppLanguage.gujarati),
+                              ),
+                              const SizedBox(height: 14),
+                              _LanguageCard(
+                                nativeLabel: 'தமிழ்',
+                                subLabel: 'Tamil',
+                                emoji: '🌺',
+                                isSelected: _selected == AppLanguage.tamil,
+                                onTap: () =>
+                                    setState(() => _selected = AppLanguage.tamil),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
 
-                      const SizedBox(height: 48),
-
-                      // Language cards
-                      _LanguageCard(
-                        nativeLabel: 'English',
-                        subLabel: 'English',
-                        emoji: '🇬🇧',
-                        isSelected: _selected == AppLanguage.english,
-                        onTap: () =>
-                            setState(() => _selected = AppLanguage.english),
-                      ),
-                      const SizedBox(height: 16),
-                      _LanguageCard(
-                        nativeLabel: 'हिन्दी',
-                        subLabel: 'Hindi',
-                        emoji: '🇮🇳',
-                        isSelected: _selected == AppLanguage.hindi,
-                        onTap: () =>
-                            setState(() => _selected = AppLanguage.hindi),
-                      ),
-                      const SizedBox(height: 16),
-                      _LanguageCard(
-                        nativeLabel: 'অসমীয়া',
-                        subLabel: 'Assamese',
-                        emoji: '🌿',
-                        isSelected: _selected == AppLanguage.assamese,
-                        onTap: () =>
-                            setState(() => _selected = AppLanguage.assamese),
-                      ),
-
-                      const Spacer(),
+                      const SizedBox(height: 20),
 
                       // Continue button
                       AnimatedOpacity(
@@ -176,7 +203,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                                 Text(
                                   'Continue',
                                   style: TextStyle(
-                                    color: Color(0xFF0B234F),
+                                    color: Color(0xFF1E3A8A),
                                     fontSize: 16,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 0.3,
@@ -185,7 +212,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                                 SizedBox(width: 8),
                                 Icon(
                                   Icons.arrow_forward_rounded,
-                                  color: Color(0xFF0B234F),
+                                  color: Color(0xFF1E3A8A),
                                   size: 18,
                                 ),
                               ],
@@ -309,8 +336,7 @@ class _LanguageCard extends StatelessWidget {
               height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color:
-                    isSelected ? Colors.white : Colors.transparent,
+                color: isSelected ? Colors.white : Colors.transparent,
                 border: Border.all(
                   color: isSelected
                       ? Colors.white
@@ -320,7 +346,7 @@ class _LanguageCard extends StatelessWidget {
               ),
               child: isSelected
                   ? const Icon(Icons.check_rounded,
-                      color: Color(0xFF0B234F), size: 14)
+                      color: Color(0xFF1E3A8A), size: 14)
                   : null,
             ),
           ],

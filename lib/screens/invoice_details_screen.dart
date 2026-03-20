@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:billeasy/l10n/app_strings.dart';
@@ -6,26 +7,34 @@ import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/customer_details_screen.dart';
+import 'package:billeasy/screens/eway_bill_screen.dart';
+import 'package:billeasy/screens/template_picker_sheet.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/widgets/whatsapp_share_sheet.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // ── Brand tokens ────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF0F4A75);
+const _kPrimary    = Color(0xFF4361EE);
 const _kBackground = Color(0xFFEFF6FF);
 const _kCardBg     = Colors.white;
 const _kBorder     = Color(0xFFBDD5F0);
 const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
+const _kTitle      = Color(0xFF1E3A8A);
+const _kTeal       = Color(0xFF6366F1);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
+
+const _kTemplatePrefsKey = 'invoice_template';
 
 BoxDecoration _cardDeco() => BoxDecoration(
       color: Colors.white,
@@ -42,11 +51,16 @@ BoxDecoration _cardDeco() => BoxDecoration(
 
 // ────────────────────────────────────────────────────────────────────────────
 
-class InvoiceDetailsScreen extends StatelessWidget {
-  InvoiceDetailsScreen({super.key, required this.invoice});
+class InvoiceDetailsScreen extends StatefulWidget {
+  const InvoiceDetailsScreen({super.key, required this.invoice});
 
   final Invoice invoice;
 
+  @override
+  State<InvoiceDetailsScreen> createState() => _InvoiceDetailsScreenState();
+}
+
+class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
@@ -54,10 +68,35 @@ class InvoiceDetailsScreen extends StatelessWidget {
     decimalDigits: 0,
   );
 
+  InvoiceTemplate _template = InvoiceTemplate.classic;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTemplate();
+  }
+
+  Future<void> _loadTemplate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kTemplatePrefsKey);
+    if (saved != null) {
+      final match = InvoiceTemplate.values.where((t) => t.name == saved);
+      if (match.isNotEmpty && mounted) {
+        setState(() => _template = match.first);
+      }
+    }
+  }
+
+  Future<void> _saveTemplate(InvoiceTemplate template) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kTemplatePrefsKey, template.name);
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
+    final invoice = widget.invoice;
     final customerName = invoice.clientName;
     final Stream<BusinessProfile?> profileStream =
         ProfileService().watchCurrentProfile();
@@ -89,6 +128,14 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 fontSize: 18,
               ),
             ),
+            actions: [
+              // Change template icon button
+              IconButton(
+                tooltip: 'Change Template',
+                icon: const Icon(Icons.style_rounded, color: Colors.white),
+                onPressed: () => _changeTemplate(context, profile, s),
+              ),
+            ],
           ),
 
           // ── Bottom action bar ────────────────────────────────────────────
@@ -120,10 +167,11 @@ class InvoiceDetailsScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
+                  // Share button → opens WhatsAppShareSheet
                   Expanded(
                     child: ElevatedButton.icon(
                       onPressed: () =>
-                          _shareInvoicePdf(context, profile),
+                          _openShareSheet(context, profile),
                       icon: const Icon(Icons.share_outlined, size: 18),
                       label: Text(s.detailsSharePdf),
                       style: ElevatedButton.styleFrom(
@@ -189,12 +237,73 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 // ── Summary ───────────────────────────────────────────────
                 _buildSummaryCard(context, s),
                 const SizedBox(height: 8),
+
+                // ── E-Way Bill button ─────────────────────────────────────
+                if (widget.invoice.grandTotal > 50000 &&
+                    widget.invoice.gstEnabled)
+                  _buildEWayBillButton(context),
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  // ── E-Way Bill ─────────────────────────────────────────────────────────────
+
+  Widget _buildEWayBillButton(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 8),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton.icon(
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => EWayBillScreen(invoice: widget.invoice),
+              ),
+            );
+          },
+          icon: const Icon(Icons.local_shipping_outlined, size: 18, color: _kTeal),
+          label: const Text(
+            'Generate E-Way Bill',
+            style: TextStyle(
+              color: _kTeal,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: _kTeal,
+            side: const BorderSide(color: _kTeal, width: 1.4),
+            padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Change Template ────────────────────────────────────────────────────────
+
+  Future<void> _changeTemplate(
+    BuildContext context,
+    BusinessProfile? profile,
+    AppStrings s,
+  ) async {
+    final result = await showModalBottomSheet<InvoiceTemplate>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TemplatePicker(current: _template),
+    );
+    if (result != null && result != _template) {
+      setState(() => _template = result);
+      await _saveTemplate(result);
+    }
   }
 
   // ── Hero card ─────────────────────────────────────────────────────────────
@@ -205,6 +314,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
     String customerName,
     String sellerName,
   ) {
+    final invoice = widget.invoice;
     final initials = customerName.trim().isEmpty
         ? '?'
         : customerName
@@ -231,7 +341,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF0F4A75), Color(0xFF0B234F)],
+                    colors: [Color(0xFF4361EE), Color(0xFF1E3A8A)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
@@ -318,7 +428,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
   Widget _buildCustomerCard(
       BuildContext context, AppStrings s, String customerName) {
     return StreamBuilder<Client?>(
-      stream: ClientService().watchClient(invoice.clientId),
+      stream: ClientService().watchClient(widget.invoice.clientId),
       builder: (context, clientSnapshot) {
         final client = clientSnapshot.data;
         return _SectionCard(
@@ -326,7 +436,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
           children: [
             _InfoRow(label: s.detailsName, value: customerName),
             _InfoRow(
-                label: s.detailsReference, value: invoice.clientId),
+                label: s.detailsReference, value: widget.invoice.clientId),
             if (client != null && client.phone.trim().isNotEmpty)
               _InfoRow(
                   label: s.detailsPhone,
@@ -378,6 +488,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
   // ── Items card ─────────────────────────────────────────────────────────────
 
   Widget _buildItemsCard(BuildContext context, AppStrings s) {
+    final invoice = widget.invoice;
     return Container(
       decoration: _cardDeco(),
       child: Column(
@@ -508,6 +619,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
   // ── Summary card ──────────────────────────────────────────────────────────
 
   Widget _buildSummaryCard(BuildContext context, AppStrings s) {
+    final invoice = widget.invoice;
     final hasDiscount = invoice.hasDiscount;
     return Container(
       padding: const EdgeInsets.all(16),
@@ -589,7 +701,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
     );
   }
 
-  // ── Logic (all unchanged) ─────────────────────────────────────────────────
+  // ── Logic ─────────────────────────────────────────────────────────────────
 
   Future<void> _previewInvoicePdf(
     BuildContext context,
@@ -599,7 +711,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
     try {
       final bytes = await _buildPdfBytes(profile, language);
       await Printing.layoutPdf(
-        name: InvoicePdfService().fileNameForInvoice(invoice),
+        name: InvoicePdfService().fileNameForInvoice(widget.invoice),
         onLayout: (_) async => bytes,
       );
     } catch (error) {
@@ -608,21 +720,46 @@ class InvoiceDetailsScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _shareInvoicePdf(
+  /// Generates the PDF, saves it to a temp file, then opens [WhatsAppShareSheet].
+  Future<void> _openShareSheet(
     BuildContext context,
     BusinessProfile? profile,
   ) async {
     final language = AppStrings.of(context).language;
+    File? pdfFile;
+    String? clientPhone;
+
     try {
       final bytes = await _buildPdfBytes(profile, language);
-      await Printing.sharePdf(
-        bytes: bytes,
-        filename: InvoicePdfService().fileNameForInvoice(invoice),
-      );
-    } catch (error) {
-      if (!context.mounted) return;
-      _showExportError(context, error);
+      final dir = await getTemporaryDirectory();
+      final fileName = InvoicePdfService().fileNameForInvoice(widget.invoice);
+      pdfFile = File('${dir.path}/$fileName');
+      await pdfFile.writeAsBytes(bytes);
+    } catch (_) {
+      // PDF generation failed — we'll still open the sheet without a file
     }
+
+    // Try fetching client phone
+    try {
+      final client = await ClientService().getClient(widget.invoice.clientId);
+      clientPhone = client?.phone;
+    } catch (_) {
+      // ignore — sheet handles missing phone
+    }
+
+    if (!context.mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => WhatsAppShareSheet(
+        invoice: widget.invoice,
+        pdfFile: pdfFile,
+        currencyFormat: _currencyFormat,
+        clientPhone: clientPhone,
+      ),
+    );
   }
 
   Future<Uint8List> _buildPdfBytes(
@@ -631,9 +768,10 @@ class InvoiceDetailsScreen extends StatelessWidget {
   ) async {
     final resolvedProfile = await _resolveProfile(profile);
     return InvoicePdfService().buildInvoicePdf(
-      invoice: invoice,
+      invoice: widget.invoice,
       profile: resolvedProfile,
       language: language,
+      template: _template,
     );
   }
 

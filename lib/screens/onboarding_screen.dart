@@ -22,6 +22,13 @@ class _Strings {
   final String feat3a;
   final String feat3b;
   final String feat3c;
+  final String step4Badge;
+  final String screen4Title;
+  final String screen4Subtitle;
+  final String feat4a;
+  final String feat4b;
+  final String feat4c;
+  final String referralCode;
   final String skip;
   final String next;
   final String getStarted;
@@ -45,6 +52,13 @@ class _Strings {
     required this.feat3a,
     required this.feat3b,
     required this.feat3c,
+    required this.step4Badge,
+    required this.screen4Title,
+    required this.screen4Subtitle,
+    required this.feat4a,
+    required this.feat4b,
+    required this.feat4c,
+    required this.referralCode,
     required this.skip,
     required this.next,
     required this.getStarted,
@@ -52,81 +66,105 @@ class _Strings {
 }
 
 const _english = _Strings(
-  step1Badge: '✦  Step 1 of 3',
+  step1Badge: '✦  Step 1 of 4',
   screen1Title: 'Create Invoices\nin Seconds',
   screen1Subtitle:
       'Fill in client details, add your products or services, set a price — and your professional invoice is ready to share.',
   feat1a: 'Add client info',
   feat1b: 'Add line items with prices',
   feat1c: 'Apply % or flat discounts',
-  step2Badge: '✦  Step 2 of 3',
+  step2Badge: '✦  Step 2 of 4',
   screen2Title: 'Track Everything,\nStress Nothing',
   screen2Subtitle:
       'Your dashboard gives you a live overview of revenue, outstanding payments, and discounts — filtered any way you need.',
   feat2a: 'Live revenue & collection stats',
   feat2b: 'Filter by status & date range',
   feat2c: 'Export & share as PDF',
-  step3Badge: '✦  Step 3 of 3',
+  step3Badge: '✦  Step 3 of 4',
   screen3Title: 'Smart Customer\nManagement',
   screen3Subtitle:
       'Organise customers into groups — Retail, Wholesale, VIP — and instantly view their invoice history, total billed, and outstanding dues from one place.',
   feat3a: 'Create & assign customer groups',
   feat3b: 'Full invoice history per customer',
   feat3c: 'Track outstanding dues instantly',
+  step4Badge: '✦  Step 4 of 4',
+  screen4Title: 'Invite & Earn',
+  screen4Subtitle:
+      'Refer friends and get 1 month Pro free for each friend who joins BillRaja',
+  feat4a: 'Share your unique referral code',
+  feat4b: '1 month Pro free per referral',
+  feat4c: 'Friends get a discount too',
+  referralCode: 'BILLRAJA2024',
   skip: 'Skip',
   next: 'Next',
   getStarted: 'Get Started',
 );
 
 const _hindi = _Strings(
-  step1Badge: '✦  चरण 1 / 3',
+  step1Badge: '✦  चरण 1 / 4',
   screen1Title: 'पलों में बनाएं\nइनवॉइस',
   screen1Subtitle:
       'ग्राहक की जानकारी भरें, सामान जोड़ें, कीमत सेट करें — और आपका इनवॉइस शेयर के लिए तैयार।',
   feat1a: 'ग्राहक की जानकारी जोड़ें',
   feat1b: 'आइटम और कीमत जोड़ें',
   feat1c: '% या फ्लैट छूट लगाएं',
-  step2Badge: '✦  चरण 2 / 3',
+  step2Badge: '✦  चरण 2 / 4',
   screen2Title: 'सब ट्रैक करें,\nचिंता न करें',
   screen2Subtitle:
       'डैशबोर्ड आय, बकाया भुगतान और छूट का लाइव अवलोकन देता है — जैसे चाहें फ़िल्टर करें।',
   feat2a: 'लाइव आय और संग्रह आँकड़े',
   feat2b: 'स्थिति और तारीख से फ़िल्टर',
   feat2c: 'PDF में निर्यात करें',
-  step3Badge: '✦  चरण 3 / 3',
+  step3Badge: '✦  चरण 3 / 4',
   screen3Title: 'स्मार्ट ग्राहक\nप्रबंधन',
   screen3Subtitle:
       'ग्राहकों को समूहों में बाँटें — रिटेल, थोक, VIP — और उनके इनवॉइस इतिहास, कुल बिल व बकाया एक ही जगह से देखें।',
   feat3a: 'ग्राहक समूह बनाएं और असाइन करें',
   feat3b: 'हर ग्राहक का पूरा इनवॉइस इतिहास',
   feat3c: 'बकाया राशि तुरंत ट्रैक करें',
+  step4Badge: '✦  चरण 4 / 4',
+  screen4Title: 'आमंत्रित करें\nऔर कमाएं',
+  screen4Subtitle:
+      'दोस्तों को रेफर करें और हर दोस्त के जुड़ने पर 1 महीना Pro मुफ्त पाएं',
+  feat4a: 'अपना रेफरल कोड शेयर करें',
+  feat4b: 'हर रेफरल पर 1 महीना Pro मुफ्त',
+  feat4c: 'दोस्तों को भी मिलती है छूट',
+  referralCode: 'BILLRAJA2024',
   skip: 'छोड़ें',
   next: 'आगे',
   getStarted: 'शुरू करें',
 );
 
 const _assamese = _Strings(
-  step1Badge: '✦  পদক্ষেপ ১ / ৩',
+  step1Badge: '✦  পদক্ষেপ ১ / ৪',
   screen1Title: 'মুহূর্তত বনাওক\nবিল',
   screen1Subtitle:
       'গ্ৰাহকৰ তথ্য পূৰণ কৰক, সামগ্ৰী যোগ কৰক, মূল্য নিৰ্ধাৰণ কৰক — আৰু আপোনাৰ বিল শ্বেয়াৰৰ বাবে প্ৰস্তুত।',
   feat1a: 'গ্ৰাহকৰ তথ্য যোগ কৰক',
   feat1b: 'সামগ্ৰী আৰু মূল্য যোগ কৰক',
   feat1c: '% বা সমতল ছাড় প্ৰয়োগ কৰক',
-  step2Badge: '✦  পদক্ষেপ ২ / ৩',
+  step2Badge: '✦  পদক্ষেপ ২ / ৪',
   screen2Title: 'সকলো ট্ৰেক কৰক,\nচিন্তা নকৰিব',
   screen2Subtitle:
       'ড্যাশব\'ৰ্ডে আয়, বকেয়া পৰিশোধ আৰু ছাড়ৰ লাইভ সংক্ষিপ্তসাৰ দিয়ে — যিদৰে বিচাৰে ফিল্টাৰ কৰক।',
   feat2a: 'লাইভ আয় আৰু সংগ্ৰহৰ পৰিসংখ্যা',
   feat2b: 'স্থিতি আৰু তাৰিখ অনুসৰি ফিল্টাৰ',
   feat2c: 'PDF ৰূপত ৰপ্তানি কৰক',
-  step3Badge: '✦  পদক্ষেপ ৩ / ৩',
+  step3Badge: '✦  পদক্ষেপ ৩ / ৪',
   screen3Title: 'স্মাৰ্ট গ্ৰাহক\nপৰিচালনা',
   screen3Subtitle:
       'গ্ৰাহকসকলক গোটত ভাগ কৰক — খুচুৰা, পাইকাৰী, VIP — আৰু তেওঁলোকৰ বিলৰ ইতিহাস, মুঠ বিল আৰু বকেয়া এঠাইৰ পৰাই চাওক।',
   feat3a: 'গ্ৰাহক গোট বনাওক আৰু নিযুক্ত কৰক',
   feat3b: 'প্ৰতিজন গ্ৰাহকৰ সম্পূৰ্ণ বিলৰ ইতিহাস',
   feat3c: 'বকেয়া পৰিমাণ তৎক্ষণাৎ ট্ৰেক কৰক',
+  step4Badge: '✦  পদক্ষেপ ৪ / ৪',
+  screen4Title: 'আমন্ত্ৰণ কৰক\nআৰু উপাৰ্জন কৰক',
+  screen4Subtitle:
+      'বন্ধুসকলক ৰেফাৰ কৰক আৰু প্ৰতিজন বন্ধুৰ বাবে ১ মাহ Pro বিনামূলীয়াকৈ পাওক',
+  feat4a: 'আপোনাৰ ৰেফাৰেল কোড শ্বেয়াৰ কৰক',
+  feat4b: 'প্ৰতিটো ৰেফাৰেলত ১ মাহ Pro বিনামূলীয়া',
+  feat4c: 'বন্ধুসকলেও ছাড় পায়',
+  referralCode: 'BILLRAJA2024',
   skip: 'এৰক',
   next: 'পৰৱৰ্তী',
   getStarted: 'আৰম্ভ কৰক',
@@ -138,6 +176,8 @@ _Strings _stringsFor(AppLanguage lang) {
       return _hindi;
     case AppLanguage.assamese:
       return _assamese;
+    case AppLanguage.gujarati:
+    case AppLanguage.tamil:
     case AppLanguage.english:
       return _english;
   }
@@ -220,7 +260,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
+    if (_currentPage < 3) {
       _slideController.reset();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 500),
@@ -240,7 +280,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           PageView(
             controller: _pageController,
             onPageChanged: (page) => setState(() => _currentPage = page),
-            children: [_buildPage1(), _buildPage2(), _buildPage3()],
+            children: [_buildPage1(), _buildPage2(), _buildPage3(), _buildPage4()],
           ),
           // Bottom controls overlay
           Positioned(
@@ -260,7 +300,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+          colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
         ),
       ),
       child: Stack(
@@ -643,6 +683,359 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  Widget _buildPage4() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFFBF360C), Color(0xFFE64A19), Color(0xFFFFA000)],
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Ambient orbs
+          _buildOrb(top: -60, right: -40, size: 220, opacity: 0.09),
+          _buildOrb(bottom: 140, left: -60, size: 180, opacity: 0.07),
+          _buildOrb(top: 200, right: -30, size: 120, opacity: 0.05),
+
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 140),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Skip button
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: TextButton(
+                      onPressed: _completeOnboarding,
+                      child: Text(
+                        _s.skip,
+                        style: const TextStyle(
+                          color: Colors.white60,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Illustration
+                  Expanded(
+                    flex: 5,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AnimatedBuilder(
+                          animation: _floatAnimation,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(0, _floatAnimation.value * 0.8),
+                            child: child,
+                          ),
+                          child: _buildReferralIllustration(),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  // Text content
+                  SlideTransition(
+                    position: _slideAnimation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: Colors.white.withOpacity(0.25),
+                            ),
+                          ),
+                          child: Text(
+                            _s.step4Badge,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          _s.screen4Title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            height: 1.15,
+                            letterSpacing: -1.0,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Text(
+                          _s.screen4Subtitle,
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.72),
+                            fontSize: 15.5,
+                            height: 1.55,
+                          ),
+                        ),
+                        const SizedBox(height: 28),
+                        _buildFeatureRow(Icons.share_rounded, _s.feat4a),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(Icons.card_giftcard_rounded, _s.feat4b),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(Icons.emoji_events_rounded, _s.feat4c),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReferralIllustration() {
+    return SizedBox(
+      width: 310,
+      height: 280,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Central referral card
+          Container(
+            width: 240,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: Colors.white.withOpacity(0.25),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.25),
+                  blurRadius: 30,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Icon
+                AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (_, child) => Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: child,
+                  ),
+                  child: Container(
+                    width: 64,
+                    height: 64,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.people_alt_rounded,
+                      color: Colors.white,
+                      size: 34,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                const Text(
+                  'Your Referral Code',
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.35),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'BILLRAJA2024',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(
+                        Icons.copy_rounded,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.share_rounded,
+                        size: 16,
+                        color: Color(0xFFE64A19),
+                      ),
+                      SizedBox(width: 8),
+                      Text(
+                        'Share & Earn',
+                        style: TextStyle(
+                          color: Color(0xFFE64A19),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Floating reward badge — top right
+          Positioned(
+            top: 8,
+            right: 0,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(_floatAnimation.value * 0.5, 0),
+                child: child,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF176).withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFFFF176).withOpacity(0.4),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.star_rounded,
+                      color: Color(0xFFE65100),
+                      size: 12,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      '1 Month Free',
+                      style: TextStyle(
+                        color: Color(0xFFE65100),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          // Floating friend badge — bottom left
+          Positioned(
+            bottom: 16,
+            left: 0,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(0, _floatAnimation.value * 0.5),
+                child: child,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF80D8FF).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFF80D8FF).withOpacity(0.4),
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.people_rounded,
+                      color: Color(0xFF80D8FF),
+                      size: 12,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      '3 Friends Joined',
+                      style: TextStyle(
+                        color: Color(0xFF80D8FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildCustomerGroupsIllustration() {
     return SizedBox(
       width: 310,
@@ -957,16 +1350,18 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildBottomControls() {
-    final isLast = _currentPage == 2;
+    final isLast = _currentPage == 3;
     final pageBottomColor = switch (_currentPage) {
-      0 => const Color(0xFF0F7D83),
+      0 => const Color(0xFF6366F1),
       1 => const Color(0xFF00897B),
-      _ => const Color(0xFF4527A0),
+      2 => const Color(0xFF4527A0),
+      _ => const Color(0xFFE65100),
     };
     final buttonTextColor = switch (_currentPage) {
-      0 => const Color(0xFF0B234F),
+      0 => const Color(0xFF1E3A8A),
       1 => const Color(0xFF00695C),
-      _ => const Color(0xFF4527A0),
+      2 => const Color(0xFF4527A0),
+      _ => const Color(0xFFE65100),
     };
 
     return Container(
@@ -981,9 +1376,9 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Page dots (3)
+          // Page dots (4)
           Row(
-            children: List.generate(3, (index) {
+            children: List.generate(4, (index) {
               final isActive = index == _currentPage;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),

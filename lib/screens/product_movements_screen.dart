@@ -6,16 +6,16 @@ import 'package:billeasy/services/inventory_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-const _kPrimary    = Color(0xFF0F4A75);
+const _kPrimary    = Color(0xFF4361EE);
 const _kBackground = Color(0xFFEFF6FF);
 const _kBorder     = Color(0xFFBDD5F0);
 const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
+const _kTitle      = Color(0xFF1E3A8A);
 
 const _kGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
+  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
 );
 
 class ProductMovementsScreen extends StatefulWidget {

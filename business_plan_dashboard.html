@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BillRaja — Business Plan Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #9ca3af;
+    --accent: #6366f1;
+    --green: #22c55e;
+    --red: #ef4444;
+    --amber: #f59e0b;
+    --teal: #14b8a6;
+    --purple: #a855f7;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+
+  /* Header */
+  .header { text-align: center; padding: 40px 20px 30px; }
+  .header h1 { font-size: 2.5rem; background: linear-gradient(135deg, #6366f1, #a855f7, #14b8a6); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 8px; }
+  .header p { color: var(--muted); font-size: 1.1rem; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 4px; background: var(--card); border-radius: 12px; padding: 4px; margin-bottom: 30px; overflow-x: auto; }
+  .tab { flex: 1; padding: 12px 16px; text-align: center; border-radius: 10px; cursor: pointer; font-weight: 500; font-size: 0.9rem; color: var(--muted); transition: all 0.3s; white-space: nowrap; border: none; background: transparent; }
+  .tab.active { background: var(--accent); color: white; }
+  .tab:hover:not(.active) { color: var(--text); background: var(--border); }
+
+  /* Panels */
+  .panel { display: none; animation: fadeIn 0.4s; }
+  .panel.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* Cards */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 24px; margin-bottom: 20px; }
+  .card h3 { font-size: 1.1rem; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+
+  /* Grid */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
+
+  /* Stat cards */
+  .stat { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 20px; }
+  .stat .label { font-size: 0.85rem; color: var(--muted); margin-bottom: 4px; }
+  .stat .value { font-size: 1.8rem; font-weight: 700; }
+  .stat .sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+  .stat.green .value { color: var(--green); }
+  .stat.red .value { color: var(--red); }
+  .stat.amber .value { color: var(--amber); }
+  .stat.accent .value { color: var(--accent); }
+  .stat.teal .value { color: var(--teal); }
+  .stat.purple .value { color: var(--purple); }
+
+  /* Plan cards */
+  .plan-card { background: var(--card); border: 2px solid var(--border); border-radius: 16px; overflow: hidden; transition: all 0.3s; position: relative; }
+  .plan-card:hover { transform: translateY(-4px); border-color: var(--accent); }
+  .plan-card.popular { border-color: var(--accent); }
+  .plan-card .badge { position: absolute; top: 12px; right: 12px; background: var(--amber); color: #000; font-size: 0.7rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; }
+  .plan-header { padding: 24px; }
+  .plan-name { font-size: 1.3rem; font-weight: 700; }
+  .plan-price { font-size: 2.2rem; font-weight: 800; margin: 8px 0; }
+  .plan-price span { font-size: 0.9rem; font-weight: 400; color: var(--muted); }
+  .plan-price .old { text-decoration: line-through; color: var(--muted); font-size: 1.2rem; margin-right: 4px; }
+  .plan-annual { font-size: 0.85rem; color: var(--green); font-weight: 500; }
+  .plan-features { padding: 0 24px 24px; }
+  .plan-feature { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 0.9rem; }
+  .plan-feature .check { color: var(--green); font-weight: bold; }
+  .plan-feature .cross { color: #555; }
+
+  /* Toggle */
+  .toggle-row { display: flex; align-items: center; justify-content: center; gap: 12px; margin-bottom: 24px; }
+  .toggle-label { font-size: 0.95rem; color: var(--muted); cursor: pointer; }
+  .toggle-label.active { color: var(--text); font-weight: 600; }
+  .toggle { width: 52px; height: 28px; background: var(--border); border-radius: 20px; position: relative; cursor: pointer; transition: background 0.3s; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; background: white; border-radius: 50%; transition: transform 0.3s; }
+  .toggle.on::after { transform: translateX(24px); }
+  .save-badge { background: var(--green); color: #000; font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+  td.green { color: var(--green); }
+  td.red { color: var(--red); }
+  td.amber { color: var(--amber); }
+
+  /* Charts */
+  .bar-chart { display: flex; align-items: flex-end; gap: 8px; height: 200px; padding-top: 20px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .bar { width: 100%; border-radius: 6px 6px 0 0; transition: height 0.6s ease; min-height: 4px; }
+  .bar-label { font-size: 0.75rem; color: var(--muted); }
+  .bar-value { font-size: 0.75rem; font-weight: 600; }
+
+  /* Slider */
+  .slider-row { display: flex; align-items: center; gap: 16px; margin: 16px 0; }
+  .slider-row label { font-size: 0.9rem; white-space: nowrap; min-width: 100px; }
+  input[type=range] { flex: 1; accent-color: var(--accent); height: 6px; }
+  .slider-val { font-weight: 700; font-size: 1.1rem; min-width: 80px; text-align: right; color: var(--accent); }
+
+  /* Milestone */
+  .timeline { position: relative; padding-left: 30px; }
+  .timeline::before { content:''; position:absolute; left:10px; top:0; bottom:0; width:2px; background: var(--border); }
+  .milestone { position: relative; margin-bottom: 24px; }
+  .milestone::before { content:''; position:absolute; left:-24px; top:6px; width:12px; height:12px; border-radius:50%; border:2px solid var(--accent); background: var(--bg); }
+  .milestone.done::before { background: var(--accent); }
+  .milestone h4 { font-size: 0.95rem; margin-bottom: 2px; }
+  .milestone p { font-size: 0.85rem; color: var(--muted); }
+  .milestone .tag { display: inline-block; font-size: 0.7rem; padding: 2px 8px; border-radius: 8px; margin-top: 4px; }
+  .tag.q1 { background: #1e3a5f; color: #60a5fa; }
+  .tag.q2 { background: #1e3a1e; color: #4ade80; }
+  .tag.q3 { background: #3a1e3a; color: #c084fc; }
+  .tag.q4 { background: #3a2d1e; color: #fbbf24; }
+
+  /* Competitor */
+  .comp-row { display: flex; gap: 12px; margin-bottom: 12px; align-items: center; }
+  .comp-name { min-width: 120px; font-weight: 600; font-size: 0.9rem; }
+  .comp-bar { flex:1; height: 32px; border-radius: 8px; display: flex; align-items: center; padding: 0 12px; font-size: 0.8rem; font-weight: 600; transition: width 1s ease; }
+  .comp-price { min-width: 100px; text-align: right; font-weight: 700; font-size: 0.9rem; }
+
+  /* Highlight box */
+  .highlight { background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(20,184,166,0.1)); border: 1px solid rgba(99,102,241,0.3); border-radius: 12px; padding: 20px; margin: 16px 0; }
+  .highlight h4 { color: var(--accent); margin-bottom: 8px; }
+
+  /* P&L rows */
+  .pnl-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .pnl-row:last-child { border: none; font-weight: 700; font-size: 1.1rem; }
+  .pnl-row.profit { color: var(--green); }
+  .pnl-row.loss { color: var(--red); }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>BillRaja Business Plan</h1>
+    <p>Interactive pricing, P&L analysis, and scaling roadmap</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('pricing')">💰 Pricing Plans</button>
+    <button class="tab" onclick="showTab('pnl')">📊 Profit & Loss</button>
+    <button class="tab" onclick="showTab('simulator')">🎛 Revenue Simulator</button>
+    <button class="tab" onclick="showTab('competitors')">⚔️ Competitors</button>
+    <button class="tab" onclick="showTab('roadmap')">🚀 Scaling Roadmap</button>
+    <button class="tab" onclick="showTab('benefits')">✅ Why BillRaja</button>
+  </div>
+
+  <!-- ===== TAB 1: PRICING ===== -->
+  <div id="pricing" class="panel active">
+    <div class="toggle-row">
+      <span class="toggle-label active" id="lbl-monthly">Monthly</span>
+      <div class="toggle" id="billing-toggle" onclick="toggleBilling()"></div>
+      <span class="toggle-label" id="lbl-annual">Annual</span>
+      <span class="save-badge">Save 33%</span>
+    </div>
+
+    <div class="grid-3" id="plan-cards">
+      <!-- Free -->
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-name">Free</div>
+          <div class="plan-price">₹0 <span>/ forever</span></div>
+          <div class="plan-annual" style="color:var(--muted)">Perfect to get started</div>
+        </div>
+        <div class="plan-features">
+          <div class="plan-feature"><span class="check">✓</span> 5 invoices / month</div>
+          <div class="plan-feature"><span class="check">✓</span> 10 customers</div>
+          <div class="plan-feature"><span class="check">✓</span> 20 products</div>
+          <div class="plan-feature"><span class="check">✓</span> 1 PDF template</div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">WhatsApp share</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">Reports</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">E-Way Bill</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">Purchase orders</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">Data export</span></div>
+        </div>
+      </div>
+
+      <!-- Starter -->
+      <div class="plan-card popular">
+        <div class="badge">BEST VALUE</div>
+        <div class="plan-header">
+          <div class="plan-name" style="color:var(--accent)">Starter</div>
+          <div class="plan-price" id="starter-price">
+            <span class="old" id="starter-old" style="display:none">₹149</span>
+            ₹149 <span>/ month</span>
+          </div>
+          <div class="plan-annual" id="starter-annual">₹1,199 / year (save ₹589)</div>
+        </div>
+        <div class="plan-features">
+          <div class="plan-feature"><span class="check">✓</span> 50 invoices / month</div>
+          <div class="plan-feature"><span class="check">✓</span> 100 customers</div>
+          <div class="plan-feature"><span class="check">✓</span> 200 products</div>
+          <div class="plan-feature"><span class="check">✓</span> 3 PDF templates</div>
+          <div class="plan-feature"><span class="check">✓</span> WhatsApp share</div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">Reports</span></div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">E-Way Bill</span></div>
+          <div class="plan-feature"><span class="check">✓</span> Purchase orders</div>
+          <div class="plan-feature"><span class="cross">✗</span> <span style="color:#555">Data export</span></div>
+        </div>
+      </div>
+
+      <!-- Pro -->
+      <div class="plan-card">
+        <div class="plan-header">
+          <div class="plan-name" style="color:var(--purple)">Pro</div>
+          <div class="plan-price" id="pro-price">
+            <span class="old" id="pro-old" style="display:none">₹399</span>
+            ₹399 <span>/ month</span>
+          </div>
+          <div class="plan-annual" id="pro-annual">₹2,999 / year (save ₹1,789)</div>
+        </div>
+        <div class="plan-features">
+          <div class="plan-feature"><span class="check">✓</span> <strong>Unlimited</strong> invoices</div>
+          <div class="plan-feature"><span class="check">✓</span> <strong>Unlimited</strong> customers</div>
+          <div class="plan-feature"><span class="check">✓</span> <strong>Unlimited</strong> products</div>
+          <div class="plan-feature"><span class="check">✓</span> All PDF templates</div>
+          <div class="plan-feature"><span class="check">✓</span> WhatsApp share</div>
+          <div class="plan-feature"><span class="check">✓</span> Reports & analytics</div>
+          <div class="plan-feature"><span class="check">✓</span> E-Way Bill generator</div>
+          <div class="plan-feature"><span class="check">✓</span> Purchase orders</div>
+          <div class="plan-feature"><span class="check">✓</span> Data export (CSV)</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="highlight">
+      <h4>🚀 Launch Offer — First 500 Users</h4>
+      <p>Starter: <strong>₹799/year</strong> (save 56%) &nbsp;|&nbsp; Pro: <strong>₹1,999/year</strong> (save 44%)</p>
+      <p style="color:var(--muted); font-size:0.85rem; margin-top:6px">Lock in launch pricing forever. Price increases won't affect early adopters.</p>
+    </div>
+  </div>
+
+  <!-- ===== TAB 2: PROFIT & LOSS ===== -->
+  <div id="pnl" class="panel">
+    <div class="grid-2">
+      <div class="card">
+        <h3>📉 Monthly Costs (Fixed)</h3>
+        <div class="pnl-row"><span>Firebase Hosting + Auth</span><span>₹0</span></div>
+        <div class="pnl-row"><span>Firestore (free tier)</span><span>₹0</span></div>
+        <div class="pnl-row"><span>Cloud Functions (if minInstances=0)</span><span>₹0</span></div>
+        <div class="pnl-row"><span>Domain + SSL</span><span>₹80</span></div>
+        <div class="pnl-row"><span>Play Store (one-time ₹2,100)</span><span>₹175</span></div>
+        <div class="pnl-row"><span>Apple Dev (₹8,700/yr)</span><span>₹725</span></div>
+        <div class="pnl-row"><span><strong>Total Fixed</strong></span><span><strong>₹980/mo</strong></span></div>
+      </div>
+
+      <div class="card">
+        <h3>📈 Cost Per User (Marginal)</h3>
+        <div class="pnl-row"><span>Firestore reads (avg 500/user/mo)</span><span>₹0.03</span></div>
+        <div class="pnl-row"><span>Firestore writes (avg 50/user/mo)</span><span>₹0.05</span></div>
+        <div class="pnl-row"><span>Storage (PDFs ~2MB/user/mo)</span><span>₹0.02</span></div>
+        <div class="pnl-row"><span>Cloud Functions invocations</span><span>₹0.10</span></div>
+        <div class="pnl-row"><span><strong>Total per user</strong></span><span style="color:var(--teal)"><strong>~₹0.20/mo</strong></span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>💰 P&L Projection (Year 1 — New Lower Pricing)</h3>
+      <table>
+        <tr><th>Month</th><th>Users</th><th>Paid %</th><th>Revenue</th><th>Cost</th><th>Profit</th></tr>
+        <tr><td>Month 1-3</td><td>200</td><td>5%</td><td>₹1,490</td><td>₹1,020</td><td class="green">₹470</td></tr>
+        <tr><td>Month 4-6</td><td>600</td><td>8%</td><td>₹7,176</td><td>₹1,100</td><td class="green">₹6,076</td></tr>
+        <tr><td>Month 7-9</td><td>1,500</td><td>10%</td><td>₹22,425</td><td>₹1,280</td><td class="green">₹21,145</td></tr>
+        <tr><td>Month 10-12</td><td>3,000</td><td>12%</td><td>₹53,820</td><td>₹1,580</td><td class="green">₹52,240</td></tr>
+        <tr style="background:rgba(34,197,94,0.1);font-weight:700"><td>Year 1 Total</td><td>3,000</td><td>—</td><td class="green">₹2,54,730</td><td class="red">₹14,940</td><td class="green">₹2,39,790</td></tr>
+      </table>
+    </div>
+
+    <div class="grid-3">
+      <div class="stat green"><div class="label">Break-even Point</div><div class="value">Month 1</div><div class="sub">Just 7 paid users cover costs</div></div>
+      <div class="stat accent"><div class="label">LTV (Starter, 12mo)</div><div class="value">₹1,199</div><div class="sub">Annual plan retention</div></div>
+      <div class="stat purple"><div class="label">LTV (Pro, 12mo)</div><div class="value">₹2,999</div><div class="sub">Annual plan retention</div></div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h3>📊 Year 1 Revenue vs Cost</h3>
+      <div class="bar-chart" id="pnl-chart">
+        <!-- filled by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 3: SIMULATOR ===== -->
+  <div id="simulator" class="panel">
+    <div class="card">
+      <h3>🎛 Revenue Simulator — Drag to Explore</h3>
+      <div class="slider-row">
+        <label>Total Users</label>
+        <input type="range" id="sl-users" min="100" max="50000" value="3000" step="100" oninput="updateSim()">
+        <span class="slider-val" id="sv-users">3,000</span>
+      </div>
+      <div class="slider-row">
+        <label>Starter %</label>
+        <input type="range" id="sl-starter" min="0" max="30" value="8" step="1" oninput="updateSim()">
+        <span class="slider-val" id="sv-starter">8%</span>
+      </div>
+      <div class="slider-row">
+        <label>Pro %</label>
+        <input type="range" id="sl-pro" min="0" max="20" value="4" step="1" oninput="updateSim()">
+        <span class="slider-val" id="sv-pro">4%</span>
+      </div>
+      <div class="slider-row">
+        <label>Annual %</label>
+        <input type="range" id="sl-annual" min="0" max="100" value="60" step="5" oninput="updateSim()">
+        <span class="slider-val" id="sv-annual">60%</span>
+      </div>
+    </div>
+
+    <div class="grid-3" id="sim-results">
+      <div class="stat teal"><div class="label">Monthly Revenue</div><div class="value" id="sim-rev">—</div></div>
+      <div class="stat red"><div class="label">Monthly Cost</div><div class="value" id="sim-cost">—</div></div>
+      <div class="stat green"><div class="label">Monthly Profit</div><div class="value" id="sim-profit">—</div></div>
+    </div>
+    <div class="grid-3" style="margin-top:20px">
+      <div class="stat accent"><div class="label">Annual Revenue</div><div class="value" id="sim-ann-rev">—</div></div>
+      <div class="stat purple"><div class="label">Profit Margin</div><div class="value" id="sim-margin">—</div></div>
+      <div class="stat amber"><div class="label">Cost per Paid User</div><div class="value" id="sim-cpu">—</div></div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 4: COMPETITORS ===== -->
+  <div id="competitors" class="panel">
+    <div class="card">
+      <h3>⚔️ Annual Plan Comparison (₹/year)</h3>
+      <div style="margin-top:16px">
+        <div class="comp-row">
+          <div class="comp-name" style="color:var(--green)">BillRaja</div>
+          <div class="comp-bar" style="width:20%;background:linear-gradient(90deg,var(--green),var(--teal));">₹1,199</div>
+          <div class="comp-price" style="color:var(--green)">₹1,199/yr</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-name">myBillBook</div>
+          <div class="comp-bar" style="width:42%;background:#444;">₹2,499</div>
+          <div class="comp-price">₹2,499/yr</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-name">Vyapar</div>
+          <div class="comp-bar" style="width:50%;background:#555;">₹2,999</div>
+          <div class="comp-price">₹2,999/yr</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-name">Zoho Invoice</div>
+          <div class="comp-bar" style="width:60%;background:#666;">₹3,588</div>
+          <div class="comp-price">₹3,588/yr</div>
+        </div>
+        <div class="comp-row">
+          <div class="comp-name">Vyapar Pro</div>
+          <div class="comp-bar" style="width:100%;background:#777;">₹5,999</div>
+          <div class="comp-price">₹5,999/yr</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>🏆 Feature Comparison</h3>
+      <table>
+        <tr><th>Feature</th><th style="color:var(--green)">BillRaja Starter</th><th>myBillBook Silver</th><th>Vyapar Mini</th></tr>
+        <tr><td>Price (Annual)</td><td class="green">₹1,199</td><td>₹2,499</td><td>₹2,999</td></tr>
+        <tr><td>Invoices/mo</td><td>50</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>PDF Templates</td><td class="green">3 templates</td><td>5+</td><td>8+</td></tr>
+        <tr><td>WhatsApp Share</td><td class="green">✓</td><td>✓</td><td>✓</td></tr>
+        <tr><td>GST Reports</td><td class="amber">Pro only</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Purchase Orders</td><td class="green">✓</td><td>✗</td><td>✓</td></tr>
+        <tr><td>Multi-language</td><td class="green">4 languages</td><td>Hindi only</td><td>10+</td></tr>
+        <tr><td>Offline Mode</td><td>Coming soon</td><td>✓</td><td>✓</td></tr>
+      </table>
+    </div>
+
+    <div class="highlight">
+      <h4>💡 Competitive Edge</h4>
+      <p>BillRaja is <strong>52-80% cheaper</strong> than competitors. At ₹1,199/yr, we undercut myBillBook by ₹1,300 and Vyapar by ₹1,800. Even our Pro plan at ₹2,999/yr is cheaper than competitors' basic plans.</p>
+    </div>
+  </div>
+
+  <!-- ===== TAB 5: ROADMAP ===== -->
+  <div id="roadmap" class="panel">
+    <div class="grid-2">
+      <div class="card">
+        <h3>🗓 Scaling Roadmap</h3>
+        <div class="timeline">
+          <div class="milestone done">
+            <h4>Phase 1: Launch (Now)</h4>
+            <p>Core invoicing, GST, PDF, WhatsApp share. Free + paid plans live.</p>
+            <span class="tag q1">Q1 2026</span>
+          </div>
+          <div class="milestone done">
+            <h4>Phase 2: Stickiness (Month 2-3)</h4>
+            <p>Inventory management, purchase orders, product catalog, reports dashboard.</p>
+            <span class="tag q1">Q1 2026</span>
+          </div>
+          <div class="milestone">
+            <h4>Phase 3: Growth (Month 4-6)</h4>
+            <p>Offline mode, barcode scanner, recurring invoices, payment reminders via WhatsApp.</p>
+            <span class="tag q2">Q2 2026</span>
+          </div>
+          <div class="milestone">
+            <h4>Phase 4: Monetization (Month 7-9)</h4>
+            <p>Razorpay/UPI payment integration, auto-reconciliation, credit notes, multi-business.</p>
+            <span class="tag q3">Q3 2026</span>
+          </div>
+          <div class="milestone">
+            <h4>Phase 5: Scale (Month 10-12)</h4>
+            <p>E-invoicing (IRN), Tally/Busy sync, staff accounts, desktop app, API access.</p>
+            <span class="tag q4">Q4 2026</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📈 Growth Targets</h3>
+        <div class="stat teal" style="margin-bottom:16px"><div class="label">Month 3</div><div class="value">500 users</div><div class="sub">25 paid • ₹3,750/mo revenue</div></div>
+        <div class="stat accent" style="margin-bottom:16px"><div class="label">Month 6</div><div class="value">2,000 users</div><div class="sub">160 paid • ₹24K/mo revenue</div></div>
+        <div class="stat purple" style="margin-bottom:16px"><div class="label">Month 9</div><div class="value">5,000 users</div><div class="sub">500 paid • ₹75K/mo revenue</div></div>
+        <div class="stat green"><div class="label">Month 12</div><div class="value">10,000 users</div><div class="sub">1,200 paid • ₹1.8L/mo revenue</div></div>
+
+        <div class="highlight" style="margin-top:20px">
+          <h4>🎯 Unit Economics at Scale</h4>
+          <p><strong>10K users:</strong> Cost ₹3K/mo → Revenue ₹1.8L/mo → <strong style="color:var(--green)">98% margin</strong></p>
+          <p style="font-size:0.85rem;color:var(--muted);margin-top:4px">Firebase scales to 100K users within free/low tiers. No server management needed.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TAB 6: BENEFITS ===== -->
+  <div id="benefits" class="panel">
+    <div class="grid-2">
+      <div class="card">
+        <h3>✅ Why Users Choose BillRaja</h3>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">💸</span>
+            <div><strong>52-80% cheaper</strong><br><span style="color:var(--muted);font-size:0.85rem">₹1,199/yr vs ₹2,499-5,999/yr from competitors</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">🇮🇳</span>
+            <div><strong>Built for India</strong><br><span style="color:var(--muted);font-size:0.85rem">GST-compliant, Hindi/Gujarati/Tamil, UPI-ready</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">📱</span>
+            <div><strong>WhatsApp-first sharing</strong><br><span style="color:var(--muted);font-size:0.85rem">Send invoices where your customers already are</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">⚡</span>
+            <div><strong>Under 3 minutes</strong><br><span style="color:var(--muted);font-size:0.85rem">Create & share a GST invoice in under 3 min</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">🔒</span>
+            <div><strong>Free forever plan</strong><br><span style="color:var(--muted);font-size:0.85rem">No credit card required, no hidden limits</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>🏗 Why This Pricing Works</h3>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">☁️</span>
+            <div><strong>Near-zero marginal cost</strong><br><span style="color:var(--muted);font-size:0.85rem">Firebase free tier covers first 50K reads/day. Cost per user: ₹0.20/mo</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">🚫</span>
+            <div><strong>No servers to manage</strong><br><span style="color:var(--muted);font-size:0.85rem">Serverless = no DevOps cost, no infra team needed</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">📐</span>
+            <div><strong>Software scales, cost doesn't</strong><br><span style="color:var(--muted);font-size:0.85rem">1,000 users cost ₹1.2K/mo. 10,000 users cost ₹3K/mo. Revenue scales linearly.</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">🎯</span>
+            <div><strong>Land & expand model</strong><br><span style="color:var(--muted);font-size:0.85rem">Free plan hooks users → usage grows → natural upgrade to Starter/Pro</span></div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span style="font-size:1.5rem">💎</span>
+            <div><strong>Annual lock-in = predictable revenue</strong><br><span style="color:var(--muted);font-size:0.85rem">33% discount incentivizes yearly commitment. Lower churn, better forecasting.</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>⚠️ Risk Analysis</h3>
+      <table>
+        <tr><th>Risk</th><th>Impact</th><th>Mitigation</th></tr>
+        <tr><td>Low conversion rate</td><td class="amber">Medium</td><td>Free tier creates habit → feature gates drive upgrade</td></tr>
+        <tr><td>Competitor undercuts price</td><td class="amber">Medium</td><td>Already 52-80% cheaper. Compete on UX, not price</td></tr>
+        <tr><td>Firebase cost spike</td><td class="green">Low</td><td>Cost per user is ₹0.20. Even 10x spike = ₹2/user</td></tr>
+        <tr><td>Users don't find app</td><td class="red">High</td><td>Referral system + Play Store ASO + regional marketing</td></tr>
+        <tr><td>Churn after free trial</td><td class="amber">Medium</td><td>Sticky data (invoices, customers) = high switching cost</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  let isAnnual = false;
+
+  function showTab(id) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    event.target.classList.add('active');
+    if (id === 'simulator') updateSim();
+    if (id === 'pnl') drawPnlChart();
+  }
+
+  function toggleBilling() {
+    isAnnual = !isAnnual;
+    const toggle = document.getElementById('billing-toggle');
+    toggle.classList.toggle('on', isAnnual);
+    document.getElementById('lbl-monthly').classList.toggle('active', !isAnnual);
+    document.getElementById('lbl-annual').classList.toggle('active', isAnnual);
+
+    if (isAnnual) {
+      document.getElementById('starter-price').innerHTML = '<span class="old">₹1,788</span> ₹1,199 <span>/ year</span>';
+      document.getElementById('starter-annual').textContent = '= ₹100/mo (save 33%)';
+      document.getElementById('pro-price').innerHTML = '<span class="old">₹4,788</span> ₹2,999 <span>/ year</span>';
+      document.getElementById('pro-annual').textContent = '= ₹250/mo (save 37%)';
+    } else {
+      document.getElementById('starter-price').innerHTML = '₹149 <span>/ month</span>';
+      document.getElementById('starter-annual').textContent = '₹1,199 / year (save ₹589)';
+      document.getElementById('pro-price').innerHTML = '₹399 <span>/ month</span>';
+      document.getElementById('pro-annual').textContent = '₹2,999 / year (save ₹1,789)';
+    }
+  }
+
+  function fmt(n) {
+    if (n >= 100000) return '₹' + (n/100000).toFixed(1) + 'L';
+    if (n >= 1000) return '₹' + (n/1000).toFixed(1) + 'K';
+    return '₹' + n.toFixed(0);
+  }
+
+  function updateSim() {
+    const users = +document.getElementById('sl-users').value;
+    const starterPct = +document.getElementById('sl-starter').value / 100;
+    const proPct = +document.getElementById('sl-pro').value / 100;
+    const annualPct = +document.getElementById('sl-annual').value / 100;
+
+    document.getElementById('sv-users').textContent = users.toLocaleString();
+    document.getElementById('sv-starter').textContent = (starterPct*100).toFixed(0) + '%';
+    document.getElementById('sv-pro').textContent = (proPct*100).toFixed(0) + '%';
+    document.getElementById('sv-annual').textContent = (annualPct*100).toFixed(0) + '%';
+
+    const starterUsers = Math.floor(users * starterPct);
+    const proUsers = Math.floor(users * proPct);
+
+    // Monthly revenue calc
+    const starterMonthly = starterUsers * (1 - annualPct) * 149;
+    const starterAnnualRev = starterUsers * annualPct * (1199/12);
+    const proMonthly = proUsers * (1 - annualPct) * 399;
+    const proAnnualRev = proUsers * annualPct * (2999/12);
+
+    const monthlyRev = starterMonthly + starterAnnualRev + proMonthly + proAnnualRev;
+    const monthlyCost = 980 + users * 0.20;
+    const monthlyProfit = monthlyRev - monthlyCost;
+    const margin = monthlyRev > 0 ? (monthlyProfit / monthlyRev * 100) : 0;
+    const paidUsers = starterUsers + proUsers;
+    const costPerPaid = paidUsers > 0 ? monthlyCost / paidUsers : 0;
+
+    document.getElementById('sim-rev').textContent = fmt(monthlyRev);
+    document.getElementById('sim-cost').textContent = fmt(monthlyCost);
+    document.getElementById('sim-profit').textContent = fmt(monthlyProfit);
+    document.getElementById('sim-profit').style.color = monthlyProfit >= 0 ? 'var(--green)' : 'var(--red)';
+    document.getElementById('sim-ann-rev').textContent = fmt(monthlyRev * 12);
+    document.getElementById('sim-margin').textContent = margin.toFixed(0) + '%';
+    document.getElementById('sim-cpu').textContent = '₹' + costPerPaid.toFixed(0);
+  }
+
+  function drawPnlChart() {
+    const data = [
+      { label: 'M1', rev: 500, cost: 1020 },
+      { label: 'M2', rev: 800, cost: 1020 },
+      { label: 'M3', rev: 1490, cost: 1020 },
+      { label: 'M4', rev: 3500, cost: 1040 },
+      { label: 'M5', rev: 5500, cost: 1060 },
+      { label: 'M6', rev: 7176, cost: 1100 },
+      { label: 'M7', rev: 12000, cost: 1150 },
+      { label: 'M8', rev: 17000, cost: 1200 },
+      { label: 'M9', rev: 22425, cost: 1280 },
+      { label: 'M10', rev: 35000, cost: 1380 },
+      { label: 'M11', rev: 45000, cost: 1480 },
+      { label: 'M12', rev: 53820, cost: 1580 },
+    ];
+    const maxVal = 55000;
+    const chart = document.getElementById('pnl-chart');
+    chart.innerHTML = '';
+    data.forEach(d => {
+      const col = document.createElement('div');
+      col.className = 'bar-col';
+      col.innerHTML = `
+        <div class="bar-value" style="color:var(--green)">${fmt(d.rev)}</div>
+        <div class="bar" style="height:${d.rev/maxVal*160}px;background:linear-gradient(var(--green),var(--teal))"></div>
+        <div class="bar" style="height:${d.cost/maxVal*160}px;background:var(--red);margin-top:2px;border-radius:0 0 4px 4px;opacity:0.7"></div>
+        <div class="bar-label">${d.label}</div>
+      `;
+      chart.appendChild(col);
+    });
+  }
+
+  // Init
+  updateSim();
+  setTimeout(drawPnlChart, 100);
+</script>
+</body>
+</html>

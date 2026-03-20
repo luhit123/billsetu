@@ -239,13 +239,31 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
-      match /subscriptions/{subscriptionId} {
-        allow read, write: if isOwner(userId);
-
-        match /payments/{paymentId} {
-          allow read, write: if request.auth != null && request.auth.uid == userId;
-        }
+      // Usage counters — client can read and increment (never decrement)
+      match /usage/{periodKey} {
+        allow read: if isOwner(userId);
+        allow create: if isOwner(userId)
+          && request.resource.data.invoicesCreated is int
+          && request.resource.data.invoicesCreated >= 0;
+        allow update: if isOwner(userId)
+          && request.resource.data.invoicesCreated >= resource.data.invoicesCreated;
       }
+    }
+
+    // Subscription doc — client can READ, only Cloud Functions can WRITE
+    match /subscriptions/{userId} {
+      allow read: if isOwner(userId);
+      // No client write — only admin SDK (Cloud Functions) writes here
+
+      match /payments/{paymentId} {
+        allow read: if isOwner(userId);
+        // No client write — only admin SDK writes
+      }
+    }
+
+    // Plan config — any signed-in user can read
+    match /config/{docId} {
+      allow read: if isSignedIn();
     }
   }
 }
