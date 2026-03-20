@@ -1,25 +1,8 @@
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/services/product_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/constants/app_constants.dart';
 import 'package:flutter/material.dart';
-
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder     = Color(0xFFBDD5F0);
-const _kCardBg     = Colors.white;
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
-
-const _kUnits = [
-  'pcs', 'kg', 'g', 'ltr', 'ml',
-  'box', 'pack', 'dozen', 'meter',
-];
 
 class ProductFormScreen extends StatefulWidget {
   const ProductFormScreen({super.key, this.initialProduct});
@@ -60,7 +43,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _descCtrl.text     = p.description;
       _priceCtrl.text    = p.unitPrice > 0 ? p.unitPrice.toString() : '';
       _categoryCtrl.text = p.category;
-      _unit              = _kUnits.contains(p.unit) ? p.unit : 'pcs';
+      _unit              = kItemUnits.contains(p.unit) ? p.unit : 'pcs';
       _hsnCtrl.text      = p.hsnCode;
       _gstApplicable     = p.gstApplicable;
       _gstRate           = p.gstRate;
@@ -89,11 +72,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         labelText: label,
         hintText: hint,
         helperText: helperText,
-        labelStyle: const TextStyle(color: _kLabel, fontSize: 13),
-        hintStyle:  const TextStyle(color: _kLabel),
-        helperStyle: const TextStyle(color: _kLabel, fontSize: 11),
+        labelStyle: const TextStyle(color: kTextSecondary, fontSize: 13),
+        hintStyle:  const TextStyle(color: kTextSecondary),
+        helperStyle: const TextStyle(color: kTextSecondary, fontSize: 11),
         prefixIcon: icon != null
-            ? Icon(icon, color: _kLabel, size: 20)
+            ? Icon(icon, color: kTextSecondary, size: 20)
             : null,
         filled: true,
         fillColor: const Color(0xFFF5F8FF),
@@ -101,15 +84,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
+          borderSide: const BorderSide(color: kBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
+          borderSide: const BorderSide(color: kBorder),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+          borderSide: const BorderSide(color: kPrimary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -128,7 +111,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         _isEditing ? 'Edit Product' : 'Add Product';
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -137,7 +120,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         shadowColor: Colors.black26,
         surfaceTintColor: Colors.transparent,
         flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
+          decoration: const BoxDecoration(gradient: kGradient),
         ),
         title: Text(
           title,
@@ -175,7 +158,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       child: Text(
                         initials,
                         style: const TextStyle(
-                          color: _kPrimary,
+                          color: kPrimary,
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
                         ),
@@ -281,7 +264,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             initialValue: _unit,
                             isExpanded: true,
                             decoration: _dec('Unit'),
-                            items: _kUnits
+                            items: kItemUnits
                                 .map((u) => DropdownMenuItem(
                                       value: u,
                                       child: Text(u),
@@ -300,7 +283,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     Wrap(
                       spacing: 8,
                       runSpacing: 8,
-                      children: _kUnits.map((u) {
+                      children: kItemUnits.map((u) {
                         final sel = u == _unit;
                         return GestureDetector(
                           onTap: () => setState(() => _unit = u),
@@ -315,8 +298,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                 color: sel
-                                    ? _kPrimary.withValues(alpha: 0.35)
-                                    : _kBorder,
+                                    ? kPrimary.withValues(alpha: 0.35)
+                                    : kBorder,
                                 width: sel ? 1.5 : 1,
                               ),
                             ),
@@ -327,7 +310,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 fontWeight: sel
                                     ? FontWeight.w700
                                     : FontWeight.w500,
-                                color: sel ? _kPrimary : _kLabel,
+                                color: sel ? kPrimary : kTextSecondary,
                               ),
                             ),
                           ),
@@ -363,7 +346,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     // GST Applicable toggle
                     Row(
                       children: [
-                        Icon(Icons.percent_rounded, color: _kLabel, size: 20),
+                        Icon(Icons.percent_rounded, color: kTextSecondary, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -371,13 +354,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _kTitle,
+                              color: kTextPrimary,
                             ),
                           ),
                         ),
                         Switch.adaptive(
                           value: _gstApplicable,
-                          activeTrackColor: _kPrimary,
+                          activeTrackColor: kPrimary,
                           activeThumbColor: Colors.white,
                           onChanged: (_) =>
                               setState(() => _gstApplicable = !_gstApplicable),
@@ -392,7 +375,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                         'GST Rate',
                         style: const TextStyle(
                           fontSize: 13,
-                          color: _kLabel,
+                          color: kTextSecondary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -409,11 +392,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(
                                 color: sel
-                                    ? _kPrimary
+                                    ? kPrimary
                                     : const Color(0xFFF0F6FF),
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
-                                  color: sel ? _kPrimary : _kBorder,
+                                  color: sel ? kPrimary : kBorder,
                                   width: sel ? 1.5 : 1,
                                 ),
                               ),
@@ -422,7 +405,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: sel ? Colors.white : _kLabel,
+                                  color: sel ? Colors.white : kTextSecondary,
                                 ),
                               ),
                             ),
@@ -447,7 +430,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     Row(
                       children: [
                         Icon(Icons.inventory_rounded,
-                            color: _kPrimary, size: 20),
+                            color: kPrimary, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
@@ -457,7 +440,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 'Track Inventory',
                                 style: const TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: _kTitle,
+                                  color: kTextPrimary,
                                   fontSize: 14,
                                 ),
                               ),
@@ -465,7 +448,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 'Monitor stock levels & movements',
                                 style: const TextStyle(
                                   fontSize: 11,
-                                  color: _kLabel,
+                                  color: kTextSecondary,
                                 ),
                               ),
                             ],
@@ -475,7 +458,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           value: _trackInventory,
                           onChanged: (v) =>
                               setState(() => _trackInventory = v),
-                          activeColor: _kPrimary,
+                          activeColor: kPrimary,
                         ),
                       ],
                     ),
@@ -541,10 +524,10 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
+                    backgroundColor: kPrimary,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        _kPrimary.withValues(alpha: 0.45),
+                        kPrimary.withValues(alpha: 0.45),
                     disabledForegroundColor: Colors.white,
                     elevation: 3,
                     shadowColor: const Color(0x402563EB),
@@ -568,9 +551,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _kCardBg,
+          color: kCardBg,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _kBorder, width: 1.2),
+          border: Border.all(color: kBorder, width: 1.2),
           boxShadow: const [
             BoxShadow(
               color: Color(0x0E2563EB),
@@ -585,7 +568,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   Widget _sectionLabel(String text) => Text(
         text,
         style: const TextStyle(
-          color: _kTitle,
+          color: kTextPrimary,
           fontSize: 14,
           fontWeight: FontWeight.w700,
         ),

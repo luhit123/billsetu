@@ -7,18 +7,8 @@ import 'package:billeasy/screens/product_movements_screen.dart';
 import 'package:billeasy/services/product_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 
 class ProductsScreen extends StatefulWidget {
   /// When [selectionMode] is true the screen returns a [Product] via
@@ -39,11 +29,7 @@ class ProductsScreen extends StatefulWidget {
 class _ProductsScreenState extends State<ProductsScreen> {
   final _svc = ProductService();
   final _searchCtrl = TextEditingController();
-  final _currFmt = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 0,
-  );
+  final _currFmt = kCurrencyFormat;
 
   bool _isSearching = false;
   String _query = '';
@@ -96,13 +82,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: _buildAppBar(),
       floatingActionButton: widget.selectionMode
           ? null
           : FloatingActionButton(
               onPressed: _openAddProduct,
-              backgroundColor: _kPrimary,
+              backgroundColor: kPrimary,
               foregroundColor: Colors.white,
               elevation: 6,
               child: const Icon(Icons.add_rounded),
@@ -165,7 +151,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       shadowColor: Colors.black26,
       surfaceTintColor: Colors.transparent,
       flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
+        decoration: const BoxDecoration(gradient: kGradient),
       ),
       title: _isSearching
           ? TextField(
@@ -237,7 +223,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
               ),
               child: const Icon(
                 Icons.inventory_2_outlined,
-                color: _kPrimary,
+                color: kPrimary,
                 size: 36,
               ),
             ),
@@ -247,14 +233,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _kTitle,
+                color: kTextPrimary,
               ),
             ),
             const SizedBox(height: 8),
             const Text(
               'Add your products once and reuse\nthem when creating invoices.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: _kLabel, fontSize: 14, height: 1.5),
+              style: TextStyle(color: kTextSecondary, fontSize: 14, height: 1.5),
             ),
             const SizedBox(height: 24),
             if (!widget.selectionMode)
@@ -263,7 +249,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 icon: const Icon(Icons.add_rounded),
                 label: const Text('Add First Product'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPrimary,
+                  backgroundColor: kPrimary,
                   foregroundColor: Colors.white,
                   elevation: 3,
                   shadowColor: const Color(0x400F4A75),
@@ -410,7 +396,7 @@ class _ProductCard extends StatelessWidget {
               child: Text(
                 product.initials,
                 style: const TextStyle(
-                  color: _kPrimary,
+                  color: kPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -428,7 +414,7 @@ class _ProductCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: _kTitle,
+                      color: kTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -443,7 +429,7 @@ class _ProductCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: _kPrimary,
+                          color: kPrimary,
                         ),
                       ),
                     ],
@@ -453,7 +439,7 @@ class _ProductCard extends StatelessWidget {
                     Text(
                       product.description,
                       style: const TextStyle(
-                          fontSize: 12, color: _kLabel),
+                          fontSize: 12, color: kTextSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -471,7 +457,7 @@ class _ProductCard extends StatelessWidget {
             if (!selectionMode) ...[
               IconButton(
                 icon: const Icon(Icons.edit_outlined,
-                    size: 18, color: _kLabel),
+                    size: 18, color: kTextSecondary),
                 onPressed: onEdit,
                 tooltip: 'Edit',
                 padding: EdgeInsets.zero,
@@ -489,7 +475,7 @@ class _ProductCard extends StatelessWidget {
               ),
             ] else
               const Icon(Icons.chevron_right_rounded,
-                  color: _kLabel, size: 20),
+                  color: kTextSecondary, size: 20),
           ],
         ),
       ),
@@ -567,7 +553,7 @@ class _UnitPill extends StatelessWidget {
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: _kLabel,
+          color: kTextSecondary,
         ),
       ),
     );

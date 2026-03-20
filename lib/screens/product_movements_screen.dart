@@ -3,20 +3,10 @@ import 'dart:async';
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/modals/stock_movement.dart';
 import 'package:billeasy/services/inventory_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-const _kPrimary    = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder     = Color(0xFFBDD5F0);
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
 
 class ProductMovementsScreen extends StatefulWidget {
   const ProductMovementsScreen({super.key, required this.product});
@@ -34,7 +24,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
   bool _loading = true;
   Object? _error;
 
-  final _dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
+  final _dateFormat = kDateTimeFormat;
 
   @override
   void initState() {
@@ -67,7 +57,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -75,7 +65,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
+          decoration: const BoxDecoration(gradient: kGradient),
         ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +98,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'adjust-stock',
         onPressed: _showAdjustSheet,
-        backgroundColor: _kPrimary,
+        backgroundColor: kPrimary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.edit_rounded),
         label: const Text('Adjust Stock'),
@@ -118,7 +108,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
 
   Widget _buildBody() {
     if (_loading) {
-      return const Center(child: CircularProgressIndicator(color: _kPrimary));
+      return const Center(child: CircularProgressIndicator(color: kPrimary));
     }
     if (_error != null) {
       return Center(
@@ -129,7 +119,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
             const SizedBox(height: 12),
             Text(
               'Failed to load movements',
-              style: TextStyle(color: _kLabel),
+              style: TextStyle(color: kTextSecondary),
             ),
           ],
         ),
@@ -147,7 +137,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.swap_vert_rounded,
-                  size: 48, color: _kPrimary),
+                  size: 48, color: kPrimary),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -155,13 +145,13 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: _kTitle,
+                color: kTextPrimary,
               ),
             ),
             const SizedBox(height: 6),
             const Text(
               'Stock adjustments will appear here',
-              style: TextStyle(fontSize: 13, color: _kLabel),
+              style: TextStyle(fontSize: 13, color: kTextSecondary),
             ),
           ],
         ),
@@ -220,7 +210,7 @@ class _StockSummaryBar extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isLow ? Colors.red.shade200 : _kBorder,
+          color: isLow ? Colors.red.shade200 : kBorder,
         ),
         boxShadow: const [
           BoxShadow(
@@ -236,13 +226,13 @@ class _StockSummaryBar extends StatelessWidget {
             child: _StatChip(
               label: 'Current Stock',
               value: _fmtQty(product.currentStock, product.unit),
-              color: isLow ? Colors.red : _kPrimary,
+              color: isLow ? Colors.red : kPrimary,
             ),
           ),
           Container(
             width: 1,
             height: 40,
-            color: _kBorder,
+            color: kBorder,
             margin: const EdgeInsets.symmetric(horizontal: 16),
           ),
           Expanded(
@@ -251,7 +241,7 @@ class _StockSummaryBar extends StatelessWidget {
               value: product.minStockAlert > 0
                   ? _fmtQty(product.minStockAlert, product.unit)
                   : '—',
-              color: _kLabel,
+              color: kTextSecondary,
             ),
           ),
           if (isLow) ...[
@@ -311,7 +301,7 @@ class _StatChip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 11, color: _kLabel)),
+            style: const TextStyle(fontSize: 11, color: kTextSecondary)),
         const SizedBox(height: 2),
         Text(
           value,
@@ -350,7 +340,7 @@ class _MovementTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: kBorder),
       ),
       child: Row(
         children: [
@@ -377,7 +367,7 @@ class _MovementTile extends StatelessWidget {
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: _kTitle,
+                    color: kTextPrimary,
                   ),
                 ),
                 if (movement.notes.isNotEmpty) ...[
@@ -385,7 +375,7 @@ class _MovementTile extends StatelessWidget {
                   Text(
                     movement.notes,
                     style:
-                        const TextStyle(fontSize: 12, color: _kLabel),
+                        const TextStyle(fontSize: 12, color: kTextSecondary),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -394,7 +384,7 @@ class _MovementTile extends StatelessWidget {
                 Text(
                   dateFormat.format(movement.createdAt),
                   style:
-                      const TextStyle(fontSize: 11, color: _kLabel),
+                      const TextStyle(fontSize: 11, color: kTextSecondary),
                 ),
               ],
             ),
@@ -413,7 +403,7 @@ class _MovementTile extends StatelessWidget {
               Text(
                 'After: ${_fmt(movement.balanceAfter)}',
                 style: const TextStyle(
-                    fontSize: 11, color: _kLabel),
+                    fontSize: 11, color: kTextSecondary),
               ),
             ],
           ),
@@ -473,7 +463,7 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: _kBorder,
+                color: kBorder,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -484,7 +474,7 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
             style: const TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: _kTitle,
+              color: kTextPrimary,
             ),
           ),
           const SizedBox(height: 16),
@@ -530,7 +520,7 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
             child: ElevatedButton(
               onPressed: _saving ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: _kPrimary,
+                backgroundColor: kPrimary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
@@ -572,21 +562,21 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          labelStyle: const TextStyle(color: _kLabel, fontSize: 13),
-          hintStyle: const TextStyle(color: _kLabel, fontSize: 12),
+          labelStyle: const TextStyle(color: kTextSecondary, fontSize: 13),
+          hintStyle: const TextStyle(color: kTextSecondary, fontSize: 12),
           filled: true,
           fillColor: const Color(0xFFF5F8FF),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _kBorder),
+            borderSide: const BorderSide(color: kBorder),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _kBorder),
+            borderSide: const BorderSide(color: kBorder),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+            borderSide: const BorderSide(color: kPrimary, width: 1.5),
           ),
         ),
       );
@@ -645,21 +635,21 @@ class _TypeBtn extends StatelessWidget {
               : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? color : _kBorder,
+            color: selected ? color : kBorder,
             width: selected ? 1.5 : 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: selected ? color : _kLabel, size: 18),
+            Icon(icon, color: selected ? color : kTextSecondary, size: 18),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: selected ? color : _kLabel,
+                color: selected ? color : kTextSecondary,
               ),
             ),
           ],

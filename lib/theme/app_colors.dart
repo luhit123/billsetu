@@ -29,13 +29,43 @@ const kTextSecondary = Color(0xFF5B7A9A); // Blue-gray
 // ── Borders ───────────────────────────────────────────────────────────────────
 const kBorder = Color(0xFFBDD5F0); // Blue-tinted border
 
-// ── Status colours (unchanged — semantic) ─────────────────────────────────────
+// ── Invoice status colours ───────────────────────────────────────────────────
 const kPaid       = Color(0xFF22C55E);
 const kPaidBg     = Color(0xFFDCFCE7);
 const kPending    = Color(0xFFF59E0B);
 const kPendingBg  = Color(0xFFFEF3C7);
 const kOverdue    = Color(0xFFEF4444);
 const kOverdueBg  = Color(0xFFFEE2E2);
+
+// ── Purchase-order status colours ───────────────────────────────────────────
+const kDraft       = Color(0xFF6B7280);
+const kDraftBg     = Color(0xFFF3F4F6);
+const kConfirmed   = Color(0xFFF59E0B);
+const kConfirmedBg = Color(0xFFFEF3C7);
+const kReceived    = Color(0xFF22C55E);
+const kReceivedBg  = Color(0xFFDCFCE7);
+const kCancelled   = Color(0xFFEF4444);
+const kCancelledBg = Color(0xFFFEE2E2);
+
+// ── Shadows ─────────────────────────────────────────────────────────────────
+const kCardShadow = Color(0x0E0F4A75);
+
+// ── Reusable card decoration ────────────────────────────────────────────────
+BoxDecoration kCardDecoration({bool error = false}) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: error ? kOverdue : kBorder,
+        width: error ? 1.5 : 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: error ? const Color(0x10EF4444) : kCardShadow,
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
 
 // ── Gradient AppBar builder ───────────────────────────────────────────────────
 /// Returns an AppBar with the onboarding gradient as background.

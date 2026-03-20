@@ -4,32 +4,11 @@ import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
-
-// ─── Brand colours ─────────────────────────────────────────────────────────────
-const _kNavy = Color(0xFF0B234F);
-const _kPrimary = Color(0xFF0F4A75);
-const _kTeal = Color(0xFF0F7D83);
-const _kBg = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kTextPrimary = Color(0xFF0B234F);
-const _kTextSecondary = Color(0xFF5B7A9A);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
-
-// ─── Status colours ────────────────────────────────────────────────────────────
-const _kPaid = Color(0xFF22C55E);
-const _kPaidBg = Color(0xFFDCFCE7);
-const _kPending = Color(0xFFF59E0B);
-const _kPendingBg = Color(0xFFFEF3C7);
-const _kOverdue = Color(0xFFEF4444);
-const _kOverdueBg = Color(0xFFFEE2E2);
 
 // ─── Period enum ───────────────────────────────────────────────────────────────
 enum _Period { monthly, quarterly, yearly }
@@ -44,12 +23,8 @@ class GstReportScreen extends StatefulWidget {
 class _GstReportScreenState extends State<GstReportScreen> {
   final AnalyticsService _analyticsService = AnalyticsService();
   final FirebaseService _firebaseService = FirebaseService();
-  final _currencyFormat = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: 'Rs. ',
-    decimalDigits: 0,
-  );
-  final _dateFormat = DateFormat('dd MMM yyyy');
+  final _currencyFormat = kRsCurrencyFormat;
+  final _dateFormat = kDateFormat;
 
   _Period _selectedPeriod = _Period.monthly;
   int _selectedMonth = DateTime.now().month;
@@ -321,7 +296,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             width: 4,
             height: 18,
             decoration: BoxDecoration(
-              color: _kTeal,
+              color: kTeal,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -331,7 +306,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: _kTeal,
+              color: kTeal,
               letterSpacing: 1.2,
             ),
           ),
@@ -355,17 +330,17 @@ class _GstReportScreenState extends State<GstReportScreen> {
           vertical: compact ? 6 : 9,
         ),
         decoration: BoxDecoration(
-          gradient: selected ? _kGradient : null,
+          gradient: selected ? kGradient : null,
           color: selected ? null : Colors.white,
           borderRadius: BorderRadius.circular(50),
           border: Border.all(
-            color: selected ? Colors.transparent : _kBorder,
+            color: selected ? Colors.transparent : kBorder,
             width: 1.2,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: _kNavy.withValues(alpha: 0.25),
+                    color: kNavy.withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 3),
                   ),
@@ -377,7 +352,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           style: TextStyle(
             fontSize: compact ? 12 : 13,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : _kTextSecondary,
+            color: selected ? Colors.white : kTextSecondary,
           ),
         ),
       ),
@@ -410,10 +385,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: kBorder),
         boxShadow: [
           BoxShadow(
-            color: _kNavy.withValues(alpha: 0.06),
+            color: kNavy.withValues(alpha: 0.06),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -536,21 +511,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: _kBg,
+              color: kBackground,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: _kBorder),
+              border: Border.all(color: kBorder),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.date_range_rounded, size: 14, color: _kTeal),
+                const Icon(Icons.date_range_rounded, size: 14, color: kTeal),
                 const SizedBox(width: 6),
                 Text(
                   _periodLabel,
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                   ),
                 ),
               ],
@@ -572,10 +547,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: kBorder),
         boxShadow: [
           BoxShadow(
-            color: _kNavy.withValues(alpha: 0.05),
+            color: kNavy.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -612,7 +587,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: _kTextSecondary,
+              color: kTextSecondary,
             ),
           ),
         ],
@@ -628,11 +603,11 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        gradient: _kGradient,
+        gradient: kGradient,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: _kNavy.withValues(alpha: 0.3),
+            color: kNavy.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -708,16 +683,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
     String label;
     switch (status) {
       case InvoiceStatus.paid:
-        fg = _kPaid;
-        bg = _kPaidBg;
+        fg = kPaid;
+        bg = kPaidBg;
         label = 'Paid';
       case InvoiceStatus.pending:
-        fg = _kPending;
-        bg = _kPendingBg;
+        fg = kPending;
+        bg = kPendingBg;
         label = 'Pending';
       case InvoiceStatus.overdue:
-        fg = _kOverdue;
-        bg = _kOverdueBg;
+        fg = kOverdue;
+        bg = kOverdueBg;
         label = 'Overdue';
     }
     return Container(
@@ -737,16 +712,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _kTeal.withValues(alpha: 0.1),
+        color: kTeal.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kTeal.withValues(alpha: 0.3)),
+        border: Border.all(color: kTeal.withValues(alpha: 0.3)),
       ),
       child: Text(
         '${rate.toStringAsFixed(rate.truncateToDouble() == rate ? 0 : 1)}% GST',
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: _kTeal,
+          color: kTeal,
         ),
       ),
     );
@@ -760,10 +735,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _kBorder),
+        border: Border.all(color: kBorder),
         boxShadow: [
           BoxShadow(
-            color: _kNavy.withValues(alpha: 0.05),
+            color: kNavy.withValues(alpha: 0.05),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -787,7 +762,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: _kTextPrimary,
+                          color: kTextPrimary,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -796,7 +771,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: _kTextSecondary,
+                          color: kTextSecondary,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -807,7 +782,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   _dateFormat.format(inv.createdAt),
                   style: const TextStyle(
                     fontSize: 11,
-                    color: _kTextSecondary,
+                    color: kTextSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -820,26 +795,26 @@ class _GstReportScreenState extends State<GstReportScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: _kBg,
+                color: kBackground,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 children: [
-                  _amountRow('Taxable', inv.taxableAmount, _kTextPrimary),
+                  _amountRow('Taxable', inv.taxableAmount, kTextPrimary),
                   if (isIgst) ...[
                     const SizedBox(height: 4),
-                    _amountRow('IGST', inv.igstAmount, _kPrimary),
+                    _amountRow('IGST', inv.igstAmount, kPrimary),
                   ] else ...[
                     const SizedBox(height: 4),
-                    _amountRow('CGST', inv.cgstAmount, _kTeal),
+                    _amountRow('CGST', inv.cgstAmount, kTeal),
                     const SizedBox(height: 4),
-                    _amountRow('SGST', inv.sgstAmount, _kTeal),
+                    _amountRow('SGST', inv.sgstAmount, kTeal),
                   ],
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 6),
-                    child: Divider(height: 1, color: _kBorder),
+                    child: Divider(height: 1, color: kBorder),
                   ),
-                  _amountRow('Total Tax', inv.totalTax, _kNavy, bold: true),
+                  _amountRow('Total Tax', inv.totalTax, kNavy, bold: true),
                 ],
               ),
             ),
@@ -857,7 +832,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   isIgst ? 'Interstate' : 'Intrastate',
                   style: const TextStyle(
                     fontSize: 11,
-                    color: _kTextSecondary,
+                    color: kTextSecondary,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -882,7 +857,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-            color: _kTextSecondary,
+            color: kTextSecondary,
           ),
         ),
         const Spacer(),
@@ -909,14 +884,14 @@ class _GstReportScreenState extends State<GstReportScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: _kBg,
+                color: kBackground,
                 shape: BoxShape.circle,
-                border: Border.all(color: _kBorder, width: 1.5),
+                border: Border.all(color: kBorder, width: 1.5),
               ),
               child: const Icon(
                 Icons.receipt_long_outlined,
                 size: 36,
-                color: _kTextSecondary,
+                color: kTextSecondary,
               ),
             ),
             const SizedBox(height: 20),
@@ -926,14 +901,14 @@ class _GstReportScreenState extends State<GstReportScreen> {
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: _kTextPrimary,
+                color: kTextPrimary,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _periodLabel,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: _kTextSecondary),
+              style: const TextStyle(fontSize: 13, color: kTextSecondary),
             ),
           ],
         ),
@@ -978,13 +953,13 @@ class _GstReportScreenState extends State<GstReportScreen> {
         final invoiceCount = summary?.invoiceCount ?? invoices.length;
 
         return Scaffold(
-          backgroundColor: _kBg,
+          backgroundColor: kBackground,
           appBar: AppBar(
             elevation: 0,
             backgroundColor: Colors.transparent,
             foregroundColor: Colors.white,
             flexibleSpace: Container(
-              decoration: const BoxDecoration(gradient: _kGradient),
+              decoration: const BoxDecoration(gradient: kGradient),
             ),
             title: Text(
               s.gstReportTitle,
@@ -1007,7 +982,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                       const SliverFillRemaining(
                         child: Center(
                           child: CircularProgressIndicator(
-                            valueColor: AlwaysStoppedAnimation(_kTeal),
+                            valueColor: AlwaysStoppedAnimation(kTeal),
                           ),
                         ),
                       )
@@ -1019,7 +994,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                             child: Text(
                               'Error loading data: $_invoiceLoadError',
                               textAlign: TextAlign.center,
-                              style: const TextStyle(color: _kOverdue),
+                              style: const TextStyle(color: kOverdue),
                             ),
                           ),
                         ),
@@ -1053,25 +1028,25 @@ class _GstReportScreenState extends State<GstReportScreen> {
                                   _summaryCard(
                                     label: s.gstReportTaxableAmount,
                                     value: totalTaxable,
-                                    color: _kNavy,
+                                    color: kNavy,
                                     icon: Icons.receipt_outlined,
                                   ),
                                   _summaryCard(
                                     label: s.gstReportTotalCgst,
                                     value: totalCgst,
-                                    color: _kTeal,
+                                    color: kTeal,
                                     icon: Icons.percent_rounded,
                                   ),
                                   _summaryCard(
                                     label: s.gstReportTotalSgst,
                                     value: totalSgst,
-                                    color: _kTeal,
+                                    color: kTeal,
                                     icon: Icons.percent_rounded,
                                   ),
                                   _summaryCard(
                                     label: s.gstReportTotalIgst,
                                     value: totalIgst,
-                                    color: _kPrimary,
+                                    color: kPrimary,
                                     icon: Icons.swap_horiz_rounded,
                                   ),
                                 ],
@@ -1126,16 +1101,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   decoration: BoxDecoration(
                     gradient: invoices.isEmpty || _isSharingReport
                         ? null
-                        : _kGradient,
+                        : kGradient,
                     color: invoices.isEmpty || _isSharingReport
-                        ? _kBorder
+                        ? kBorder
                         : null,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: invoices.isEmpty || _isSharingReport
                         ? null
                         : [
                             BoxShadow(
-                              color: _kNavy.withValues(alpha: 0.3),
+                              color: kNavy.withValues(alpha: 0.3),
                               blurRadius: 12,
                               offset: const Offset(0, 4),
                             ),
@@ -1155,7 +1130,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                           Icons.share_rounded,
                           size: 20,
                           color: invoices.isEmpty
-                              ? _kTextSecondary
+                              ? kTextSecondary
                               : Colors.white,
                         ),
                       const SizedBox(width: 10),
@@ -1165,7 +1140,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: invoices.isEmpty || _isSharingReport
-                              ? _kTextSecondary
+                              ? kTextSecondary
                               : Colors.white,
                         ),
                       ),

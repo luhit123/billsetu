@@ -11,28 +11,10 @@ import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-// ─── Brand colours (same across all redesigned screens) ──────────────────────
-const _kPrimary = Color(0xFF0F4A75);
-const _kBg = Color(0xFFEFF6FF);
-const _kCard = Colors.white;
-const _kTextPrimary = Color(0xFF0B234F);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kBorder = Color(0xFFBDD5F0);
-const _kPaid = Color(0xFF22C55E);
-const _kPaidBg = Color(0xFFDCFCE7);
-const _kPending = Color(0xFFF59E0B);
-const _kPendingBg = Color(0xFFFEF3C7);
-const _kOverdue = Color(0xFFEF4444);
-const _kOverdueBg = Color(0xFFFEE2E2);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
 
 class CustomerDetailsScreen extends StatefulWidget {
   const CustomerDetailsScreen({super.key, required this.client});
@@ -139,7 +121,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         .fold<double>(0, (total, invoice) => total + invoice.grandTotal);
 
     return Scaffold(
-      backgroundColor: _kBg,
+      backgroundColor: kBackground,
       appBar: _buildAppBar(s, client),
       bottomNavigationBar: _buildBottomBar(s, client),
       body: SafeArea(
@@ -163,7 +145,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     label: s.customerDetailsStatInvoices,
                     value: _statsInvoices.length.toString(),
                     icon: Icons.receipt_long_rounded,
-                    color: _kPrimary,
+                    color: kPrimary,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -172,7 +154,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     label: s.customerDetailsStatTotalBilled,
                     value: _currency.format(totalBilled),
                     icon: Icons.payments_rounded,
-                    color: _kPaid,
+                    color: kPaid,
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -181,7 +163,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     label: s.customerDetailsStatOutstanding,
                     value: _currency.format(outstanding),
                     icon: Icons.account_balance_wallet_rounded,
-                    color: outstanding > 0 ? _kOverdue : _kPrimary,
+                    color: outstanding > 0 ? kOverdue : kPrimary,
                   ),
                 ),
               ],
@@ -221,7 +203,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   Text(
                     client.notes.trim(),
                     style: const TextStyle(
-                      color: _kTextSecondary,
+                      color: kTextSecondary,
                       fontSize: 14,
                       height: 1.6,
                     ),
@@ -237,7 +219,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     _dateFmt.format(client.updatedAt!),
                   ),
                   style: const TextStyle(
-                    color: _kTextSecondary,
+                    color: kTextSecondary,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -267,7 +249,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                       Text(
                         s.customerDetailsHistoryEmpty,
                         style: const TextStyle(
-                          color: _kTextSecondary,
+                          color: kTextSecondary,
                           fontSize: 14,
                         ),
                       ),
@@ -397,7 +379,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       shadowColor: Colors.black26,
       surfaceTintColor: Colors.transparent,
       flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
+        decoration: const BoxDecoration(gradient: kGradient),
       ),
       title: Text(
         s.customerDetailsTitle,
@@ -428,7 +410,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Widget _buildBottomBar(AppStrings s, Client client) {
     return Container(
-      color: _kCard,
+      color: kCardBg,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       child: SafeArea(
         top: false,
@@ -440,7 +422,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             icon: const Icon(Icons.receipt_long_outlined, size: 18),
             label: Text(s.customerDetailsCreateInvoice),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _kPrimary,
+              backgroundColor: kPrimary,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -536,7 +518,7 @@ class _HeroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: _kCard,
+        color: kCardBg,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
@@ -550,7 +532,7 @@ class _HeroCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 32,
-            backgroundColor: _kPrimary,
+            backgroundColor: kPrimary,
             foregroundColor: Colors.white,
             child: Text(
               client.initials,
@@ -565,7 +547,7 @@ class _HeroCard extends StatelessWidget {
                 Text(
                   client.name,
                   style: const TextStyle(
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
@@ -575,7 +557,7 @@ class _HeroCard extends StatelessWidget {
                   Text(
                     client.subtitle,
                     style: const TextStyle(
-                      color: _kTextSecondary,
+                      color: kTextSecondary,
                       fontSize: 13,
                       height: 1.4,
                     ),
@@ -589,7 +571,7 @@ class _HeroCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: _kPrimary.withAlpha(18),
+                      color: kPrimary.withAlpha(18),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -597,7 +579,7 @@ class _HeroCard extends StatelessWidget {
                       style: const TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
-                        color: _kPrimary,
+                        color: kPrimary,
                       ),
                     ),
                   ),
@@ -629,7 +611,7 @@ class _MiniStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: _kCard,
+        color: kCardBg,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [
           BoxShadow(
@@ -656,7 +638,7 @@ class _MiniStatCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,
-              color: _kTextSecondary,
+              color: kTextSecondary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -667,7 +649,7 @@ class _MiniStatCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _kTextPrimary,
+              color: kTextPrimary,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -689,7 +671,7 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _kCard,
+        color: kCardBg,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
@@ -707,11 +689,11 @@ class _SectionCard extends StatelessWidget {
             style: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: _kTextPrimary,
+              color: kTextPrimary,
             ),
           ),
           const SizedBox(height: 12),
-          const Divider(height: 1, color: _kBorder),
+          const Divider(height: 1, color: kBorder),
           const SizedBox(height: 12),
           ...children,
         ],
@@ -742,10 +724,10 @@ class _ContactRow extends StatelessWidget {
             width: 32,
             height: 32,
             decoration: BoxDecoration(
-              color: _kPrimary.withAlpha(15),
+              color: kPrimary.withAlpha(15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, size: 15, color: _kPrimary),
+            child: Icon(icon, size: 15, color: kPrimary),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -757,7 +739,7 @@ class _ContactRow extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: _kTextSecondary,
+                    color: kTextSecondary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -766,7 +748,7 @@ class _ContactRow extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                   ),
                 ),
               ],
@@ -809,9 +791,9 @@ class _HistoryInvoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (badgeColor, badgeBg, label) = switch (invoice.status) {
-      InvoiceStatus.paid => (_kPaid, _kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (_kPending, _kPendingBg, 'PENDING'),
-      InvoiceStatus.overdue => (_kOverdue, _kOverdueBg, 'OVERDUE'),
+      InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
+      InvoiceStatus.pending => (kPending, kPendingBg, 'PENDING'),
+      InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
     };
     final s = AppStrings.of(context);
 
@@ -824,7 +806,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _kBorder),
+          border: Border.all(color: kBorder),
         ),
         child: Row(
           children: [
@@ -832,13 +814,13 @@ class _HistoryInvoiceTile extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: _kPrimary.withAlpha(15),
+                color: kPrimary.withAlpha(15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
                 Icons.description_rounded,
                 size: 16,
-                color: _kPrimary,
+                color: kPrimary,
               ),
             ),
             const SizedBox(width: 10),
@@ -851,14 +833,14 @@ class _HistoryInvoiceTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: _kTextPrimary,
+                      color: kTextPrimary,
                     ),
                   ),
                   Text(
                     _timeAgo(invoice.createdAt),
                     style: const TextStyle(
                       fontSize: 11,
-                      color: _kTextSecondary,
+                      color: kTextSecondary,
                     ),
                   ),
                 ],
@@ -872,7 +854,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -912,7 +894,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
           children: [
             if (invoice.status != InvoiceStatus.paid)
               ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: _kPaid),
+                leading: const Icon(Icons.check_circle_outline, color: kPaid),
                 title: Text(s.cardMarkPaid),
                 onTap: () {
                   Navigator.pop(context);
@@ -923,7 +905,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
               ListTile(
                 leading: const Icon(
                   Icons.warning_amber_rounded,
-                  color: _kOverdue,
+                  color: kOverdue,
                 ),
                 title: Text(s.cardMarkOverdue),
                 onTap: () {
@@ -932,7 +914,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: _kOverdue),
+              leading: const Icon(Icons.delete_outline, color: kOverdue),
               title: Text(s.cardDelete),
               onTap: () {
                 Navigator.pop(context);

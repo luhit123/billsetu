@@ -1,19 +1,8 @@
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/services/client_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const _kPrimary       = Color(0xFF0F4A75);
-const _kBackground    = Color(0xFFEFF6FF);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kBorder        = Color(0xFFBDD5F0);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
 
 class CustomerFormScreen extends StatefulWidget {
   const CustomerFormScreen({super.key, this.initialClient});
@@ -64,7 +53,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     final subtitle = _isEditing ? s.customerFormSubtitleEdit : s.customerFormSubtitleAdd;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -73,7 +62,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
         shadowColor: Colors.black26,
         surfaceTintColor: Colors.transparent,
         flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
+          decoration: const BoxDecoration(gradient: kGradient),
         ),
         title: Text(
           title,
@@ -100,7 +89,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       width: 52,
                       height: 52,
                       decoration: BoxDecoration(
-                        color: _kPrimary.withValues(alpha: 0.10),
+                        color: kPrimary.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
@@ -229,8 +218,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
-                    disabledBackgroundColor: _kPrimary.withValues(alpha: 0.50),
+                    backgroundColor: kPrimary,
+                    disabledBackgroundColor: kPrimary.withValues(alpha: 0.50),
                     elevation: 3,
                     shadowColor: const Color(0x400F4A75),
                     shape: RoundedRectangleBorder(
@@ -253,7 +242,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kBorder, width: 1.2),
+        border: Border.all(color: kBorder, width: 1.2),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0E0F4A75),
@@ -286,7 +275,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       hintText: hint,
       hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
       errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
-      prefixIcon: Icon(icon, color: _kTextSecondary, size: 20),
+      prefixIcon: Icon(icon, color: kTextSecondary, size: 20),
       filled: true,
       fillColor: const Color(0xFFF5F8FF),
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),

@@ -9,50 +9,19 @@ import 'package:billeasy/screens/customer_details_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:printing/printing.dart';
-
-// ── Brand tokens ────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kCardBg     = Colors.white;
-const _kBorder     = Color(0xFFBDD5F0);
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF0B234F);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
-
-BoxDecoration _cardDeco() => BoxDecoration(
-      color: Colors.white,
-      borderRadius: const BorderRadius.all(Radius.circular(20)),
-      border: Border.all(color: const Color(0xFFBDD5F0), width: 1.2),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0E0F4A75),
-          blurRadius: 16,
-          offset: Offset(0, 4),
-        ),
-      ],
-    );
-
-// ────────────────────────────────────────────────────────────────────────────
 
 class InvoiceDetailsScreen extends StatelessWidget {
   InvoiceDetailsScreen({super.key, required this.invoice});
 
   final Invoice invoice;
 
-  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
-  final NumberFormat _currencyFormat = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 0,
-  );
+  final DateFormat _dateFormat = kDateFormat;
+  final NumberFormat _currencyFormat = kCurrencyFormat;
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
@@ -70,7 +39,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
         final sellerName = _sellerName(profile, s);
 
         return Scaffold(
-          backgroundColor: _kBackground,
+          backgroundColor: kBackground,
           appBar: AppBar(
             backgroundColor: Colors.transparent,
             foregroundColor: Colors.white,
@@ -79,7 +48,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
             shadowColor: Colors.black26,
             surfaceTintColor: Colors.transparent,
             flexibleSpace: Container(
-              decoration: const BoxDecoration(gradient: _kGradient),
+              decoration: const BoxDecoration(gradient: kGradient),
             ),
             title: Text(
               s.detailsTitle,
@@ -94,7 +63,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
           // ── Bottom action bar ────────────────────────────────────────────
           bottomNavigationBar: Container(
             decoration: const BoxDecoration(
-              color: _kCardBg,
+              color: kCardBg,
               border: Border(top: BorderSide(color: Color(0xFFBDD5F0))),
               boxShadow: [BoxShadow(color: Color(0x120F4A75), blurRadius: 16, offset: Offset(0, -3))],
             ),
@@ -109,7 +78,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                       icon: const Icon(Icons.print_outlined, size: 18),
                       label: Text(s.detailsPreviewPrint),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: _kTitle,
+                        foregroundColor: kTextPrimary,
                         side: const BorderSide(color: Color(0xFFBDD5F0)),
                         padding:
                             const EdgeInsets.symmetric(vertical: 14),
@@ -127,7 +96,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                       icon: const Icon(Icons.share_outlined, size: 18),
                       label: Text(s.detailsSharePdf),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _kPrimary,
+                        backgroundColor: kPrimary,
                         foregroundColor: Colors.white,
                         elevation: 0,
                         padding:
@@ -217,7 +186,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+      decoration: kCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -256,7 +225,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                     Text(
                       invoice.invoiceNumber,
                       style: const TextStyle(
-                        color: _kTitle,
+                        color: kTextPrimary,
                         fontSize: 17,
                         fontWeight: FontWeight.w800,
                       ),
@@ -265,7 +234,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                     Text(
                       customerName,
                       style: const TextStyle(
-                        color: _kLabel,
+                        color: kTextSecondary,
                         fontSize: 14,
                       ),
                     ),
@@ -273,7 +242,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                     Text(
                       s.detailsIssuedBy(sellerName),
                       style: const TextStyle(
-                        color: _kLabel,
+                        color: kTextSecondary,
                         fontSize: 12,
                       ),
                     ),
@@ -303,7 +272,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   icon: Icons.currency_rupee_rounded,
                   label: s.createSummaryGrandTotal,
                   value: _currencyFormat.format(invoice.grandTotal),
-                  valueColor: _kPrimary,
+                  valueColor: kPrimary,
                 ),
               ),
             ],
@@ -355,11 +324,11 @@ class InvoiceDetailsScreen extends StatelessWidget {
                     );
                   },
                   icon: const Icon(Icons.person_search_outlined,
-                      size: 16, color: _kPrimary),
+                      size: 16, color: kPrimary),
                   label: Text(
                     s.detailsOpenProfile,
                     style: const TextStyle(
-                        color: _kPrimary,
+                        color: kPrimary,
                         fontWeight: FontWeight.w600),
                   ),
                   style: TextButton.styleFrom(
@@ -379,7 +348,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
 
   Widget _buildItemsCard(BuildContext context, AppStrings s) {
     return Container(
-      decoration: _cardDeco(),
+      decoration: kCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -396,7 +365,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: _kTitle,
+                    color: kTextPrimary,
                   ),
                 ),
                 const Spacer(),
@@ -410,7 +379,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                   child: Text(
                     '${invoice.items.length} ${invoice.items.length == 1 ? "item" : "items"}',
                     style: const TextStyle(
-                      color: _kPrimary,
+                      color: kPrimary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
                     ),
@@ -445,7 +414,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                               child: Text(
                                 '${i + 1}',
                                 style: const TextStyle(
-                                  color: _kPrimary,
+                                  color: kPrimary,
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
                                 ),
@@ -459,7 +428,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                               style: const TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: _kTitle,
+                                color: kTextPrimary,
                               ),
                             ),
                           ),
@@ -468,7 +437,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                             style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w800,
-                              color: _kTitle,
+                              color: kTextPrimary,
                             ),
                           ),
                         ],
@@ -511,7 +480,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
     final hasDiscount = invoice.hasDiscount;
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
+      decoration: kCardDecoration(),
       child: Column(
         children: [
           _SummaryLine(
@@ -561,7 +530,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
           ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: _kBorder, height: 1),
+            child: Divider(color: kBorder, height: 1),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -571,7 +540,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: _kTitle,
+                  color: kTextPrimary,
                 ),
               ),
               Text(
@@ -579,7 +548,7 @@ class InvoiceDetailsScreen extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
-                  color: _kPrimary,
+                  color: kPrimary,
                 ),
               ),
             ],
@@ -721,7 +690,7 @@ class _SectionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: _cardDeco(),
+      decoration: kCardDecoration(),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -732,7 +701,7 @@ class _SectionCard extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: _kTitle,
+                color: kTextPrimary,
               ),
             ),
           ),
@@ -771,7 +740,7 @@ class _InfoRow extends StatelessWidget {
                 child: Text(
                   label,
                   style: const TextStyle(
-                    color: _kLabel,
+                    color: kTextSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -781,7 +750,7 @@ class _InfoRow extends StatelessWidget {
                 child: Text(
                   value,
                   style: const TextStyle(
-                    color: _kTitle,
+                    color: kTextPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -856,7 +825,7 @@ class _MetaTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
-    this.valueColor = _kTitle,
+    this.valueColor = kTextPrimary,
   });
 
   final IconData icon;
@@ -875,7 +844,7 @@ class _MetaTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: _kLabel),
+          Icon(icon, size: 18, color: kTextSecondary),
           const SizedBox(width: 8),
           Expanded(
             child: Column(
@@ -884,7 +853,7 @@ class _MetaTile extends StatelessWidget {
                 Text(
                   label,
                   style: const TextStyle(
-                    color: _kLabel,
+                    color: kTextSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                   ),
@@ -927,7 +896,7 @@ class _ItemPill extends StatelessWidget {
       child: Text(
         label,
         style: const TextStyle(
-          color: _kLabel,
+          color: kTextSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w500,
         ),
@@ -941,7 +910,7 @@ class _SummaryLine extends StatelessWidget {
   const _SummaryLine({
     required this.label,
     required this.value,
-    this.valueColor = _kTitle,
+    this.valueColor = kTextPrimary,
   });
 
   final String label;
@@ -958,7 +927,7 @@ class _SummaryLine extends StatelessWidget {
           style: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: _kLabel,
+            color: kTextSecondary,
           ),
         ),
         Text(

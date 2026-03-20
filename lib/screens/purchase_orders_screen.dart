@@ -4,31 +4,11 @@ import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/create_purchase_order_screen.dart';
 import 'package:billeasy/screens/purchase_order_details_screen.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kTextPrimary = Color(0xFF0B234F);
-const _kTextSecondary = Color(0xFF5B7A9A);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
-
-// Status colours
-const _kDraft = Color(0xFF6B7280);
-const _kDraftBg = Color(0xFFF3F4F6);
-const _kConfirmed = Color(0xFFF59E0B);
-const _kConfirmedBg = Color(0xFFFEF3C7);
-const _kReceived = Color(0xFF22C55E);
-const _kReceivedBg = Color(0xFFDCFCE7);
-const _kCancelled = Color(0xFFEF4444);
-const _kCancelledBg = Color(0xFFFEE2E2);
 
 enum _Filter { all, draft, confirmed, received }
 
@@ -41,12 +21,8 @@ class PurchaseOrdersScreen extends StatefulWidget {
 
 class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
   final _svc = PurchaseOrderService();
-  final _currency = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 0,
-  );
-  final _dateFmt = DateFormat('dd MMM yyyy');
+  final _currency = kCurrencyFormat;
+  final _dateFmt = kDateFormat;
   final _searchCtrl = TextEditingController();
 
   bool _searching = false;
@@ -128,7 +104,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     final filtered = _filtered;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: _buildAppBar(),
       body: SafeArea(
         child: RefreshIndicator(
@@ -191,7 +167,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             ),
                             child: const Icon(
                               Icons.shopping_cart_outlined,
-                              color: _kPrimary,
+                              color: kPrimary,
                               size: 36,
                             ),
                           ),
@@ -203,7 +179,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
-                              color: _kTextPrimary,
+                              color: kTextPrimary,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -212,7 +188,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             const Text(
                               'Create your first PO',
                               style: TextStyle(
-                                color: _kTextSecondary,
+                                color: kTextSecondary,
                                 fontSize: 14,
                                 height: 1.5,
                               ),
@@ -259,7 +235,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           context,
           MaterialPageRoute(builder: (_) => const CreatePurchaseOrderScreen()),
         ),
-        backgroundColor: _kPrimary,
+        backgroundColor: kPrimary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
         label: const Text('New PO'),
@@ -278,7 +254,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       shadowColor: Colors.black26,
       surfaceTintColor: Colors.transparent,
       flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
+        decoration: const BoxDecoration(gradient: kGradient),
       ),
       title: _searching
           ? TextField(
@@ -336,7 +312,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? _kPrimary : const Color(0xFFF3F4F6),
+          color: active ? kPrimary : const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -344,7 +320,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : _kTextSecondary,
+            color: active ? Colors.white : kTextSecondary,
           ),
         ),
       ),
@@ -397,18 +373,18 @@ class _SummaryStrip extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _SummaryCell(label: 'Draft', value: '$draft POs', color: _kDraft),
+          _SummaryCell(label: 'Draft', value: '$draft POs', color: kDraft),
           _VertDivider(),
           _SummaryCell(
             label: 'Confirmed',
             value: '$confirmed POs',
-            color: _kConfirmed,
+            color: kConfirmed,
           ),
           _VertDivider(),
           _SummaryCell(
             label: 'Received',
             value: currency.format(received),
-            color: _kReceived,
+            color: kReceived,
           ),
         ],
       ),
@@ -442,7 +418,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _kTextPrimary,
+              color: kTextPrimary,
             ),
           ),
           const SizedBox(height: 2),
@@ -451,7 +427,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: _kTextSecondary,
+              color: kTextSecondary,
             ),
           ),
         ],
@@ -484,16 +460,16 @@ class _POTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (badgeColor, badgeBg, statusLabel) = switch (order.status) {
-      PurchaseOrderStatus.draft => (_kDraft, _kDraftBg, 'DRAFT'),
+      PurchaseOrderStatus.draft => (kDraft, kDraftBg, 'DRAFT'),
       PurchaseOrderStatus.confirmed => (
-          _kConfirmed,
-          _kConfirmedBg,
+          kConfirmed,
+          kConfirmedBg,
           'CONFIRMED'
         ),
-      PurchaseOrderStatus.received => (_kReceived, _kReceivedBg, 'RECEIVED'),
+      PurchaseOrderStatus.received => (kReceived, kReceivedBg, 'RECEIVED'),
       PurchaseOrderStatus.cancelled => (
-          _kCancelled,
-          _kCancelledBg,
+          kCancelled,
+          kCancelledBg,
           'CANCELLED'
         ),
     };
@@ -523,13 +499,13 @@ class _POTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: _kPrimary.withAlpha(15),
+                color: kPrimary.withAlpha(15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.shopping_cart_outlined,
                 size: 20,
-                color: _kPrimary,
+                color: kPrimary,
               ),
             ),
             const SizedBox(width: 12),
@@ -542,7 +518,7 @@ class _POTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _kTextPrimary,
+                      color: kTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -565,7 +541,7 @@ class _POTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 5),

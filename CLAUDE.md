@@ -101,11 +101,14 @@ lib/
 │   ├── customer_group_service.dart
 │   ├── app_check_service.dart
 │   └── background_maintenance_service.dart
+├── constants/
+│   └── app_constants.dart     # Shared constants (units, payment terms, GST rates)
 ├── theme/
-│   └── app_colors.dart        # Material 3 color scheme
+│   └── app_colors.dart        # All color tokens, gradients, status colors, card decoration
 ├── utils/
+│   ├── formatters.dart        # Centralised NumberFormat and DateFormat instances
 │   ├── invoice_search.dart    # Search query normalization
-│   └── number_utils.dart      # Number formatting
+│   └── number_utils.dart      # Regional-script digit parsing
 └── widgets/
     ├── invoice_card.dart
     ├── customer_groups_sheet.dart
@@ -139,6 +142,11 @@ firestore.indexes.json         # Composite indexes
 - **Linting:** `flutter_lints` package (analysis_options.yaml)
 - Models use `factory` constructors for deserialization (`fromMap`)
 - Models use `toMap()` for Firestore serialization
+
+### Centralised Design Tokens
+- **Colors:** All brand colors live in `lib/theme/app_colors.dart` — import `kPrimary`, `kBackground`, `kGradient`, etc. Do NOT define local `_k*` color constants in screen files.
+- **Formatters:** Currency and date formatters live in `lib/utils/formatters.dart` — use `kCurrencyFormat`, `kDateFormat`, `kMonthYearFormat`, `kDateTimeFormat`, `kRsCurrencyFormat`.
+- **Constants:** Shared app constants (unit lists, payment terms, GST rates) live in `lib/constants/app_constants.dart` — use `kItemUnits`, `kDefaultItemUnit`, `kDefaultPaymentTerm`, `kAllowedGstRates`.
 
 ### Firebase / Firestore
 - **Data hierarchy:** `/invoices/{id}` (top-level), `/users/{uid}/clients/{id}`, `/users/{uid}/products/{id}`, etc.

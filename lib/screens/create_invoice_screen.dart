@@ -14,35 +14,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/constants/app_constants.dart';
+import 'package:billeasy/utils/formatters.dart';
 
-// ── Brand tokens ────────────────────────────────────────────────────────────
-const _kPrimary     = Color(0xFF0F4A75);
-const _kBackground  = Color(0xFFEFF6FF);
-const _kBorder      = Color(0xFFBDD5F0);
-const _kLabel       = Color(0xFF5B7A9A);
-const _kTitle       = Color(0xFF0B234F);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
-
-BoxDecoration _cardDecoration({bool error = false}) => BoxDecoration(
-  color: Colors.white,
-  borderRadius: BorderRadius.circular(20),
-  border: Border.all(
-    color: error ? const Color(0xFFEF4444) : const Color(0xFFBDD5F0),
-    width: error ? 1.5 : 1.2,
-  ),
-  boxShadow: [
-    BoxShadow(
-      color: error ? const Color(0x10EF4444) : const Color(0x0E0F4A75),
-      blurRadius: 16,
-      offset: const Offset(0, 4),
-    ),
-  ],
-);
+BoxDecoration _cardDecoration({bool error = false}) => kCardDecoration(error: error);
 
 class CreateInvoiceScreen extends StatefulWidget {
   const CreateInvoiceScreen({super.key, this.initialClient});
@@ -54,19 +30,9 @@ class CreateInvoiceScreen extends StatefulWidget {
 }
 
 class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
-  static const List<String> _itemUnitOptions = [
-    'pcs',
-    'kg',
-    'g',
-    'ltr',
-    'ml',
-    'box',
-    'pack',
-    'dozen',
-    'meter',
-  ];
-  static const String _defaultItemUnit = 'pcs';
-  static const Duration _defaultPaymentTerm = Duration(days: 14);
+  static const List<String> _itemUnitOptions = kItemUnits;
+  static const String _defaultItemUnit = kDefaultItemUnit;
+  static const Duration _defaultPaymentTerm = kDefaultPaymentTerm;
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
   final TextEditingController _discountController = TextEditingController();
@@ -126,7 +92,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   InputDecoration _inputDecoration(String label, {String? suffix}) =>
       InputDecoration(
         labelText: label,
-        labelStyle: const TextStyle(color: _kLabel, fontSize: 13),
+        labelStyle: const TextStyle(color: kTextSecondary, fontSize: 13),
         suffixText: suffix,
         filled: true,
         fillColor: const Color(0xFFF5F8FF),
@@ -134,7 +100,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
             const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
+          borderSide: const BorderSide(color: kBorder),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -142,7 +108,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+          borderSide: const BorderSide(color: kPrimary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -174,7 +140,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final grandTotal = taxableAmount + totalTax;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -183,7 +149,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         shadowColor: Colors.black26,
         surfaceTintColor: Colors.transparent,
         flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
+          decoration: const BoxDecoration(gradient: kGradient),
         ),
         title: Text(
           s.createTitle,
@@ -233,11 +199,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               TextButton.icon(
                 onPressed: _addItemRow,
                 icon: const Icon(Icons.add_circle_outline,
-                    color: _kPrimary, size: 18),
+                    color: kPrimary, size: 18),
                 label: Text(
                   s.createAddItem,
                   style: const TextStyle(
-                    color: _kPrimary,
+                    color: kPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -324,7 +290,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     Text(
                       _discountPreviewText(subtotal, discountAmount, s),
                       style: const TextStyle(
-                        color: _kLabel,
+                        color: kTextSecondary,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -363,10 +329,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         : s.createSaveInvoice,
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
+                    backgroundColor: kPrimary,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        _kPrimary.withValues(alpha: 0.45),
+                        kPrimary.withValues(alpha: 0.45),
                     disabledForegroundColor: Colors.white,
                     elevation: 3,
                     shadowColor: const Color(0x400F4A75),
@@ -385,7 +351,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 s.createSaveHint,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
-                  color: _kLabel,
+                  color: kTextSecondary,
                   fontSize: 12.5,
                   fontWeight: FontWeight.w500,
                 ),
@@ -406,7 +372,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
             width: 3,
             height: 16,
             decoration: BoxDecoration(
-              color: _kPrimary,
+              color: kPrimary,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -447,7 +413,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 Icons.calendar_month_rounded,
                 size: 22,
                 color: hasDate
-                    ? _kPrimary
+                    ? kPrimary
                     : const Color(0xFFD97706),
               ),
             ),
@@ -461,7 +427,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      color: _kLabel,
+                      color: kTextSecondary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -472,7 +438,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: hasDate ? _kTitle : const Color(0xFFD97706),
+                      color: hasDate ? kTextPrimary : const Color(0xFFD97706),
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -480,13 +446,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     hasDate
                         ? s.createDateHintSelected
                         : s.createDateHintEmpty,
-                    style: const TextStyle(fontSize: 12, color: _kLabel),
+                    style: const TextStyle(fontSize: 12, color: kTextSecondary),
                   ),
                 ],
               ),
             ),
             const Icon(Icons.chevron_right_rounded,
-                color: _kLabel, size: 20),
+                color: kTextSecondary, size: 20),
           ],
         ),
       ),
@@ -520,7 +486,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     child: Text(
                       '${index + 1}',
                       style: const TextStyle(
-                        color: _kPrimary,
+                        color: kPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
                       ),
@@ -534,7 +500,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 13,
-                      color: _kTitle,
+                      color: kTextPrimary,
                     ),
                   ),
                 ),
@@ -554,14 +520,14 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.inventory_2_outlined,
-                            size: 13, color: _kPrimary),
+                            size: 13, color: kPrimary),
                         SizedBox(width: 4),
                         Text(
                           'Products',
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w700,
-                            color: _kPrimary,
+                            color: kPrimary,
                           ),
                         ),
                       ],
@@ -727,7 +693,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                       Icons.receipt_long_outlined,
                       size: 18,
                       color:
-                          _gstEnabled ? _kPrimary : const Color(0xFF9CA3AF),
+                          _gstEnabled ? kPrimary : const Color(0xFF9CA3AF),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -740,14 +706,14 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                           style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _kTitle),
+                              color: kTextPrimary),
                         ),
                         Text(
                           _gstEnabled
                               ? 'GST is included in grand total'
                               : 'Tap to enable GST on this invoice',
                           style: const TextStyle(
-                              fontSize: 12, color: _kLabel),
+                              fontSize: 12, color: kTextSecondary),
                         ),
                       ],
                     ),
@@ -755,7 +721,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   Switch.adaptive(
                     value: _gstEnabled,
                     activeThumbColor: Colors.white,
-                    activeTrackColor: _kPrimary,
+                    activeTrackColor: kPrimary,
                     onChanged: (v) => setState(() => _gstEnabled = v),
                   ),
                 ],
@@ -771,7 +737,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: _kLabel,
+                      color: kTextSecondary,
                       letterSpacing: 0.8),
                 ),
                 const SizedBox(height: 8),
@@ -788,12 +754,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
                           color: selected
-                              ? _kPrimary
+                              ? kPrimary
                               : const Color(0xFFF5F8FF),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: selected
-                                ? _kPrimary
+                                ? kPrimary
                                 : const Color(0xFFBDD5F0),
                           ),
                         ),
@@ -818,7 +784,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
-                      color: _kLabel,
+                      color: kTextSecondary,
                       letterSpacing: 0.8),
                 ),
                 const SizedBox(height: 8),
@@ -878,11 +844,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 13, color: _kLabel, fontWeight: FontWeight.w500)),
+                  fontSize: 13, color: kTextSecondary, fontWeight: FontWeight.w500)),
           Text(value,
               style: const TextStyle(
                   fontSize: 13,
-                  color: _kTitle,
+                  color: kTextPrimary,
                   fontWeight: FontWeight.w600)),
         ],
       );
@@ -981,7 +947,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
             fontSize: isTotal ? 14 : 13,
             fontWeight:
                 isTotal ? FontWeight.w700 : FontWeight.w500,
-            color: isTotal ? _kTitle : _kLabel,
+            color: isTotal ? kTextPrimary : kTextSecondary,
           ),
         ),
         Text(
@@ -989,7 +955,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           style: TextStyle(
             fontSize: isTotal ? 20 : 14,
             fontWeight: FontWeight.w700,
-            color: valueColor ?? (isTotal ? _kPrimary : _kTitle),
+            color: valueColor ?? (isTotal ? kPrimary : kTextPrimary),
           ),
         ),
       ],
@@ -1022,7 +988,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                   selectedClient?.initials ?? '+',
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    color: _kPrimary,
+                    color: kPrimary,
                     fontSize: 16,
                   ),
                 ),
@@ -1039,8 +1005,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
                         color: selectedClient == null
-                            ? _kLabel
-                            : _kTitle,
+                            ? kTextSecondary
+                            : kTextPrimary,
                       ),
                     ),
                     const SizedBox(height: 3),
@@ -1049,7 +1015,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                           ? s.createCustomerHint
                           : selectedClient.subtitle,
                       style: const TextStyle(
-                        color: _kLabel,
+                        color: kTextSecondary,
                         fontSize: 13,
                         height: 1.4,
                       ),
@@ -1074,14 +1040,14 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(Icons.receipt_long_outlined,
-                    size: 14, color: _kPrimary),
+                    size: 14, color: kPrimary),
                 const SizedBox(width: 6),
                 Text(
                   '${s.customerGstinLabel}: ${_selectedClient!.gstin}',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: _kPrimary,
+                    color: kPrimary,
                   ),
                 ),
               ],
@@ -1103,8 +1069,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                 style: const TextStyle(fontWeight: FontWeight.w600),
               ),
               style: OutlinedButton.styleFrom(
-                foregroundColor: _kPrimary,
-                side: const BorderSide(color: _kPrimary),
+                foregroundColor: kPrimary,
+                side: const BorderSide(color: kPrimary),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -1122,7 +1088,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFEFF6FF),
-                foregroundColor: _kPrimary,
+                foregroundColor: kPrimary,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
@@ -1603,7 +1569,7 @@ class _StatusPill extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: isSelected ? selectedText : _kLabel,
+            color: isSelected ? selectedText : kTextSecondary,
           ),
         ),
       ),
@@ -1635,10 +1601,10 @@ class _GstTypeChip extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
           decoration: BoxDecoration(
-            color: selected ? _kPrimary : const Color(0xFFF5F8FF),
+            color: selected ? kPrimary : const Color(0xFFF5F8FF),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected ? _kPrimary : const Color(0xFFBDD5F0),
+              color: selected ? kPrimary : const Color(0xFFBDD5F0),
             ),
           ),
           child: Column(
@@ -1649,7 +1615,7 @@ class _GstTypeChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: selected ? Colors.white : _kTitle,
+                  color: selected ? Colors.white : kTextPrimary,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1659,7 +1625,7 @@ class _GstTypeChip extends StatelessWidget {
                   fontSize: 11,
                   color: selected
                       ? Colors.white.withValues(alpha: 0.8)
-                      : _kLabel,
+                      : kTextSecondary,
                 ),
               ),
             ],

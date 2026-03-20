@@ -6,26 +6,10 @@ import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/formatters.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-// ─── Shared brand colours (onboarding-inspired palette) ──────────────────────
-const _kPrimary = Color(0xFF0F4A75);
-const _kBackground = Color(0xFFEFF6FF);
-const _kTextPrimary = Color(0xFF0B234F);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kCardBg = Colors.white;
-const _kPaid = Color(0xFF22C55E);
-const _kPaidBg = Color(0xFFDCFCE7);
-const _kPending = Color(0xFFF59E0B);
-const _kPendingBg = Color(0xFFFEF3C7);
-const _kOverdue = Color(0xFFEF4444);
-const _kOverdueBg = Color(0xFFFEE2E2);
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF0B234F), Color(0xFF0F4A75), Color(0xFF0F7D83)],
-);
 
 enum _Filter { all, paid, pending, overdue }
 
@@ -40,13 +24,9 @@ class InvoicesScreen extends StatefulWidget {
 
 class _InvoicesScreenState extends State<InvoicesScreen> {
   final FirebaseService _firebaseService = FirebaseService();
-  final _currency = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: '₹',
-    decimalDigits: 0,
-  );
-  final _monthFmt = DateFormat('MMMM yyyy');
-  final _dateFmt = DateFormat('dd MMM yyyy');
+  final _currency = kCurrencyFormat;
+  final _monthFmt = kMonthYearFormat;
+  final _dateFmt = kDateFormat;
   final _searchCtrl = TextEditingController();
 
   bool _searching = false;
@@ -130,7 +110,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     final filtered = _filtered; // in-memory — zero network cost
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kBackground,
       appBar: _buildAppBar(s),
       body: SafeArea(
         child: RefreshIndicator(
@@ -154,7 +134,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: _kCardBg,
+                          color: kCardBg,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: const Color(0xFFE5E7EB)),
                         ),
@@ -163,7 +143,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                             const Icon(
                               Icons.calendar_today_rounded,
                               size: 15,
-                              color: _kPrimary,
+                              color: kPrimary,
                             ),
                             const SizedBox(width: 8),
                             Text(
@@ -171,7 +151,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _kTextPrimary,
+                                color: kTextPrimary,
                               ),
                             ),
                             const Spacer(),
@@ -278,7 +258,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           context,
           MaterialPageRoute(builder: (_) => const CreateInvoiceScreen()),
         ),
-        backgroundColor: _kPrimary,
+        backgroundColor: kPrimary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
         label: Text(AppStrings.of(context).homeCreateInvoice),
@@ -297,7 +277,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       shadowColor: Colors.black26,
       surfaceTintColor: Colors.transparent,
       flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
+        decoration: const BoxDecoration(gradient: kGradient),
       ),
       title: _searching
           ? TextField(
@@ -359,7 +339,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? _kPrimary : const Color(0xFFF3F4F6),
+          color: active ? kPrimary : const Color(0xFFF3F4F6),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -367,7 +347,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : _kTextSecondary,
+            color: active ? Colors.white : kTextSecondary,
           ),
         ),
       ),
@@ -469,7 +449,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
     return ListTile(
       leading: Icon(
         sel ? Icons.radio_button_checked : Icons.radio_button_off,
-        color: sel ? _kPrimary : Colors.grey.shade500,
+        color: sel ? kPrimary : Colors.grey.shade500,
       ),
       title: Text(
         label,
@@ -539,7 +519,7 @@ class _SummaryStrip extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: _kCardBg,
+        color: kCardBg,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [
           BoxShadow(
@@ -554,19 +534,19 @@ class _SummaryStrip extends StatelessWidget {
           _SummaryCell(
             label: 'Paid',
             value: currency.format(paid),
-            color: _kPaid,
+            color: kPaid,
           ),
           _Divider(),
           _SummaryCell(
             label: 'Pending',
             value: currency.format(pending),
-            color: _kPending,
+            color: kPending,
           ),
           _Divider(),
           _SummaryCell(
             label: 'Overdue',
             value: currency.format(overdue),
-            color: _kOverdue,
+            color: kOverdue,
           ),
         ],
       ),
@@ -600,7 +580,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _kTextPrimary,
+              color: kTextPrimary,
             ),
           ),
           const SizedBox(height: 2),
@@ -609,7 +589,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: _kTextSecondary,
+              color: kTextSecondary,
             ),
           ),
         ],
@@ -657,9 +637,9 @@ class _InvoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (badgeColor, badgeBg, statusLabel) = switch (invoice.status) {
-      InvoiceStatus.paid => (_kPaid, _kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (_kPending, _kPendingBg, 'PENDING'),
-      InvoiceStatus.overdue => (_kOverdue, _kOverdueBg, 'OVERDUE'),
+      InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
+      InvoiceStatus.pending => (kPending, kPendingBg, 'PENDING'),
+      InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
     };
 
     return GestureDetector(
@@ -669,7 +649,7 @@ class _InvoiceTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: _kCardBg,
+          color: kCardBg,
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [
             BoxShadow(
@@ -685,13 +665,13 @@ class _InvoiceTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: _kPrimary.withAlpha(15),
+                color: kPrimary.withAlpha(15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.description_rounded,
                 size: 20,
-                color: _kPrimary,
+                color: kPrimary,
               ),
             ),
             const SizedBox(width: 12),
@@ -704,7 +684,7 @@ class _InvoiceTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _kTextPrimary,
+                      color: kTextPrimary,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -727,7 +707,7 @@ class _InvoiceTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: _kTextPrimary,
+                    color: kTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 5),
@@ -768,7 +748,7 @@ class _InvoiceTile extends StatelessWidget {
           children: [
             if (invoice.status != InvoiceStatus.paid)
               ListTile(
-                leading: const Icon(Icons.check_circle_outline, color: _kPaid),
+                leading: const Icon(Icons.check_circle_outline, color: kPaid),
                 title: Text(s.cardMarkPaid),
                 onTap: () {
                   Navigator.pop(context);
@@ -779,7 +759,7 @@ class _InvoiceTile extends StatelessWidget {
               ListTile(
                 leading: const Icon(
                   Icons.warning_amber_rounded,
-                  color: _kOverdue,
+                  color: kOverdue,
                 ),
                 title: Text(s.cardMarkOverdue),
                 onTap: () {
@@ -788,7 +768,7 @@ class _InvoiceTile extends StatelessWidget {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: _kOverdue),
+              leading: const Icon(Icons.delete_outline, color: kOverdue),
               title: Text(s.cardDelete),
               onTap: () {
                 Navigator.pop(context);
