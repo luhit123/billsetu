@@ -246,6 +246,13 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                     icon: Icons.diamond_rounded,
                     badgeText: null,
                   ),
+                  const SizedBox(height: 16),
+                  _buildPlanCard(
+                    plan: AppPlan.king,
+                    accentColor: const Color(0xFF0F172A),
+                    icon: Icons.workspace_premium_rounded,
+                    badgeText: 'Everything Unlimited',
+                  ),
                   const SizedBox(height: 24),
                   _buildLaunchOfferBanner(),
                   const SizedBox(height: 24),
@@ -637,7 +644,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
       _FeatureRow(
         icon: Icons.picture_as_pdf,
         label: 'PDF Templates',
-        value: '${limits.maxPdfTemplates}',
+        value: _formatLimit(limits.maxPdfTemplates),
         enabled: true,
       ),
       _FeatureRow(
@@ -804,6 +811,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
   Widget _buildCtaButtons() {
     final isOnRaja = _currentPlan == AppPlan.raja;
     final isOnMaharaja = _currentPlan == AppPlan.maharaja;
+    final isOnKing = _currentPlan == AppPlan.king;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -835,6 +843,20 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           enabled: !isOnMaharaja,
           onPressed:
               isOnMaharaja ? null : () => _handlePurchase(AppPlan.maharaja),
+        ),
+        const SizedBox(height: 12),
+        // King CTA
+        _CtaButton(
+          label: isOnKing
+              ? 'Current Plan \u2014 King'
+              : 'Go King \u2014 ${_ctaPriceLabel(AppPlan.king)}',
+          gradient: const LinearGradient(
+            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+          ),
+          shadowColor: const Color(0xFF0F172A),
+          icon: Icons.workspace_premium_rounded,
+          enabled: !isOnKing,
+          onPressed: isOnKing ? null : () => _handlePurchase(AppPlan.king),
         ),
       ],
     );

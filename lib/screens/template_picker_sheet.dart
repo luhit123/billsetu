@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 const _kPrimary = Color(0xFF4361EE);
 const _kNavy = Color(0xFF1E3A8A);
 const _kTeal = Color(0xFF6366F1);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
+const _kBackground = Color(0xFFF8FAFC);
+const _kBorder = Color(0xFFCBD5E1);
 
 /// Bottom sheet that lets the user pick an [InvoiceTemplate].
 ///
@@ -72,7 +72,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
             const SizedBox(height: 4),
             const Text(
               'Select a design for your invoice PDF',
-              style: TextStyle(color: Color(0xFF5B7A9A), fontSize: 13),
+              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
             const SizedBox(height: 20),
             // Template cards — horizontal row
@@ -102,7 +102,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
                     onTap: () {
                       if (!PlanService.instance.canUseTemplate(1)) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Upgrade to Maharaja to unlock this template')),
+                          const SnackBar(content: Text('Upgrade to Raja or above to unlock this template')),
                         );
                         return;
                       }
@@ -249,7 +249,7 @@ class _TemplateCard extends StatelessWidget {
             Text(
               description,
               style: const TextStyle(
-                color: Color(0xFF5B7A9A),
+                color: Color(0xFF64748B),
                 fontSize: 10,
                 height: 1.4,
               ),

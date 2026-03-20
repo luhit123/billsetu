@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppPlan { free, raja, maharaja }
+enum AppPlan { free, raja, maharaja, king }
 
 class PlanLimits {
   final int maxInvoicesPerMonth;
@@ -68,7 +68,7 @@ class PlanService {
       maxCustomers: -1,           // unlimited
       maxProducts: -1,            // unlimited
       maxPdfTemplates: 2,
-      maxWhatsAppSharesPerMonth: -1, // unlimited
+      maxWhatsAppSharesPerMonth: 50,
       hasReports: false,
       hasEwayBill: false,
       hasPurchaseOrders: true,
@@ -83,6 +83,21 @@ class PlanService {
       maxCustomers: -1,           // unlimited
       maxProducts: -1,            // unlimited
       maxPdfTemplates: 5,
+      maxWhatsAppSharesPerMonth: 100,
+      hasReports: true,
+      hasEwayBill: true,
+      hasPurchaseOrders: true,
+      hasDataExport: true,
+    ),
+    AppPlan.king: PlanLimits(
+      name: 'king',
+      displayName: 'King',
+      priceMonthly: 499,
+      priceAnnual: 3999,
+      maxInvoicesPerMonth: -1,    // unlimited
+      maxCustomers: -1,           // unlimited
+      maxProducts: -1,            // unlimited
+      maxPdfTemplates: -1,        // unlimited
       maxWhatsAppSharesPerMonth: -1, // unlimited
       hasReports: true,
       hasEwayBill: true,
@@ -242,14 +257,20 @@ class PlanService {
   /// For upgrade screen — which plan unlocks a feature
   static AppPlan cheapestPlanFor(String feature) {
     switch (feature) {
-      case 'whatsapp':
       case 'purchase_orders':
+      case 'data_export':
+      case 'more_invoices':
+      case 'more_customers':
+      case 'more_products':
         return AppPlan.raja;
       case 'reports':
       case 'eway_bill':
-      case 'data_export':
+      case 'e_way_bill':
       case 'pdf_templates':
         return AppPlan.maharaja;
+      case 'whatsapp':
+      case 'whatsapp_sharing':
+        return AppPlan.king; // unlimited WhatsApp is King-only
       default:
         return AppPlan.raja;
     }
