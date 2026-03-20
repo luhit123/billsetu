@@ -1,7 +1,10 @@
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/screens/privacy_policy_screen.dart';
+import 'package:billeasy/screens/terms_conditions_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -101,6 +104,8 @@ class _LoginScreenState extends State<LoginScreen> {
                               ? null
                               : _handleGoogleSignIn,
                         ),
+                        const SizedBox(height: 16),
+                        _LegalConsentText(),
                       ],
                     ),
                   ),
@@ -234,6 +239,52 @@ class _GoogleLogo extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return CustomPaint(size: Size.square(size), painter: _GoogleLogoPainter());
+  }
+}
+
+class _LegalConsentText extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      textAlign: TextAlign.center,
+      text: TextSpan(
+        style: const TextStyle(
+          fontSize: 12,
+          color: kTextTertiary,
+          height: 1.5,
+        ),
+        children: [
+          const TextSpan(text: 'By continuing, you agree to our '),
+          TextSpan(
+            text: 'Terms & Conditions',
+            style: const TextStyle(
+              color: kPrimary,
+              fontWeight: FontWeight.w500,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const TermsConditionsScreen()),
+                  ),
+          ),
+          const TextSpan(text: ' and '),
+          TextSpan(
+            text: 'Privacy Policy',
+            style: const TextStyle(
+              color: kPrimary,
+              fontWeight: FontWeight.w500,
+              decoration: TextDecoration.underline,
+            ),
+            recognizer: TapGestureRecognizer()
+              ..onTap = () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen()),
+                  ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

@@ -1,7 +1,15 @@
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:flutter/foundation.dart';
+
 class AppCheckService {
   AppCheckService._();
 
-  // App Check is intentionally disabled during development.
-  // Re-enable before production release by restoring FirebaseAppCheck.instance.activate().
-  static Future<void> activate() async {}
+  static Future<void> activate() async {
+    await FirebaseAppCheck.instance.activate(
+      androidProvider:
+          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      appleProvider:
+          kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+    );
+  }
 }

@@ -1192,12 +1192,23 @@ function getIndianDateParts(date) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SUBSCRIPTION & PAYMENT MANAGEMENT
+// SUBSCRIPTION & PAYMENT MANAGEMENT (Razorpay)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// Demo Razorpay key for testing - replace with real keys in production
-const RAZORPAY_KEY_ID = 'rzp_test_demo';
-const RAZORPAY_KEY_SECRET = 'demo_secret';
+const crypto = require('crypto');
+const Razorpay = require('razorpay');
+
+// Razorpay credentials — set via: firebase functions:secrets:set RAZORPAY_KEY_ID etc.
+// Falls back to env vars or hardcoded test keys for local dev.
+// Razorpay credentials are injected at runtime via Cloud Functions secrets.
+// Create a fresh client each time to ensure secrets are loaded.
+function getRazorpay() {
+  const keyId = process.env.RAZORPAY_KEY_ID;
+  const keySecret = process.env.RAZORPAY_KEY_SECRET;
+  logger.info('Razorpay init', { keyId: keyId ? keyId.substring(0, 20) + '...' : 'MISSING', secretLen: keySecret ? keySecret.length : 0 });
+  return new Razorpay({ key_id: keyId, key_secret: keySecret });
+}
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'webhook_secret';
 
 // Plan pricing in paise (₹1 = 100 paise)
 const PLAN_PRICING = {
@@ -1215,268 +1226,500 @@ const PLAN_PRICING = {
   },
 };
 
+// Razorpay Plan IDs — create these once in Razorpay Dashboard or via API,
+// then store the IDs here. You can also store them in Firestore config/razorpay_plans.
+// Format: { planId_billingCycle: 'plan_XXXXXXX' }
+// These MUST be set before going live.
+let RAZORPAY_PLAN_IDS = null;
+
+async function getRazorpayPlanIds() {
+  if (RAZORPAY_PLAN_IDS) return RAZORPAY_PLAN_IDS;
+  const doc = await db.collection('config').doc('razorpay_plans').get();
+  if (doc.exists) {
+    RAZORPAY_PLAN_IDS = doc.data();
+    return RAZORPAY_PLAN_IDS;
+  }
+  // Fallback — return null; createSubscription will create plans on-the-fly
+  return null;
+}
+
 /**
- * Creates a subscription for the user.
- * In DEMO mode, this creates a Firestore subscription directly.
- * In production, this would call Razorpay API to create a subscription
- * and return the subscription ID for client-side checkout.
+ * Helper: ensure a Razorpay Plan exists for the given planId + billingCycle.
+ * Creates it via API if not found in config, then caches the ID.
  */
-exports.createSubscription = onCall(async (request) => {
-  const uid = request.auth && request.auth.uid;
-  if (!uid) {
-    throw new HttpsError('unauthenticated', 'Sign in required.');
+async function ensureRazorpayPlan(planId, billingCycle) {
+  const planIds = await getRazorpayPlanIds();
+  const key = `${planId}_${billingCycle}`;
+
+  if (planIds && planIds[key]) {
+    return planIds[key];
   }
 
-  const { planId, billingCycle } = request.data || {};
-  if (!planId || !['raja', 'maharaja', 'king'].includes(planId)) {
-    throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja, maharaja, or king.');
-  }
-  if (!billingCycle || !['monthly', 'annual'].includes(billingCycle)) {
-    throw new HttpsError('invalid-argument', 'Invalid billing cycle.');
-  }
-
-  // Check for existing active subscription
-  const existingDoc = await db.collection('subscriptions').doc(uid).get();
-  if (existingDoc.exists) {
-    const existing = existingDoc.data();
-    if (existing.status === 'active' && existing.plan === planId) {
-      throw new HttpsError('already-exists', 'You already have this plan active.');
-    }
-  }
-
+  // Create plan via Razorpay API
   const pricing = PLAN_PRICING[planId];
-  const priceInPaise = pricing[billingCycle];
+  const displayName = planId.charAt(0).toUpperCase() + planId.slice(1);
+  const period = billingCycle === 'annual' ? 'yearly' : 'monthly';
 
-  const now = new Date();
-  const periodEnd = billingCycle === 'annual'
-    ? new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
-    : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
-  const demoSubId = `demo_sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-
-  // In DEMO mode, activate immediately
-  await db.collection('subscriptions').doc(uid).set({
-    id: demoSubId,
-    userId: uid,
-    plan: planId,
-    billingCycle,
-    status: 'active',
-    razorpaySubscriptionId: demoSubId,
-    currentPeriodStart: Timestamp.fromDate(now),
-    currentPeriodEnd: Timestamp.fromDate(periodEnd),
-    cancelAtPeriodEnd: false,
-    createdAt: Timestamp.fromDate(now),
-    updatedAt: Timestamp.fromDate(now),
-    priceInPaise: priceInPaise,
-    demoMode: true,
+  const rzpPlan = await getRazorpay().plans.create({
+    period,
+    interval: 1,
+    item: {
+      name: `${displayName} ${billingCycle === 'annual' ? 'Annual' : 'Monthly'}`,
+      amount: pricing[billingCycle],
+      currency: 'INR',
+      description: `BillEasy ${displayName} plan — ${billingCycle} billing`,
+    },
   });
 
-  // Record payment
-  const demoPayId = `demo_pay_${Date.now()}`;
-  const gstAmount = Math.round(priceInPaise * 18 / 118);
-  await db.collection('subscriptions').doc(uid).collection('payments').doc(demoPayId).set({
-    id: demoPayId,
-    userId: uid,
-    subscriptionId: demoSubId,
-    razorpayPaymentId: demoPayId,
-    amount: priceInPaise,
-    currency: 'INR',
-    status: 'captured',
-    method: 'demo',
-    createdAt: Timestamp.fromDate(now),
-    gstAmount,
-    baseAmount: priceInPaise - gstAmount,
-  });
+  // Cache in Firestore
+  await db.collection('config').doc('razorpay_plans').set(
+    { [key]: rzpPlan.id },
+    { merge: true }
+  );
 
-  logger.info('Subscription created (demo mode)', { uid, planId, billingCycle });
+  // Update in-memory cache
+  if (!RAZORPAY_PLAN_IDS) RAZORPAY_PLAN_IDS = {};
+  RAZORPAY_PLAN_IDS[key] = rzpPlan.id;
 
-  return {
-    success: true,
-    subscriptionId: demoSubId,
-    plan: planId,
-    billingCycle,
-    priceInPaise,
-    demoMode: true,
-  };
-});
+  logger.info('Created Razorpay plan', { key, rzpPlanId: rzpPlan.id });
+  return rzpPlan.id;
+}
 
 /**
- * Cancel subscription — sets cancelAtPeriodEnd or immediately cancels.
+ * Creates a Razorpay subscription for the user.
+ * Returns the subscription ID for client-side checkout.
  */
-exports.cancelSubscription = onCall(async (request) => {
-  const uid = request.auth && request.auth.uid;
-  if (!uid) {
-    throw new HttpsError('unauthenticated', 'Sign in required.');
-  }
+exports.createSubscription = onCall(
+  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
+  async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Sign in required.');
+    }
 
-  const cancelImmediately = request.data && request.data.immediate === true;
-  const subRef = db.collection('subscriptions').doc(uid);
-  const subDoc = await subRef.get();
+    const { planId, billingCycle } = request.data || {};
+    if (!planId || !['raja', 'maharaja', 'king'].includes(planId)) {
+      throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja, maharaja, or king.');
+    }
+    if (!billingCycle || !['monthly', 'annual'].includes(billingCycle)) {
+      throw new HttpsError('invalid-argument', 'Invalid billing cycle.');
+    }
 
-  if (!subDoc.exists) {
-    throw new HttpsError('not-found', 'No active subscription found.');
-  }
+    // Check for existing active subscription on the same plan
+    const existingDoc = await db.collection('subscriptions').doc(uid).get();
+    if (existingDoc.exists) {
+      const existing = existingDoc.data();
+      if (existing.status === 'active' && existing.plan === planId) {
+        throw new HttpsError('already-exists', 'You already have this plan active.');
+      }
+      // If upgrading/downgrading, cancel old Razorpay subscription first
+      if (existing.status === 'active' && existing.razorpaySubscriptionId) {
+        try {
+          await getRazorpay().subscriptions.cancel(existing.razorpaySubscriptionId, { cancel_at_cycle_end: false });
+          logger.info('Cancelled old Razorpay subscription for plan change', {
+            uid, oldPlan: existing.plan, newPlan: planId,
+          });
+        } catch (cancelErr) {
+          logger.warn('Failed to cancel old Razorpay sub (may be already cancelled)', {
+            error: cancelErr.message,
+          });
+        }
+      }
+    }
 
-  const sub = subDoc.data();
-  if (sub.status !== 'active' && sub.status !== 'pending') {
-    throw new HttpsError('failed-precondition', 'Subscription is not active.');
-  }
+    // Ensure the Razorpay Plan exists
+    let rzpPlanId;
+    try {
+      rzpPlanId = await ensureRazorpayPlan(planId, billingCycle);
+      logger.info('Got Razorpay plan', { rzpPlanId });
+    } catch (planErr) {
+      const errDetail = planErr.error || planErr;
+      logger.error('ensureRazorpayPlan failed', { error: JSON.stringify(errDetail), statusCode: planErr.statusCode, stack: planErr.stack });
+      throw new HttpsError('internal', 'Failed to create billing plan: ' + JSON.stringify(errDetail));
+    }
+    const pricing = PLAN_PRICING[planId];
+    const priceInPaise = pricing[billingCycle];
 
-  if (cancelImmediately) {
-    await subRef.update({
-      status: 'cancelled',
-      cancelledAt: Timestamp.fromDate(new Date()),
-      updatedAt: Timestamp.fromDate(new Date()),
+    // Total billing cycles: 12 for monthly (1 year), 1 for annual
+    const totalCount = billingCycle === 'annual' ? 5 : 12;
+
+    // Create Razorpay Subscription
+    let rzpSub;
+    try {
+      rzpSub = await getRazorpay().subscriptions.create({
+      plan_id: rzpPlanId,
+      total_count: totalCount,
+      quantity: 1,
+      customer_notify: 1,
+      notes: {
+        userId: uid,
+        planId,
+        billingCycle,
+      },
     });
-  } else {
-    await subRef.update({
-      cancelAtPeriodEnd: true,
-      updatedAt: Timestamp.fromDate(new Date()),
-    });
-  }
+    logger.info('Razorpay subscription created via API', { rzpSubId: rzpSub.id });
+    } catch (subErr) {
+      logger.error('subscriptions.create failed', { error: subErr.message, statusCode: subErr.statusCode, rzpPlanId });
+      throw new HttpsError('internal', 'Failed to create subscription: ' + subErr.message);
+    }
 
-  logger.info('Subscription cancelled', { uid, immediate: cancelImmediately });
-  return { success: true, cancelledImmediately: cancelImmediately };
-});
+    // Write pending subscription to Firestore (webhook will activate it)
+    const now = new Date();
+    await db.collection('subscriptions').doc(uid).set({
+      id: rzpSub.id,
+      userId: uid,
+      plan: planId,
+      billingCycle,
+      status: 'created',
+      razorpaySubscriptionId: rzpSub.id,
+      razorpayPlanId: rzpPlanId,
+      currentPeriodStart: Timestamp.fromDate(now),
+      cancelAtPeriodEnd: false,
+      createdAt: Timestamp.fromDate(now),
+      updatedAt: Timestamp.fromDate(now),
+      priceInPaise,
+    });
+
+    logger.info('Razorpay subscription created', {
+      uid, planId, billingCycle, rzpSubId: rzpSub.id,
+    });
+
+    return {
+      success: true,
+      subscriptionId: rzpSub.id,
+      plan: planId,
+      billingCycle,
+      priceInPaise,
+    };
+  }
+);
+
+/**
+ * Cancel subscription — cancels on Razorpay and updates Firestore.
+ */
+exports.cancelSubscription = onCall(
+  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
+  async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Sign in required.');
+    }
+
+    const cancelImmediately = request.data && request.data.immediate === true;
+    const subRef = db.collection('subscriptions').doc(uid);
+    const subDoc = await subRef.get();
+
+    if (!subDoc.exists) {
+      throw new HttpsError('not-found', 'No active subscription found.');
+    }
+
+    const sub = subDoc.data();
+    if (sub.status !== 'active' && sub.status !== 'pending') {
+      throw new HttpsError('failed-precondition', 'Subscription is not active.');
+    }
+
+    // Cancel on Razorpay
+    const rzpSubId = sub.razorpaySubscriptionId;
+    if (rzpSubId) {
+      try {
+        await getRazorpay().subscriptions.cancel(rzpSubId, {
+          cancel_at_cycle_end: cancelImmediately ? false : true,
+        });
+      } catch (rzpErr) {
+        logger.warn('Razorpay cancel failed (may already be cancelled)', {
+          error: rzpErr.message, rzpSubId,
+        });
+      }
+    }
+
+    // Update Firestore
+    if (cancelImmediately) {
+      await subRef.update({
+        status: 'cancelled',
+        cancelledAt: Timestamp.fromDate(new Date()),
+        updatedAt: Timestamp.fromDate(new Date()),
+      });
+    } else {
+      await subRef.update({
+        cancelAtPeriodEnd: true,
+        updatedAt: Timestamp.fromDate(new Date()),
+      });
+    }
+
+    logger.info('Subscription cancelled', { uid, immediate: cancelImmediately });
+    return { success: true, cancelledImmediately: cancelImmediately };
+  }
+);
+
+/**
+ * Verify payment signature after Razorpay checkout success.
+ * Called by Flutter client to confirm payment is genuine.
+ */
+exports.verifyPayment = onCall(
+  { secrets: ['RAZORPAY_KEY_SECRET'] },
+  async (request) => {
+    const uid = request.auth && request.auth.uid;
+    if (!uid) {
+      throw new HttpsError('unauthenticated', 'Sign in required.');
+    }
+
+    const { razorpayPaymentId, razorpaySubscriptionId, razorpaySignature } = request.data || {};
+    if (!razorpayPaymentId || !razorpaySubscriptionId || !razorpaySignature) {
+      throw new HttpsError('invalid-argument', 'Missing payment verification parameters.');
+    }
+
+    // Verify signature: HMAC-SHA256(razorpayPaymentId + "|" + razorpaySubscriptionId, key_secret)
+    const expectedSignature = crypto
+      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET)
+      .update(`${razorpayPaymentId}|${razorpaySubscriptionId}`)
+      .digest('hex');
+
+    if (expectedSignature !== razorpaySignature) {
+      logger.warn('Payment signature mismatch', { uid, razorpayPaymentId });
+      return { verified: false, message: 'Invalid payment signature.' };
+    }
+
+    // Activate the subscription in Firestore
+    const subRef = db.collection('subscriptions').doc(uid);
+    const subDoc = await subRef.get();
+    if (subDoc.exists) {
+      const sub = subDoc.data();
+      if (sub.status !== 'active') {
+        const now = new Date();
+        const periodEnd = new Date(now);
+        if (sub.billingCycle === 'annual') {
+          periodEnd.setFullYear(periodEnd.getFullYear() + 1);
+        } else {
+          periodEnd.setMonth(periodEnd.getMonth() + 1);
+        }
+        await subRef.update({
+          status: 'active',
+          currentPeriodStart: Timestamp.fromDate(now),
+          currentPeriodEnd: Timestamp.fromDate(periodEnd),
+          lastPaymentId: razorpayPaymentId,
+          updatedAt: Timestamp.fromDate(now),
+        });
+        logger.info('Plan activated via verifyPayment', { uid, plan: sub.plan });
+      }
+    }
+
+    logger.info('Payment verified', { uid, razorpayPaymentId, razorpaySubscriptionId });
+    return { verified: true };
+  }
+);
 
 /**
  * Razorpay webhook handler (HTTP endpoint).
- * In production, this verifies the webhook signature and processes events.
- * In DEMO mode, this is a placeholder.
+ * Verifies signature and processes subscription/payment events.
  */
 const { onRequest } = require('firebase-functions/v2/https');
 
-exports.razorpayWebhook = onRequest(async (req, res) => {
-  if (req.method !== 'POST') {
-    res.status(405).send('Method not allowed');
-    return;
-  }
-
-  try {
-    const event = req.body;
-    const eventType = event && event.event;
-
-    // In production: verify signature with crypto.createHmac('sha256', webhookSecret)
-    // const expectedSignature = crypto.createHmac('sha256', RAZORPAY_WEBHOOK_SECRET)
-    //   .update(JSON.stringify(req.body))
-    //   .digest('hex');
-    // if (req.headers['x-razorpay-signature'] !== expectedSignature) {
-    //   res.status(401).send('Invalid signature');
-    //   return;
-    // }
-
-    logger.info('Razorpay webhook received', { eventType });
-
-    // Idempotency check
-    const eventId = event && event.id;
-    if (eventId) {
-      const eventRef = db.collection('razorpayEvents').doc(eventId);
-      const eventDoc = await eventRef.get();
-      if (eventDoc.exists && eventDoc.data().processed) {
-        res.status(200).json({ status: 'already_processed' });
-        return;
-      }
-      await eventRef.set({ processed: true, processedAt: FieldValue.serverTimestamp() });
+exports.razorpayWebhook = onRequest(
+  { secrets: ['RAZORPAY_WEBHOOK_SECRET'] },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      res.status(405).send('Method not allowed');
+      return;
     }
 
-    // Handle different event types
-    const payload = event && event.payload;
-    switch (eventType) {
-      case 'subscription.activated':
-      case 'subscription.charged': {
-        const subscription = payload && payload.subscription && payload.subscription.entity;
-        if (subscription) {
-          const userId = subscription.notes && subscription.notes.userId;
-          if (userId) {
-            const periodEnd = subscription.current_end
-              ? Timestamp.fromDate(new Date(subscription.current_end * 1000))
-              : null;
-            await db.collection('subscriptions').doc(userId).update({
-              status: 'active',
-              currentPeriodEnd: periodEnd,
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-          }
+    try {
+      const event = req.body;
+      const eventType = event && event.event;
+
+      // Verify webhook signature
+      const webhookSignature = req.headers['x-razorpay-signature'];
+      if (webhookSignature) {
+        const expectedSignature = crypto
+          .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || RAZORPAY_WEBHOOK_SECRET)
+          .update(JSON.stringify(req.body))
+          .digest('hex');
+        if (webhookSignature !== expectedSignature) {
+          logger.warn('Webhook signature mismatch', { eventType });
+          res.status(401).send('Invalid signature');
+          return;
         }
-        break;
+      } else {
+        logger.warn('Webhook received without signature header', { eventType });
       }
-      case 'subscription.pending': {
-        const subscription = payload && payload.subscription && payload.subscription.entity;
-        if (subscription) {
-          const userId = subscription.notes && subscription.notes.userId;
-          if (userId) {
-            await db.collection('subscriptions').doc(userId).update({
-              status: 'pending',
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-          }
+
+      logger.info('Razorpay webhook received', { eventType });
+
+      // Idempotency check
+      const eventId = event && event.id;
+      if (eventId) {
+        const eventRef = db.collection('razorpayEvents').doc(eventId);
+        const eventDoc = await eventRef.get();
+        if (eventDoc.exists && eventDoc.data().processed) {
+          res.status(200).json({ status: 'already_processed' });
+          return;
         }
-        break;
+        await eventRef.set({
+          processed: true,
+          eventType,
+          processedAt: FieldValue.serverTimestamp(),
+        });
       }
-      case 'subscription.halted': {
-        const subscription = payload && payload.subscription && payload.subscription.entity;
-        if (subscription) {
-          const userId = subscription.notes && subscription.notes.userId;
-          if (userId) {
-            const graceDate = new Date();
-            graceDate.setDate(graceDate.getDate() + 7);
-            await db.collection('subscriptions').doc(userId).update({
-              status: 'halted',
-              graceExpiresAt: Timestamp.fromDate(graceDate),
-              updatedAt: FieldValue.serverTimestamp(),
-            });
+
+      // Handle different event types
+      const payload = event && event.payload;
+      switch (eventType) {
+        case 'subscription.activated':
+        case 'subscription.charged': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            const planId = subscription.notes && subscription.notes.planId;
+            const billingCycle = subscription.notes && subscription.notes.billingCycle;
+            if (userId) {
+              const periodStart = subscription.current_start
+                ? Timestamp.fromDate(new Date(subscription.current_start * 1000))
+                : null;
+              const periodEnd = subscription.current_end
+                ? Timestamp.fromDate(new Date(subscription.current_end * 1000))
+                : null;
+              const updateData = {
+                status: 'active',
+                updatedAt: FieldValue.serverTimestamp(),
+              };
+              if (periodStart) updateData.currentPeriodStart = periodStart;
+              if (periodEnd) updateData.currentPeriodEnd = periodEnd;
+              if (planId) updateData.plan = planId;
+              if (billingCycle) updateData.billingCycle = billingCycle;
+              await db.collection('subscriptions').doc(userId).update(updateData);
+            }
           }
+          break;
         }
-        break;
-      }
-      case 'subscription.cancelled': {
-        const subscription = payload && payload.subscription && payload.subscription.entity;
-        if (subscription) {
-          const userId = subscription.notes && subscription.notes.userId;
-          if (userId) {
-            await db.collection('subscriptions').doc(userId).update({
-              status: 'cancelled',
-              cancelledAt: FieldValue.serverTimestamp(),
-              updatedAt: FieldValue.serverTimestamp(),
-            });
-          }
-        }
-        break;
-      }
-      case 'payment.captured': {
-        const payment = payload && payload.payment && payload.payment.entity;
-        if (payment) {
-          const userId = payment.notes && payment.notes.userId;
-          const subId = payment.notes && payment.notes.subscriptionId;
-          if (userId && subId) {
-            const gstAmount = Math.round(payment.amount * 18 / 118);
-            await db.collection('subscriptions').doc(userId)
-              .collection('payments').doc(payment.id).set({
-                id: payment.id,
-                userId,
-                subscriptionId: subId,
-                razorpayPaymentId: payment.id,
-                amount: payment.amount,
-                currency: payment.currency || 'INR',
-                status: 'captured',
-                method: payment.method,
-                createdAt: FieldValue.serverTimestamp(),
-                gstAmount,
-                baseAmount: payment.amount - gstAmount,
+        case 'subscription.pending': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            if (userId) {
+              await db.collection('subscriptions').doc(userId).update({
+                status: 'pending',
+                updatedAt: FieldValue.serverTimestamp(),
               });
+            }
           }
+          break;
         }
-        break;
+        case 'subscription.halted': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            if (userId) {
+              const graceDate = new Date();
+              graceDate.setDate(graceDate.getDate() + 7);
+              await db.collection('subscriptions').doc(userId).update({
+                status: 'halted',
+                graceExpiresAt: Timestamp.fromDate(graceDate),
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          break;
+        }
+        case 'subscription.cancelled':
+        case 'subscription.completed': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            if (userId) {
+              await db.collection('subscriptions').doc(userId).update({
+                status: 'cancelled',
+                cancelledAt: FieldValue.serverTimestamp(),
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          break;
+        }
+        case 'subscription.paused': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            if (userId) {
+              await db.collection('subscriptions').doc(userId).update({
+                status: 'paused',
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          break;
+        }
+        case 'subscription.resumed': {
+          const subscription = payload && payload.subscription && payload.subscription.entity;
+          if (subscription) {
+            const userId = subscription.notes && subscription.notes.userId;
+            if (userId) {
+              await db.collection('subscriptions').doc(userId).update({
+                status: 'active',
+                updatedAt: FieldValue.serverTimestamp(),
+              });
+            }
+          }
+          break;
+        }
+        case 'payment.captured': {
+          const payment = payload && payload.payment && payload.payment.entity;
+          if (payment) {
+            const userId = payment.notes && payment.notes.userId;
+            // For subscription payments, get subId from the subscription entity or notes
+            const subEntity = payload && payload.subscription && payload.subscription.entity;
+            const subId = (subEntity && subEntity.id) || (payment.notes && payment.notes.subscriptionId);
+            if (userId) {
+              const gstAmount = Math.round(payment.amount * 18 / 118);
+              await db.collection('subscriptions').doc(userId)
+                .collection('payments').doc(payment.id).set({
+                  id: payment.id,
+                  userId,
+                  subscriptionId: subId || '',
+                  razorpayPaymentId: payment.id,
+                  amount: payment.amount,
+                  currency: payment.currency || 'INR',
+                  status: 'captured',
+                  method: payment.method,
+                  createdAt: FieldValue.serverTimestamp(),
+                  gstAmount,
+                  baseAmount: payment.amount - gstAmount,
+                });
+            }
+          }
+          break;
+        }
+        case 'payment.failed': {
+          const payment = payload && payload.payment && payload.payment.entity;
+          if (payment) {
+            const userId = payment.notes && payment.notes.userId;
+            if (userId) {
+              await db.collection('subscriptions').doc(userId)
+                .collection('payments').doc(payment.id).set({
+                  id: payment.id,
+                  userId,
+                  razorpayPaymentId: payment.id,
+                  amount: payment.amount,
+                  currency: payment.currency || 'INR',
+                  status: 'failed',
+                  method: payment.method,
+                  errorCode: payment.error_code,
+                  errorDescription: payment.error_description,
+                  createdAt: FieldValue.serverTimestamp(),
+                });
+            }
+          }
+          break;
+        }
+        default:
+          logger.info('Unhandled webhook event', { eventType });
       }
-      default:
-        logger.info('Unhandled webhook event', { eventType });
-    }
 
-    res.status(200).json({ status: 'ok' });
-  } catch (err) {
-    logger.error('Webhook error', { error: err && err.message });
-    res.status(500).json({ error: 'Internal error' });
+      res.status(200).json({ status: 'ok' });
+    } catch (err) {
+      logger.error('Webhook error', { error: err && err.message });
+      res.status(500).json({ error: 'Internal error' });
+    }
   }
-});
+);
 
 /**
  * Daily job: check for expired grace periods and downgrade to free.
@@ -1488,8 +1731,6 @@ exports.checkSubscriptionExpiry = onSchedule(
     timeZone: INDIA_TIME_ZONE,
   },
   async () => {
-    const now = Timestamp.fromDate(new Date());
-
     // 1. Expired grace periods → downgrade to free
     const haltedSnapshot = await db.collection('subscriptions')
       .where('status', '==', 'halted')
@@ -1520,7 +1761,6 @@ exports.checkSubscriptionExpiry = onSchedule(
 
     activeSnapshot.forEach((doc) => {
       const data = doc.data();
-      if (data.demoMode) return; // Skip demo subscriptions
       const periodEnd = data.currentPeriodEnd;
       if (periodEnd && periodEnd.toDate() < new Date()) {
         haltedCount++;
@@ -1578,6 +1818,5 @@ exports.getSubscriptionStatus = onCall(async (request) => {
     currentPeriodEnd: data.currentPeriodEnd,
     cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
     priceInPaise: data.priceInPaise,
-    demoMode: data.demoMode || false,
   };
 });

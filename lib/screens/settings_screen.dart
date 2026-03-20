@@ -6,7 +6,9 @@ import 'package:billeasy/screens/invoices_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/screens/privacy_policy_screen.dart';
 import 'package:billeasy/screens/subscription_screen.dart';
+import 'package:billeasy/screens/terms_conditions_screen.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/plan_service.dart';
@@ -298,6 +300,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   isSelected: currentLanguage == AppLanguage.tamil,
                   isBusy: _isUpdatingLanguage,
                   onTap: () => _changeLanguage(AppLanguage.tamil),
+                ),
+              ],
+            ),
+          ),
+
+          // ── Legal ──
+          const SizedBox(height: 28),
+          const _SectionLabel(title: 'LEGAL'),
+          const SizedBox(height: 8),
+          _TonalCard(
+            child: Column(
+              children: [
+                _SettingsTile(
+                  icon: Icons.shield_outlined,
+                  iconBg: const Color(0xFF007AFF),
+                  title: 'Privacy Policy',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const PrivacyPolicyScreen()),
+                  ),
+                ),
+                const _TileDivider(),
+                _SettingsTile(
+                  icon: Icons.description_outlined,
+                  iconBg: const Color(0xFF5856D6),
+                  title: 'Terms & Conditions',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                        builder: (_) => const TermsConditionsScreen()),
+                  ),
                 ),
               ],
             ),
