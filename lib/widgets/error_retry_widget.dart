@@ -19,7 +19,7 @@ class ErrorRetryWidget extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.cloud_off_rounded, size: 64, color: kTextSecondary),
+            Icon(Icons.cloud_off_rounded, size: 64, color: const Color(0xFFFF9500)),
             const SizedBox(height: 16),
             Text(
               message,

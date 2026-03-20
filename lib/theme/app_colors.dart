@@ -1,60 +1,101 @@
 import 'package:flutter/material.dart';
 
-// ── Gradient (matches onboarding page 1: navy → deep blue → teal) ─────────────
-const kGradientColors = [
-  Color(0xFF1E3A8A), // Deep navy
-  Color(0xFF4361EE), // Deep blue
-  Color(0xFF6366F1), // Teal
-];
+// ═══════════════════════════════════════════════════════════════════════════════
+// Design System: "Metric Clarity"
+// Swiss minimalism · Tonal layering · No-border philosophy
+// ═══════════════════════════════════════════════════════════════════════════════
 
-const kGradient = LinearGradient(
+// ── Primary (Royal Blue — the ONLY accent) ───────────────────────────────────
+const kPrimary          = Color(0xFF0057FF);
+const kPrimaryDark      = Color(0xFF004CE1); // Gradient end / pressed state
+const kPrimaryContainer = Color(0xFFDCE1FF); // Selected rows / active states
+const kOnPrimary        = Colors.white;
+
+// ── Signature Gradient (for primary CTAs & hero states) ──────────────────────
+const kSignatureGradient = LinearGradient(
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
-  colors: kGradientColors,
+  colors: [kPrimary, kPrimaryDark],
 );
 
-// ── Primary ───────────────────────────────────────────────────────────────────
-const kPrimary = Color(0xFF4361EE);   // Deep blue (mid-gradient)
-const kTeal    = Color(0xFF6366F1);   // Teal (end of gradient)
-const kNavy    = Color(0xFF1E3A8A);   // Deep navy (start of gradient)
+// ── Surfaces (tonal layering — no borders) ───────────────────────────────────
+const kSurface              = Color(0xFFF9FAFB); // Base desk (Neutral)
+const kSurfaceContainerLow  = Color(0xFFF1F4F6); // Section blocks
+const kSurfaceContainer     = Color(0xFFEAEFF1); // Deeper nesting
+const kSurfaceContainerHigh = Color(0xFFDDE3E6); // Utility buttons
+const kSurfaceLowest        = Color(0xFFFFFFFF); // Interactive cards
+const kSurfaceDim           = Color(0xFFE3E7EA); // Disabled states
 
-// ── Backgrounds ───────────────────────────────────────────────────────────────
-const kBackground = Color(0xFFEFF6FF); // Very light blue
-const kCardBg     = Colors.white;
+// ── Text (never use #000000) ────────────────────────────────────────────────
+const kOnSurface        = Color(0xFF2B3437); // Primary text
+const kOnSurfaceVariant = Color(0xFF586064); // Labels, metadata
+const kTextTertiary     = Color(0xFF98A2B3); // Hints, placeholders
+const kTextSecondary    = Color(0xFF475467); // Secondary body text
 
-// ── Text ──────────────────────────────────────────────────────────────────────
-const kTextPrimary   = Color(0xFF1E3A8A); // Deep navy
-const kTextSecondary = Color(0xFF5B7A9A); // Blue-gray
+// ── Outline (ghost borders only — 20% opacity when required) ─────────────────
+const kOutlineVariant = Color(0xFFABB3B7);
 
-// ── Borders ───────────────────────────────────────────────────────────────────
-const kBorder = Color(0xFFBDD5F0); // Blue-tinted border
-
-// ── Status colours (unchanged — semantic) ─────────────────────────────────────
+// ── Status (semantic only — the sole exception to single-accent rule) ────────
 const kPaid       = Color(0xFF22C55E);
 const kPaidBg     = Color(0xFFDCFCE7);
 const kPending    = Color(0xFFF59E0B);
 const kPendingBg  = Color(0xFFFEF3C7);
 const kOverdue    = Color(0xFFEF4444);
 const kOverdueBg  = Color(0xFFFEE2E2);
+const kError      = Color(0xFF9E3F4E);
+const kErrorContainer = Color(0xFFFF8B9A);
 
-// ── Gradient AppBar builder ───────────────────────────────────────────────────
-/// Returns an AppBar with the onboarding gradient as background.
-/// Use this in every screen to get visual consistency.
+// ── Shadows (whisper shadow — inverse_surface at 4%) ────────────────────────
+const kWhisperShadow = BoxShadow(
+  color: Color(0x0A0C0F10),
+  blurRadius: 20,
+  offset: Offset(0, 10),
+);
+
+const kSubtleShadow = BoxShadow(
+  color: Color(0x060C0F10),
+  blurRadius: 8,
+  offset: Offset(0, 4),
+);
+
+// ── Legacy aliases (for backward compat during migration) ────────────────────
+const kNavy       = kOnSurface;
+const kTeal       = kPrimary;
+const kBackground = kSurface;
+const kCardBg     = kSurfaceLowest;
+const kBorder     = kOutlineVariant;
+const kTextPrimary = kOnSurface;
+const kGradientColors = [kPrimary, kPrimaryDark];
+const kGradient = kSignatureGradient;
+
+// ── BillEasy logo widget ────────────────────────────────────────────────────
+Widget kBillRajaLogo({double fontSize = 20}) {
+  return Text(
+    'BillEasy',
+    style: TextStyle(
+      color: kOnSurface,
+      fontWeight: FontWeight.w700,
+      fontSize: fontSize,
+      letterSpacing: -0.4,
+    ),
+  );
+}
+
+// ── App Bar builder (tonal, no borders) ──────────────────────────────────────
 PreferredSizeWidget kBuildGradientAppBar({
   Widget? title,
   String? titleText,
   List<Widget>? actions,
   Widget? leading,
   bool automaticallyImplyLeading = true,
-  double scrolledUnderElevation = 2,
+  double scrolledUnderElevation = 0,
   PreferredSizeWidget? bottom,
 }) {
   return AppBar(
-    backgroundColor: Colors.transparent,
-    foregroundColor: Colors.white,
+    backgroundColor: kSurface,
+    foregroundColor: kOnSurface,
     elevation: 0,
     scrolledUnderElevation: scrolledUnderElevation,
-    shadowColor: Colors.black26,
     surfaceTintColor: Colors.transparent,
     automaticallyImplyLeading: automaticallyImplyLeading,
     leading: leading,
@@ -63,18 +104,15 @@ PreferredSizeWidget kBuildGradientAppBar({
             ? Text(
                 titleText,
                 style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+                  color: kOnSurface,
+                  fontWeight: FontWeight.w600,
                   fontSize: 18,
                 ),
               )
-            : null),
+            : kBillRajaLogo()),
     actions: actions,
     bottom: bottom,
-    iconTheme: const IconThemeData(color: Colors.white),
-    actionsIconTheme: const IconThemeData(color: Colors.white),
-    flexibleSpace: Container(
-      decoration: const BoxDecoration(gradient: kGradient),
-    ),
+    iconTheme: const IconThemeData(color: kOnSurface),
+    actionsIconTheme: const IconThemeData(color: kOnSurfaceVariant),
   );
 }

@@ -6,36 +6,16 @@ import 'package:billeasy/services/eway_bill_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:share_plus/share_plus.dart';
 
-// ── Brand colours ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF4361EE);
-const _kNavy = Color(0xFF1E3A8A);
-const _kTeal = Color(0xFF6366F1);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kLabel = Color(0xFF5B7A9A);
-const _kTitle = Color(0xFF1E3A8A);
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
-
 BoxDecoration _cardDeco() => BoxDecoration(
-      color: Colors.white,
+      color: kSurfaceLowest,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _kBorder, width: 1.2),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0E0F4A75),
-          blurRadius: 14,
-          offset: Offset(0, 4),
-        ),
-      ],
+      boxShadow: const [kSubtleShadow],
     );
 
 class EWayBillScreen extends StatefulWidget {
@@ -137,23 +117,36 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
   Widget build(BuildContext context) {
     if (!PlanService.instance.hasEwayBill) {
       return Scaffold(
-        appBar: AppBar(title: const Text('E-Way Bill')),
+        backgroundColor: kSurface,
+        appBar: AppBar(
+          title: const Text('E-Way Bill'),
+          backgroundColor: kSurface,
+          foregroundColor: kOnSurface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 64, color: Color(0xFFBDD5F0)),
+                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
                 const SizedBox(height: 16),
-                const Text('E-Way Bill', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A))),
+                const Text('E-Way Bill', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
                 const SizedBox(height: 8),
-                const Text('Upgrade to Maharaja plan to generate E-Way Bills.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF5B7A9A))),
+                const Text('Upgrade to Maharaja plan to generate E-Way Bills.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'E-Way Bill'))),
                   icon: const Icon(Icons.workspace_premium),
                   label: const Text('Upgrade Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
                 ),
               ],
             ),
@@ -171,21 +164,17 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             : <String>[];
 
         return Scaffold(
-          backgroundColor: _kBackground,
+          backgroundColor: kSurface,
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            foregroundColor: Colors.white,
+            backgroundColor: kSurface,
+            foregroundColor: kOnSurface,
             elevation: 0,
-            scrolledUnderElevation: 2,
-            shadowColor: Colors.black26,
+            scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
-            flexibleSpace: Container(
-              decoration: const BoxDecoration(gradient: _kGradient),
-            ),
             title: const Text(
               'E-Way Bill',
               style: TextStyle(
-                color: Colors.white,
+                color: kOnSurface,
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
               ),
@@ -235,13 +224,12 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: _kTeal.withValues(alpha: 0.08),
+        color: kPrimaryContainer,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: _kTeal.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
-          Icon(Icons.info_outline_rounded, size: 18, color: _kTeal),
+          const Icon(Icons.info_outline_rounded, size: 18, color: kPrimary),
           const SizedBox(width: 10),
           const Expanded(
             child: Text(
@@ -249,7 +237,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
-                color: _kTeal,
+                color: kPrimary,
               ),
             ),
           ),
@@ -266,7 +254,6 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFFEE2E2),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFFCA5A5)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -343,11 +330,11 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: _kTitle,
+              color: kOnSurface,
             ),
           ),
           const SizedBox(height: 12),
-          Container(height: 1, color: _kBorder),
+          Container(height: 1, color: kSurfaceDim),
           const SizedBox(height: 12),
           _summaryRow('Invoice #', inv.invoiceNumber),
           _summaryRow('Date', _dateFmt.format(inv.createdAt)),
@@ -355,7 +342,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
           _summaryRow(
             'Amount',
             _currencyFmt.format(inv.grandTotal),
-            valueColor: _kPrimary,
+            valueColor: kPrimary,
           ),
           _summaryRow('GST Type', gstLabel),
           if (inv.placeOfSupply.isNotEmpty)
@@ -383,7 +370,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
               label,
               style: const TextStyle(
                 fontSize: 13,
-                color: _kLabel,
+                color: kOnSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -393,7 +380,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
               value,
               style: TextStyle(
                 fontSize: 13,
-                color: valueColor ?? _kTitle,
+                color: valueColor ?? kOnSurface,
                 fontWeight: FontWeight.w600,
               ),
               textAlign: TextAlign.end,
@@ -422,7 +409,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: _kTitle,
+                  color: kOnSurface,
                 ),
               ),
               const Spacer(),
@@ -430,14 +417,14 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: _kBackground,
+                  color: kSurfaceContainerLow,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   '${items.length} item${items.length == 1 ? '' : 's'}',
                   style: const TextStyle(
                     fontSize: 12,
-                    color: _kPrimary,
+                    color: kPrimary,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -445,7 +432,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Container(height: 1, color: _kBorder),
+          Container(height: 1, color: kSurfaceDim),
           ...items.asMap().entries.map((e) {
             final i = e.key;
             final item = e.value;
@@ -461,7 +448,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                         width: 22,
                         height: 22,
                         decoration: BoxDecoration(
-                          color: _kBackground,
+                          color: kSurfaceContainerLow,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Center(
@@ -469,7 +456,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                             '${i + 1}',
                             style: const TextStyle(
                               fontSize: 11,
-                              color: _kPrimary,
+                              color: kPrimary,
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -485,7 +472,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
-                                color: _kTitle,
+                                color: kOnSurface,
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -493,8 +480,8 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                               children: [
                                 _pill(
                                   'Qty: ${item.quantityLabel}',
-                                  _kLabel,
-                                  _kBackground,
+                                  kOnSurfaceVariant,
+                                  kSurfaceContainerLow,
                                 ),
                                 const SizedBox(width: 6),
                                 _pill(
@@ -503,10 +490,10 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                                       : 'HSN: ${item.hsnCode}',
                                   hsnMissing
                                       ? const Color(0xFFB91C1C)
-                                      : _kTeal,
+                                      : kPrimary,
                                   hsnMissing
                                       ? const Color(0xFFFEE2E2)
-                                      : _kTeal.withValues(alpha: 0.08),
+                                      : kPrimaryContainer,
                                 ),
                               ],
                             ),
@@ -518,14 +505,14 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color: _kTitle,
+                          color: kOnSurface,
                         ),
                       ),
                     ],
                   ),
                 ),
                 if (i < items.length - 1)
-                  Container(height: 1, color: const Color(0xFFEFF6FF)),
+                  Container(height: 1, color: kSurfaceContainerLow),
               ],
             );
           }),
@@ -566,7 +553,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: _kTitle,
+              color: kOnSurface,
             ),
           ),
           const SizedBox(height: 16),
@@ -577,7 +564,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: _kLabel,
+              color: kOnSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -588,18 +575,18 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+                borderSide: const BorderSide(color: kPrimary, width: 1.5),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: kSurfaceLowest,
             ),
             items: _transportModes.entries
                 .map(
@@ -621,7 +608,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: _kLabel,
+              color: kOnSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -630,23 +617,23 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
               hintText: 'e.g. MH12AB1234',
-              hintStyle: const TextStyle(color: _kLabel, fontSize: 13),
+              hintStyle: const TextStyle(color: kTextTertiary, fontSize: 13),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+                borderSide: const BorderSide(color: kPrimary, width: 1.5),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: kSurfaceLowest,
             ),
           ),
           const SizedBox(height: 14),
@@ -657,7 +644,7 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: _kLabel,
+              color: kOnSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -666,23 +653,23 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
             textCapitalization: TextCapitalization.characters,
             decoration: InputDecoration(
               hintText: 'Enter if applicable',
-              hintStyle: const TextStyle(color: _kLabel, fontSize: 13),
+              hintStyle: const TextStyle(color: kTextTertiary, fontSize: 13),
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kBorder),
+                borderSide: BorderSide(color: kOutlineVariant),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+                borderSide: const BorderSide(color: kPrimary, width: 1.5),
               ),
               filled: true,
-              fillColor: Colors.white,
+              fillColor: kSurfaceLowest,
             ),
           ),
         ],
@@ -725,9 +712,9 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
               ),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: _kPrimary,
+              backgroundColor: kPrimary,
               foregroundColor: Colors.white,
-              disabledBackgroundColor: _kBorder,
+              disabledBackgroundColor: kSurfaceDim,
               elevation: 0,
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
@@ -749,8 +736,8 @@ class _EWayBillScreenState extends State<EWayBillScreen> {
               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
             ),
             style: OutlinedButton.styleFrom(
-              foregroundColor: _kNavy,
-              side: const BorderSide(color: _kBorder, width: 1.5),
+              foregroundColor: kOnSurface,
+              side: BorderSide(color: kOutlineVariant, width: 1.5),
               padding: const EdgeInsets.symmetric(vertical: 14),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),

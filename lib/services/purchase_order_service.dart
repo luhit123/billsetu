@@ -90,11 +90,11 @@ class PurchaseOrderService {
 
       final productRef = _productCol(ownerId).doc(item.productId);
 
-      // Increment stock atomically
-      batch.update(productRef, {
+      // Increment stock atomically (merge: true creates doc if missing)
+      batch.set(productRef, {
         'currentStock': FieldValue.increment(item.quantity),
         'updatedAt': Timestamp.fromDate(now),
-      });
+      }, SetOptions(merge: true));
 
       // Create stock movement record
       final movRef = _movCol(ownerId).doc();

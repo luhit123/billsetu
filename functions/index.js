@@ -182,6 +182,175 @@ exports.cleanupInvoicesAfterClientDelete = onDocumentDeleted(
   },
 );
 
+// ══════════════════════════════════════════════════════════════════════════════
+// PURCHASE ORDER → INPUT GST ANALYTICS
+// When a PO is written (status changed to received, or GST values change),
+// recompute Input GST totals for the relevant period.
+// ══════════════════════════════════════════════════════════════════════════════
+
+exports.syncPurchaseOrderAnalytics = onDocumentWritten(
+  'users/{ownerId}/purchaseOrders/{poId}',
+  async (event) => {
+    try {
+      const ownerId = event.params.ownerId;
+      const poId = event.params.poId;
+      const beforeData = event.data.before.exists ? event.data.before.data() : null;
+      const afterData = event.data.after.exists ? event.data.after.data() : null;
+
+      // Only care about received POs with GST enabled
+      const beforeRelevant = beforeData &&
+        beforeData.status === 'received' &&
+        beforeData.gstEnabled === true;
+      const afterRelevant = afterData &&
+        afterData.status === 'received' &&
+        afterData.gstEnabled === true;
+
+      // Skip if nothing changed from an input-GST perspective
+      if (!beforeRelevant && !afterRelevant) {
+        return;
+      }
+
+      // Build before/after input GST contributions
+      const beforeInput = beforeRelevant ? buildPoInputGst(beforeData) : null;
+      const afterInput = afterRelevant ? buildPoInputGst(afterData) : null;
+
+      // Determine the date for period bucketing
+      const afterDate = afterData ? parseDate(afterData.createdAt) : null;
+      const beforeDate = beforeData ? parseDate(beforeData.createdAt) : null;
+
+      const writes = [];
+
+      // Subtract old contribution
+      if (beforeInput && beforeDate) {
+        const periods = buildInputGstPeriods(beforeDate, beforeInput, -1);
+        for (const p of periods) {
+          writes.push(writeInputGstPeriod(ownerId, p, poId));
+        }
+      }
+
+      // Add new contribution
+      if (afterInput && afterDate) {
+        const periods = buildInputGstPeriods(afterDate, afterInput, 1);
+        for (const p of periods) {
+          writes.push(writeInputGstPeriod(ownerId, p, poId));
+        }
+      }
+
+      await Promise.all(writes);
+
+      logger.info('syncPurchaseOrderAnalytics: updated input GST', {
+        ownerId,
+        poId,
+        beforeRelevant,
+        afterRelevant,
+      });
+    } catch (err) {
+      logger.error('syncPurchaseOrderAnalytics: error', {
+        poId: event.params.poId,
+        error: err && err.message,
+      });
+    }
+  },
+);
+
+function buildPoInputGst(data) {
+  const items = Array.isArray(data.items) ? data.items : [];
+  const subtotal = roundMoney(items.reduce((s, i) => s + lineItemTotal(i), 0));
+  const discountType = data.discountType || null;
+  const discountValue = toNumber(data.discountValue);
+  const discountAmount = roundMoney(computeDiscountAmount(subtotal, discountType, discountValue));
+  const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
+  const gstType = normalizeGstType(data.gstType);
+  const orderGstRate = toNumber(data.gstRate);
+
+  // Per-item GST calculation (mirrors Dart model logic)
+  const ratio = subtotal > 0 ? taxableAmount / subtotal : 0;
+  let cgstAmount = 0;
+  let igstAmount = 0;
+
+  for (const item of items) {
+    const itemTotal = lineItemTotal(item);
+    // Use per-item rate if available, otherwise fall back to order-level rate
+    let itemRate = toNumber(item.gstRate);
+    if (itemRate === 0 && orderGstRate > 0) {
+      itemRate = orderGstRate;
+    }
+    if (gstType === 'cgst_sgst') {
+      cgstAmount += itemTotal * ratio * itemRate / 200;
+    } else {
+      igstAmount += itemTotal * ratio * itemRate / 100;
+    }
+  }
+
+  cgstAmount = roundMoney(cgstAmount);
+  const sgstAmount = cgstAmount;
+  igstAmount = roundMoney(igstAmount);
+  const totalTax = roundMoney(cgstAmount + sgstAmount + igstAmount);
+  const grandTotal = roundMoney(taxableAmount + totalTax);
+
+  return {
+    taxableAmount,
+    discountAmount,
+    cgstAmount,
+    sgstAmount,
+    igstAmount,
+    totalTax,
+    grandTotal,
+  };
+}
+
+function buildInputGstPeriods(date, input, sign) {
+  const dateParts = getIndianDateParts(date);
+  const monthKey = `${dateParts.year}-${padNumber(dateParts.month, 2)}`;
+  const quarterNumber = Math.floor((dateParts.month - 1) / 3) + 1;
+  const quarterKey = `${dateParts.year}-Q${quarterNumber}`;
+  const yearKey = String(dateParts.year);
+
+  const delta = {
+    inputPoCount: sign * 1,
+    inputTaxableAmount: sign * input.taxableAmount,
+    inputDiscountAmount: sign * input.discountAmount,
+    inputCgstAmount: sign * input.cgstAmount,
+    inputSgstAmount: sign * input.sgstAmount,
+    inputIgstAmount: sign * input.igstAmount,
+    inputTotalTax: sign * input.totalTax,
+    inputGrandTotal: sign * input.grandTotal,
+  };
+
+  return [
+    { docId: `monthly_${monthKey}`, periodType: 'monthly', periodKey: monthKey, delta },
+    { docId: `quarterly_${quarterKey}`, periodType: 'quarterly', periodKey: quarterKey, delta },
+    { docId: `yearly_${yearKey}`, periodType: 'yearly', periodKey: yearKey, delta },
+  ];
+}
+
+function writeInputGstPeriod(ownerId, period, poId) {
+  const ref = db
+    .collection('users')
+    .doc(ownerId)
+    .collection('analytics')
+    .doc('gstSummaries')
+    .collection('periods')
+    .doc(period.docId);
+
+  return ref.set({
+    ownerId,
+    docId: period.docId,
+    periodType: period.periodType,
+    periodKey: period.periodKey,
+    inputPoCount: FieldValue.increment(period.delta.inputPoCount || 0),
+    inputTaxableAmount: FieldValue.increment(period.delta.inputTaxableAmount || 0),
+    inputDiscountAmount: FieldValue.increment(period.delta.inputDiscountAmount || 0),
+    inputCgstAmount: FieldValue.increment(period.delta.inputCgstAmount || 0),
+    inputSgstAmount: FieldValue.increment(period.delta.inputSgstAmount || 0),
+    inputIgstAmount: FieldValue.increment(period.delta.inputIgstAmount || 0),
+    inputTotalTax: FieldValue.increment(period.delta.inputTotalTax || 0),
+    inputGrandTotal: FieldValue.increment(period.delta.inputGrandTotal || 0),
+    updatedAt: FieldValue.serverTimestamp(),
+    lastSyncedPoId: poId,
+  }, { merge: true });
+}
+
 exports.markOverdueInvoices = onSchedule(
   {
     schedule: 'every day 02:30',
@@ -1033,14 +1202,16 @@ const RAZORPAY_KEY_SECRET = 'demo_secret';
 // Plan pricing in paise (₹1 = 100 paise)
 const PLAN_PRICING = {
   raja: {
-    monthly: 14900,   // ₹149/mo (₹126.27 + 18% GST)
-    annual: 119900,    // ₹1,199/yr
-    launchAnnual: 79900, // ₹799/yr (first 500 users)
+    monthly: 12000,    // ₹120/mo
+    annual: 99900,     // ₹999/yr
   },
   maharaja: {
-    monthly: 39900,    // ₹399/mo (₹338.14 + 18% GST)
-    annual: 299900,    // ₹2,999/yr
-    launchAnnual: 199900, // ₹1,999/yr (first 500 users)
+    monthly: 23900,    // ₹239/mo
+    annual: 199900,    // ₹1,999/yr
+  },
+  king: {
+    monthly: 55500,    // ₹555/mo
+    annual: 499900,    // ₹4,999/yr
   },
 };
 
@@ -1057,8 +1228,8 @@ exports.createSubscription = onCall(async (request) => {
   }
 
   const { planId, billingCycle } = request.data || {};
-  if (!planId || !['raja', 'maharaja'].includes(planId)) {
-    throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja or maharaja.');
+  if (!planId || !['raja', 'maharaja', 'king'].includes(planId)) {
+    throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja, maharaja, or king.');
   }
   if (!billingCycle || !['monthly', 'annual'].includes(billingCycle)) {
     throw new HttpsError('invalid-argument', 'Invalid billing cycle.');
@@ -1076,30 +1247,10 @@ exports.createSubscription = onCall(async (request) => {
   const pricing = PLAN_PRICING[planId];
   const priceInPaise = pricing[billingCycle];
 
-  // Check launch offer availability
-  let isLaunchOffer = false;
-  let launchSlot = null;
-  if (billingCycle === 'annual') {
-    const launchRef = db.collection('config').doc('launchOffer');
-    const launchDoc = await launchRef.get();
-    const claimed = launchDoc.exists ? (launchDoc.data().claimedSlots || 0) : 0;
-    if (claimed < 500) {
-      isLaunchOffer = true;
-      launchSlot = claimed + 1;
-      await launchRef.set({
-        totalSlots: 500,
-        claimedSlots: FieldValue.increment(1),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-  }
-
   const now = new Date();
   const periodEnd = billingCycle === 'annual'
     ? new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
     : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
-
-  const finalPrice = isLaunchOffer ? pricing.launchAnnual : priceInPaise;
   const demoSubId = `demo_sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   // In DEMO mode, activate immediately
@@ -1115,39 +1266,35 @@ exports.createSubscription = onCall(async (request) => {
     cancelAtPeriodEnd: false,
     createdAt: Timestamp.fromDate(now),
     updatedAt: Timestamp.fromDate(now),
-    priceInPaise: finalPrice,
-    launchOffer: isLaunchOffer,
-    launchOfferSlot: launchSlot,
+    priceInPaise: priceInPaise,
     demoMode: true,
   });
 
   // Record payment
   const demoPayId = `demo_pay_${Date.now()}`;
-  const gstAmount = Math.round(finalPrice * 18 / 118);
+  const gstAmount = Math.round(priceInPaise * 18 / 118);
   await db.collection('subscriptions').doc(uid).collection('payments').doc(demoPayId).set({
     id: demoPayId,
     userId: uid,
     subscriptionId: demoSubId,
     razorpayPaymentId: demoPayId,
-    amount: finalPrice,
+    amount: priceInPaise,
     currency: 'INR',
     status: 'captured',
     method: 'demo',
     createdAt: Timestamp.fromDate(now),
     gstAmount,
-    baseAmount: finalPrice - gstAmount,
+    baseAmount: priceInPaise - gstAmount,
   });
 
-  logger.info('Subscription created (demo mode)', { uid, planId, billingCycle, isLaunchOffer });
+  logger.info('Subscription created (demo mode)', { uid, planId, billingCycle });
 
   return {
     success: true,
     subscriptionId: demoSubId,
     plan: planId,
     billingCycle,
-    priceInPaise: finalPrice,
-    isLaunchOffer,
-    launchSlot,
+    priceInPaise,
     demoMode: true,
   };
 });
@@ -1424,11 +1571,6 @@ exports.getSubscriptionStatus = onCall(async (request) => {
 
   const data = subDoc.data();
 
-  // Get launch offer availability
-  const launchRef = db.collection('config').doc('launchOffer');
-  const launchDoc = await launchRef.get();
-  const claimedSlots = launchDoc.exists ? (launchDoc.data().claimedSlots || 0) : 0;
-
   return {
     plan: data.plan,
     status: data.status,
@@ -1436,9 +1578,6 @@ exports.getSubscriptionStatus = onCall(async (request) => {
     currentPeriodEnd: data.currentPeriodEnd,
     cancelAtPeriodEnd: data.cancelAtPeriodEnd || false,
     priceInPaise: data.priceInPaise,
-    launchOffer: data.launchOffer || false,
     demoMode: data.demoMode || false,
-    launchOfferAvailable: claimedSlots < 500,
-    launchOfferSlotsRemaining: Math.max(0, 500 - claimedSlots),
   };
 });

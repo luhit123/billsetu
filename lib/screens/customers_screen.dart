@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/empty_state_widget.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:billeasy/modals/client.dart';
@@ -13,18 +14,6 @@ import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const _kPrimary       = Color(0xFF4361EE);
-const _kBackground    = Color(0xFFEFF6FF);
-const _kTextPrimary   = Color(0xFF1E3A8A);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kCardShadow    = Color(0x0C0F4A75);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
 
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({
@@ -91,28 +80,25 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final title = widget.selectionMode ? s.customersSelectTitle : s.customersTitle;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        backgroundColor: kSurface,
+        foregroundColor: kOnSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
-        ),
         title: _isSearching
             ? TextField(
                 controller: _searchController,
                 autofocus: true,
-                cursorColor: Colors.white,
+                cursorColor: kPrimary,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: kOnSurface,
                   fontWeight: FontWeight.w600,
                 ),
                 decoration: InputDecoration(
                   hintText: s.customersSearchHint,
-                  hintStyle: const TextStyle(color: Colors.white60),
+                  hintStyle: const TextStyle(color: kTextTertiary),
                   border: InputBorder.none,
                 ),
                 onChanged: _handleSearchChanged,
@@ -120,7 +106,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
             : Text(
                 title,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: kOnSurface,
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
                 ),
@@ -128,14 +114,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
         actions: [
           IconButton(
             onPressed: _manageGroups,
-            icon: const Icon(Icons.folder_open_rounded, color: Colors.white),
+            icon: const Icon(Icons.folder_open_rounded, color: kOnSurfaceVariant),
             tooltip: s.customersManageGroupsTooltip,
           ),
           IconButton(
             onPressed: _toggleSearch,
             icon: Icon(
               _isSearching ? Icons.close_rounded : Icons.search,
-              color: Colors.white,
+              color: kOnSurfaceVariant,
             ),
             tooltip: _isSearching ? s.customersCloseSearch : s.customersSearchTooltip,
           ),
@@ -144,7 +130,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
       body: SafeArea(
         child: _isLoadingClients && _clients.isEmpty
             ? const Center(
-                child: CircularProgressIndicator(color: _kPrimary),
+                child: CircularProgressIndicator(color: kPrimary),
               )
             : RefreshIndicator(
                 onRefresh: () => _loadClients(reset: true),
@@ -191,7 +177,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                           title: 'No customers yet',
                           subtitle: 'Add your first customer to get started',
                           actionLabel: 'Add Customer',
-                          iconColor: _kPrimary,
+                          iconColor: kPrimary,
                           onAction: _openCustomerForm,
                         )
                       else
@@ -244,9 +230,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: widget.selectionMode ? 'pick-customer-fab' : 'customers-fab',
-        backgroundColor: _kPrimary,
+        backgroundColor: kPrimary,
         foregroundColor: Colors.white,
-        elevation: 6,
+        elevation: 2,
         onPressed: _openCustomerForm,
         icon: const Icon(Icons.person_add_alt_1_rounded),
         label: Text(AppStrings.of(context).customersAddButton),
@@ -560,7 +546,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
 enum _CustomerAction { moveToGroup, delete }
 
-// ─── Intro card ───────────────────────────────────────────────────────────────
+// --- Intro card ---
 
 class _CustomersIntroCard extends StatelessWidget {
   const _CustomersIntroCard({required this.selectionMode});
@@ -573,28 +559,21 @@ class _CustomersIntroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFBDD5F0), width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: _kCardShadow,
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: const [kWhisperShadow],
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
+              color: kSurfaceContainerLow,
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Icon(
               Icons.people_alt_rounded,
-              color: _kPrimary,
+              color: kPrimary,
               size: 22,
             ),
           ),
@@ -608,7 +587,7 @@ class _CustomersIntroCard extends StatelessWidget {
                       ? s.customersSelectIntroTitle
                       : s.customersIntroTitle,
                   style: const TextStyle(
-                    color: _kTextPrimary,
+                    color: kOnSurface,
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
                   ),
@@ -619,7 +598,7 @@ class _CustomersIntroCard extends StatelessWidget {
                       ? s.customersSelectIntroBody
                       : s.customersIntroBody,
                   style: const TextStyle(
-                    color: _kTextSecondary,
+                    color: kOnSurfaceVariant,
                     fontSize: 12,
                     height: 1.4,
                   ),
@@ -633,7 +612,7 @@ class _CustomersIntroCard extends StatelessWidget {
   }
 }
 
-// ─── Groups toolbar ───────────────────────────────────────────────────────────
+// --- Groups toolbar ---
 
 class _GroupsToolbar extends StatelessWidget {
   const _GroupsToolbar({
@@ -661,7 +640,7 @@ class _GroupsToolbar extends StatelessWidget {
   }
 }
 
-// ─── Group filter bar ─────────────────────────────────────────────────────────
+// --- Group filter bar ---
 
 class _GroupFilterBar extends StatelessWidget {
   const _GroupFilterBar({
@@ -685,16 +664,13 @@ class _GroupFilterBar extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? _kPrimary : const Color(0xFFEFF6FF),
+          color: selected ? kPrimary : kSurfaceContainerLow,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: selected ? _kPrimary : const Color(0xFFBDD5F0),
-          ),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : _kTextSecondary,
+            color: selected ? Colors.white : kOnSurfaceVariant,
             fontSize: 13,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           ),
@@ -739,7 +715,7 @@ class _GroupFilterBar extends StatelessWidget {
   }
 }
 
-// ─── Customer card ────────────────────────────────────────────────────────────
+// --- Customer card ---
 
 class _CustomerCard extends StatelessWidget {
   const _CustomerCard({
@@ -764,19 +740,9 @@ class _CustomerCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isSelected ? kPrimaryContainer : kSurfaceLowest,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isSelected ? _kPrimary : const Color(0xFFBDD5F0),
-          width: isSelected ? 1.5 : 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: isSelected ? const Color(0x182563EB) : const Color(0x0C2563EB),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       child: Material(
         color: Colors.transparent,
@@ -792,11 +758,11 @@ class _CustomerCard extends StatelessWidget {
                 // Avatar
                 CircleAvatar(
                   radius: 22,
-                  backgroundColor: const Color(0xFFEFF6FF),
+                  backgroundColor: kSurfaceContainerLow,
                   child: Text(
                     client.initials,
                     style: const TextStyle(
-                      color: _kPrimary,
+                      color: kPrimary,
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                     ),
@@ -813,7 +779,7 @@ class _CustomerCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: _kTextPrimary,
+                          color: kOnSurface,
                         ),
                       ),
                       if (subtitle.isNotEmpty) ...[
@@ -824,7 +790,7 @@ class _CustomerCard extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             fontSize: 12,
-                            color: _kTextSecondary,
+                            color: kOnSurfaceVariant,
                           ),
                         ),
                       ],
@@ -841,13 +807,13 @@ class _CustomerCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: kPrimaryContainer,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       groupName,
                       style: const TextStyle(
-                        color: _kPrimary,
+                        color: kPrimary,
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -860,13 +826,13 @@ class _CustomerCard extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFEFF6FF),
+                      color: kPrimaryContainer,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
                       AppStrings.of(context).customersSelected,
                       style: const TextStyle(
-                        color: _kPrimary,
+                        color: kPrimary,
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -878,7 +844,7 @@ class _CustomerCard extends StatelessWidget {
                         ? Icons.check_circle_outline_rounded
                         : Icons.chevron_right_rounded,
                     size: 20,
-                    color: _kTextSecondary,
+                    color: kOnSurfaceVariant,
                   ),
               ],
             ),
@@ -889,7 +855,7 @@ class _CustomerCard extends StatelessWidget {
   }
 }
 
-// ─── Empty state ──────────────────────────────────────────────────────────────
+// --- Empty state ---
 
 class _EmptyCustomersState extends StatelessWidget {
   const _EmptyCustomersState({
@@ -936,13 +902,13 @@ class _EmptyCustomersState extends StatelessWidget {
                 width: 72,
                 height: 72,
                 decoration: const BoxDecoration(
-                  color: Color(0xFFEFF6FF),
+                  color: kSurfaceContainerLow,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
                   Icons.group_add_rounded,
                   size: 36,
-                  color: _kPrimary,
+                  color: kPrimary,
                 ),
               ),
               const SizedBox(height: 16),
@@ -950,7 +916,7 @@ class _EmptyCustomersState extends StatelessWidget {
                 title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: _kTextPrimary,
+                  color: kOnSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -958,7 +924,7 @@ class _EmptyCustomersState extends StatelessWidget {
               Text(
                 description,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: _kTextSecondary,
+                  color: kOnSurfaceVariant,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -966,7 +932,7 @@ class _EmptyCustomersState extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: _kPrimary,
+                  backgroundColor: kPrimary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,

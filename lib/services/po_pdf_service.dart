@@ -11,17 +11,14 @@ class PoPdfService {
   PoPdfService._();
   static final PoPdfService instance = PoPdfService._();
 
-  // ── Brand palette ──────────────────────────────────────────────────────────
-  static const PdfColor _navy = PdfColor(0.07, 0.24, 0.52);
-  static const PdfColor _navyLight = PdfColor(0.14, 0.34, 0.65);
-  static const PdfColor _surface = PdfColor(0.97, 0.98, 1.00);
-  static const PdfColor _border = PdfColor(0.87, 0.90, 0.95);
-  static const PdfColor _mutedText = PdfColor(0.45, 0.51, 0.62);
-  static const PdfColor _bodyText = PdfColor(0.20, 0.25, 0.35);
-  static const PdfColor _headingText = PdfColor(0.08, 0.13, 0.22);
-  static const PdfColor _headerBg = PdfColor(0.94, 0.97, 1.00);
+  // ── Monochrome palette ───────────────────────────────────────────────────
+  static const PdfColor _black = PdfColors.black;
+  static const PdfColor _darkGray = PdfColor(0.30, 0.30, 0.30);
+  static const PdfColor _midGray = PdfColor(0.55, 0.55, 0.55);
+  static const PdfColor _lightGray = PdfColor(0.94, 0.94, 0.94); // #F0F0F0
+  static const PdfColor _borderColor = PdfColor(0.75, 0.75, 0.75);
 
-  // ── Public API ─────────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────────────
 
   Future<void> generateAndShare(
     PurchaseOrder po,
@@ -47,7 +44,7 @@ class PoPdfService {
     );
   }
 
-  // ── Page builder ──────────────────────────────────────────────────────────
+  // ── Page builder ──────────────────────────────────────────────────────
 
   pw.Widget _buildPage(PurchaseOrder po, BusinessProfile? profile) {
     return pw.Column(
@@ -55,7 +52,7 @@ class PoPdfService {
       children: [
         _buildHeader(po, profile),
         pw.SizedBox(height: 20),
-        pw.Divider(color: _border, thickness: 1),
+        pw.Divider(color: _borderColor, thickness: 1),
         pw.SizedBox(height: 16),
         _buildSupplierSection(po),
         pw.SizedBox(height: 20),
@@ -67,11 +64,11 @@ class PoPdfService {
           _buildNotesSection(po),
         ],
         pw.Spacer(),
-        pw.Divider(color: _border, thickness: 1),
+        pw.Divider(color: _borderColor, thickness: 1),
         pw.SizedBox(height: 6),
         pw.Text(
           'This is a computer generated Purchase Order.',
-          style: pw.TextStyle(fontSize: 9, color: _mutedText),
+          style: pw.TextStyle(fontSize: 9, color: _midGray),
         ),
       ],
     );
@@ -91,28 +88,28 @@ class PoPdfService {
               style: pw.TextStyle(
                 fontSize: 18,
                 fontWeight: pw.FontWeight.bold,
-                color: _headingText,
+                color: _black,
               ),
             ),
             if (profile?.gstin.isNotEmpty == true) ...[
               pw.SizedBox(height: 3),
               pw.Text(
                 'GSTIN: ${profile!.gstin}',
-                style: pw.TextStyle(fontSize: 10, color: _mutedText),
+                style: pw.TextStyle(fontSize: 10, color: _midGray),
               ),
             ],
             if (profile?.address.isNotEmpty == true) ...[
               pw.SizedBox(height: 2),
               pw.Text(
                 profile!.address,
-                style: pw.TextStyle(fontSize: 10, color: _bodyText),
+                style: pw.TextStyle(fontSize: 10, color: _darkGray),
               ),
             ],
             if (profile?.phoneNumber.isNotEmpty == true) ...[
               pw.SizedBox(height: 2),
               pw.Text(
                 profile!.phoneNumber,
-                style: pw.TextStyle(fontSize: 10, color: _bodyText),
+                style: pw.TextStyle(fontSize: 10, color: _darkGray),
               ),
             ],
           ],
@@ -127,7 +124,7 @@ class PoPdfService {
                 vertical: 4,
               ),
               decoration: pw.BoxDecoration(
-                color: _navy,
+                color: _black,
                 borderRadius: pw.BorderRadius.circular(4),
               ),
               child: pw.Text(
@@ -146,19 +143,19 @@ class PoPdfService {
               style: pw.TextStyle(
                 fontSize: 13,
                 fontWeight: pw.FontWeight.bold,
-                color: _navyLight,
+                color: _black,
               ),
             ),
             pw.SizedBox(height: 3),
             pw.Text(
               'Date: ${_formatDate(po.createdAt)}',
-              style: pw.TextStyle(fontSize: 10, color: _bodyText),
+              style: pw.TextStyle(fontSize: 10, color: _darkGray),
             ),
             if (po.expectedDate != null) ...[
               pw.SizedBox(height: 2),
               pw.Text(
                 'Expected: ${_formatDate(po.expectedDate!)}',
-                style: pw.TextStyle(fontSize: 10, color: _mutedText),
+                style: pw.TextStyle(fontSize: 10, color: _midGray),
               ),
             ],
             pw.SizedBox(height: 3),
@@ -167,7 +164,7 @@ class PoPdfService {
               style: pw.TextStyle(
                 fontSize: 10,
                 fontWeight: pw.FontWeight.bold,
-                color: _statusColor(po.status),
+                color: _black,
               ),
             ),
           ],
@@ -180,9 +177,9 @@ class PoPdfService {
     return pw.Container(
       padding: const pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
-        color: _headerBg,
+        color: _lightGray,
         borderRadius: pw.BorderRadius.circular(6),
-        border: pw.Border.all(color: _border),
+        border: pw.Border.all(color: _borderColor),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -192,7 +189,7 @@ class PoPdfService {
             style: pw.TextStyle(
               fontSize: 9,
               fontWeight: pw.FontWeight.bold,
-              color: _mutedText,
+              color: _midGray,
               letterSpacing: 0.8,
             ),
           ),
@@ -202,28 +199,28 @@ class PoPdfService {
             style: pw.TextStyle(
               fontSize: 13,
               fontWeight: pw.FontWeight.bold,
-              color: _headingText,
+              color: _black,
             ),
           ),
           if (po.supplierPhone.isNotEmpty) ...[
             pw.SizedBox(height: 3),
             pw.Text(
               'Phone: ${po.supplierPhone}',
-              style: pw.TextStyle(fontSize: 10, color: _bodyText),
+              style: pw.TextStyle(fontSize: 10, color: _darkGray),
             ),
           ],
           if (po.supplierAddress.isNotEmpty) ...[
             pw.SizedBox(height: 2),
             pw.Text(
               po.supplierAddress,
-              style: pw.TextStyle(fontSize: 10, color: _bodyText),
+              style: pw.TextStyle(fontSize: 10, color: _darkGray),
             ),
           ],
           if (po.supplierGstin.isNotEmpty) ...[
             pw.SizedBox(height: 2),
             pw.Text(
               'GSTIN: ${po.supplierGstin}',
-              style: pw.TextStyle(fontSize: 10, color: _mutedText),
+              style: pw.TextStyle(fontSize: 10, color: _midGray),
             ),
           ],
         ],
@@ -232,37 +229,47 @@ class PoPdfService {
   }
 
   pw.Widget _buildItemsTable(PurchaseOrder po) {
+    final showGst = po.gstEnabled;
     return pw.Table(
-      border: pw.TableBorder.all(color: _border, width: 0.5),
-      columnWidths: const {
-        0: pw.FlexColumnWidth(3.5),
-        1: pw.FlexColumnWidth(1),
-        2: pw.FlexColumnWidth(1.5),
-        3: pw.FlexColumnWidth(1.5),
-      },
+      border: pw.TableBorder.all(color: _borderColor, width: 0.5),
+      columnWidths: showGst
+          ? const {
+              0: pw.FlexColumnWidth(3),
+              1: pw.FlexColumnWidth(1),
+              2: pw.FlexColumnWidth(1),
+              3: pw.FlexColumnWidth(1.5),
+              4: pw.FlexColumnWidth(1.5),
+            }
+          : const {
+              0: pw.FlexColumnWidth(3.5),
+              1: pw.FlexColumnWidth(1),
+              2: pw.FlexColumnWidth(1.5),
+              3: pw.FlexColumnWidth(1.5),
+            },
       children: [
         // Header row
         pw.TableRow(
-          decoration: pw.BoxDecoration(color: _navy),
+          decoration: pw.BoxDecoration(color: _lightGray),
           children: [
             _tableHeaderCell('Item / Description'),
             _tableHeaderCell('Qty'),
-            _tableHeaderCell('Rate (₹)'),
-            _tableHeaderCell('Amount (₹)'),
+            if (showGst) _tableHeaderCell('GST%'),
+            _tableHeaderCell('Rate (Rs.)'),
+            _tableHeaderCell('Amount (Rs.)'),
           ],
         ),
         // Data rows
         ...po.items.asMap().entries.map((entry) {
-          final i = entry.key;
           final item = entry.value;
-          final isEven = i.isEven;
           return pw.TableRow(
-            decoration: pw.BoxDecoration(
-              color: isEven ? PdfColors.white : _surface,
+            decoration: const pw.BoxDecoration(
+              color: PdfColors.white,
             ),
             children: [
               _tableDataCell(item.productName),
               _tableDataCell(item.quantityLabel),
+              if (showGst)
+                _tableDataCell('${item.gstRate.toStringAsFixed(0)}%'),
               _tableDataCell(item.unitPrice.toStringAsFixed(2)),
               _tableDataCell(item.total.toStringAsFixed(2)),
             ],
@@ -276,48 +283,60 @@ class PoPdfService {
     return pw.Align(
       alignment: pw.Alignment.centerRight,
       child: pw.Container(
-        width: 220,
+        width: 240,
         padding: const pw.EdgeInsets.all(12),
         decoration: pw.BoxDecoration(
-          color: _surface,
+          color: PdfColors.white,
           borderRadius: pw.BorderRadius.circular(6),
-          border: pw.Border.all(color: _border),
+          border: pw.Border.all(color: _borderColor),
         ),
         child: pw.Column(
           children: [
+            _totalsRow('Subtotal', 'Rs. ${po.subtotal.toStringAsFixed(2)}'),
+            if (po.hasDiscount) ...[
+              pw.SizedBox(height: 4),
+              _totalsRow(
+                  'Discount${po.discountType == 'percentage' ? ' (${po.discountValue.toStringAsFixed(0)}%)' : ''}',
+                  '- Rs. ${po.discountAmount.toStringAsFixed(2)}'),
+            ],
+            if (po.hasGst) ...[
+              pw.SizedBox(height: 4),
+              if (po.gstType == 'cgst_sgst') ...[
+                _totalsRow(
+                    'CGST',
+                    'Rs. ${po.cgstAmount.toStringAsFixed(2)}'),
+                pw.SizedBox(height: 3),
+                _totalsRow(
+                    'SGST',
+                    'Rs. ${po.sgstAmount.toStringAsFixed(2)}'),
+              ] else
+                _totalsRow(
+                    'IGST',
+                    'Rs. ${po.igstAmount.toStringAsFixed(2)}'),
+              pw.SizedBox(height: 3),
+              _totalsRow(
+                  'Total Tax', 'Rs. ${po.totalTax.toStringAsFixed(2)}'),
+            ],
+            pw.SizedBox(height: 6),
+            pw.Divider(color: _borderColor, thickness: 0.5),
+            pw.SizedBox(height: 6),
             pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
               children: [
                 pw.Text(
-                  'Subtotal',
-                  style: pw.TextStyle(fontSize: 10, color: _bodyText),
-                ),
-                pw.Text(
-                  '₹${po.subtotal.toStringAsFixed(2)}',
-                  style: pw.TextStyle(fontSize: 10, color: _bodyText),
-                ),
-              ],
-            ),
-            pw.SizedBox(height: 6),
-            pw.Divider(color: _border, thickness: 0.5),
-            pw.SizedBox(height: 6),
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              children: [
-                pw.Text(
-                  'TOTAL',
+                  'GRAND TOTAL',
                   style: pw.TextStyle(
                     fontSize: 13,
                     fontWeight: pw.FontWeight.bold,
-                    color: _headingText,
+                    color: _black,
                   ),
                 ),
                 pw.Text(
-                  '₹${po.subtotal.toStringAsFixed(2)}',
+                  'Rs. ${po.grandTotal.toStringAsFixed(2)}',
                   style: pw.TextStyle(
                     fontSize: 13,
                     fontWeight: pw.FontWeight.bold,
-                    color: _navy,
+                    color: _black,
                   ),
                 ),
               ],
@@ -328,14 +347,24 @@ class PoPdfService {
     );
   }
 
+  pw.Widget _totalsRow(String label, String value) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: 10, color: _darkGray)),
+        pw.Text(value, style: pw.TextStyle(fontSize: 10, color: _darkGray)),
+      ],
+    );
+  }
+
   pw.Widget _buildNotesSection(PurchaseOrder po) {
     return pw.Container(
       width: double.infinity,
       padding: const pw.EdgeInsets.all(10),
       decoration: pw.BoxDecoration(
-        color: _headerBg,
+        color: _lightGray,
         borderRadius: pw.BorderRadius.circular(6),
-        border: pw.Border.all(color: _border),
+        border: pw.Border.all(color: _borderColor),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -345,21 +374,21 @@ class PoPdfService {
             style: pw.TextStyle(
               fontSize: 9,
               fontWeight: pw.FontWeight.bold,
-              color: _mutedText,
+              color: _midGray,
               letterSpacing: 0.8,
             ),
           ),
           pw.SizedBox(height: 4),
           pw.Text(
             po.notes,
-            style: pw.TextStyle(fontSize: 10, color: _bodyText),
+            style: pw.TextStyle(fontSize: 10, color: _darkGray),
           ),
         ],
       ),
     );
   }
 
-  // ── Table helpers ──────────────────────────────────────────────────────────
+  // ── Table helpers ──────────────────────────────────────────────────────
 
   pw.Widget _tableHeaderCell(String text) {
     return pw.Padding(
@@ -369,7 +398,7 @@ class PoPdfService {
         style: pw.TextStyle(
           fontSize: 9,
           fontWeight: pw.FontWeight.bold,
-          color: PdfColors.white,
+          color: _black,
           letterSpacing: 0.3,
         ),
       ),
@@ -381,12 +410,12 @@ class PoPdfService {
       padding: const pw.EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       child: pw.Text(
         text,
-        style: pw.TextStyle(fontSize: 10, color: _bodyText),
+        style: pw.TextStyle(fontSize: 10, color: _darkGray),
       ),
     );
   }
 
-  // ── Utilities ─────────────────────────────────────────────────────────────
+  // ── Utilities ─────────────────────────────────────────────────────────
 
   String _formatDate(DateTime date) =>
       '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
@@ -397,15 +426,6 @@ class PoPdfService {
       PurchaseOrderStatus.confirmed => 'CONFIRMED',
       PurchaseOrderStatus.received => 'RECEIVED',
       PurchaseOrderStatus.cancelled => 'CANCELLED',
-    };
-  }
-
-  PdfColor _statusColor(PurchaseOrderStatus status) {
-    return switch (status) {
-      PurchaseOrderStatus.draft => _mutedText,
-      PurchaseOrderStatus.confirmed => const PdfColor(0.72, 0.40, 0.04),
-      PurchaseOrderStatus.received => const PdfColor(0.10, 0.52, 0.27),
-      PurchaseOrderStatus.cancelled => const PdfColor(0.74, 0.13, 0.13),
     };
   }
 }

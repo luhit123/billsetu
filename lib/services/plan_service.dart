@@ -62,8 +62,8 @@ class PlanService {
     AppPlan.raja: PlanLimits(
       name: 'raja',
       displayName: 'Raja',
-      priceMonthly: 99,
-      priceAnnual: 799,
+      priceMonthly: 120,
+      priceAnnual: 999,
       maxInvoicesPerMonth: -1,    // unlimited
       maxCustomers: -1,           // unlimited
       maxProducts: -1,            // unlimited
@@ -77,8 +77,8 @@ class PlanService {
     AppPlan.maharaja: PlanLimits(
       name: 'maharaja',
       displayName: 'Maharaja',
-      priceMonthly: 199,
-      priceAnnual: 1499,
+      priceMonthly: 239,
+      priceAnnual: 1999,
       maxInvoicesPerMonth: -1,    // unlimited
       maxCustomers: -1,           // unlimited
       maxProducts: -1,            // unlimited

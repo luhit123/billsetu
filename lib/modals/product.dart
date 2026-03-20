@@ -15,7 +15,7 @@ class Product {
     this.gstApplicable = false,
     this.currentStock = 0.0,
     this.minStockAlert = 0.0,
-    this.trackInventory = false,
+    this.trackInventory = true,
   });
 
   final String id;
@@ -99,7 +99,7 @@ class Product {
       gstApplicable: map['gstApplicable'] as bool? ?? false,
       currentStock: (map['currentStock'] as num? ?? 0).toDouble(),
       minStockAlert: (map['minStockAlert'] as num? ?? 0).toDouble(),
-      trackInventory: map['trackInventory'] as bool? ?? false,
+      trackInventory: map['trackInventory'] as bool? ?? true,
     );
   }
 

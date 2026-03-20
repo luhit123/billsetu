@@ -4,23 +4,12 @@ import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/create_purchase_order_screen.dart';
 import 'package:billeasy/screens/purchase_order_details_screen.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF4361EE);
-const _kBackground = Color(0xFFEFF6FF);
-const _kTextPrimary = Color(0xFF1E3A8A);
-const _kTextSecondary = Color(0xFF5B7A9A);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
-
-// Status colours
+// Status colours (kept as semantic)
 const _kDraft = Color(0xFF6B7280);
 const _kDraftBg = Color(0xFFF3F4F6);
 const _kConfirmed = Color(0xFFF59E0B);
@@ -130,7 +119,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     final filtered = _filtered;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: _buildAppBar(),
       body: SafeArea(
         child: RefreshIndicator(
@@ -190,12 +179,12 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             width: 72,
                             height: 72,
                             decoration: BoxDecoration(
-                              color: const Color(0xFFEFF6FF),
+                              color: kSurfaceContainerLow,
                               borderRadius: BorderRadius.circular(24),
                             ),
                             child: const Icon(
                               Icons.shopping_cart_outlined,
-                              color: _kPrimary,
+                              color: kPrimary,
                               size: 36,
                             ),
                           ),
@@ -207,7 +196,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             style: const TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
-                              color: _kTextPrimary,
+                              color: kOnSurface,
                             ),
                             textAlign: TextAlign.center,
                           ),
@@ -216,7 +205,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             const Text(
                               'Create your first PO',
                               style: TextStyle(
-                                color: _kTextSecondary,
+                                color: kOnSurfaceVariant,
                                 fontSize: 14,
                                 height: 1.5,
                               ),
@@ -263,7 +252,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           context,
           MaterialPageRoute(builder: (_) => const CreatePurchaseOrderScreen()),
         ),
-        backgroundColor: _kPrimary,
+        backgroundColor: kPrimary,
         foregroundColor: Colors.white,
         icon: const Icon(Icons.add_rounded),
         label: const Text('New PO'),
@@ -275,27 +264,23 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
+      backgroundColor: kSurface,
+      foregroundColor: kOnSurface,
       elevation: 0,
-      scrolledUnderElevation: 2,
-      shadowColor: Colors.black26,
+      scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
-      ),
       title: _searching
           ? TextField(
               controller: _searchCtrl,
               autofocus: true,
-              cursorColor: Colors.white,
+              cursorColor: kOnSurface,
               style: const TextStyle(
-                color: Colors.white,
+                color: kOnSurface,
                 fontWeight: FontWeight.w600,
               ),
               decoration: const InputDecoration(
                 hintText: 'Search orders…',
-                hintStyle: TextStyle(color: Colors.white60),
+                hintStyle: TextStyle(color: kTextTertiary),
                 border: InputBorder.none,
               ),
               onChanged: _handleSearchChanged,
@@ -305,7 +290,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 20,
-                color: Colors.white,
+                color: kOnSurface,
               ),
             ),
       actions: [
@@ -324,7 +309,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           },
           icon: Icon(
             _searching ? Icons.close_rounded : Icons.search_rounded,
-            color: Colors.white,
+            color: kOnSurface,
           ),
         ),
       ],
@@ -340,7 +325,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? _kPrimary : const Color(0xFFF3F4F6),
+          color: active ? kPrimary : kSurfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -348,7 +333,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : _kTextSecondary,
+            color: active ? Colors.white : kTextSecondary,
           ),
         ),
       ),
@@ -389,15 +374,9 @@ class _SummaryStrip extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0A000000),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       child: Row(
         children: [
@@ -446,7 +425,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: _kTextPrimary,
+              color: kOnSurface,
             ),
           ),
           const SizedBox(height: 2),
@@ -455,7 +434,7 @@ class _SummaryCell extends StatelessWidget {
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: _kTextSecondary,
+              color: kOnSurfaceVariant,
             ),
           ),
         ],
@@ -467,7 +446,7 @@ class _SummaryCell extends StatelessWidget {
 class _VertDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1, height: 36, color: const Color(0xFFE5E7EB));
+    return Container(width: 1, height: 36, color: kSurfaceDim);
   }
 }
 
@@ -507,15 +486,9 @@ class _POTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x08000000),
-              blurRadius: 6,
-              offset: Offset(0, 2),
-            ),
-          ],
+          boxShadow: const [kSubtleShadow],
         ),
         child: Row(
           children: [
@@ -523,13 +496,13 @@ class _POTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: _kPrimary.withAlpha(15),
+                color: kPrimaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.shopping_cart_outlined,
                 size: 20,
-                color: _kPrimary,
+                color: kPrimary,
               ),
             ),
             const SizedBox(width: 12),
@@ -542,7 +515,7 @@ class _POTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _kTextPrimary,
+                      color: kOnSurface,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -550,7 +523,7 @@ class _POTile extends StatelessWidget {
                     '${order.orderNumber} · ${dateFmt.format(order.createdAt)} · $itemLabel',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF9CA3AF),
+                      color: kTextTertiary,
                     ),
                   ),
                 ],
@@ -565,7 +538,7 @@ class _POTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: _kTextPrimary,
+                    color: kOnSurface,
                   ),
                 ),
                 const SizedBox(height: 5),

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:billeasy/modals/product.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/empty_state_widget.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:billeasy/screens/product_form_screen.dart';
@@ -9,17 +10,6 @@ import 'package:billeasy/services/product_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF4361EE);
-const _kBackground = Color(0xFFEFF6FF);
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF1E3A8A);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
 
 class ProductsScreen extends StatefulWidget {
   /// When [selectionMode] is true the screen returns a [Product] via
@@ -42,7 +32,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   final _searchCtrl = TextEditingController();
   final _currFmt = NumberFormat.currency(
     locale: 'en_IN',
-    symbol: '₹',
+    symbol: '\u20b9',
     decimalDigits: 0,
   );
 
@@ -50,13 +40,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String _query = '';
   Timer? _searchDebounce;
 
-  // ── Stream-based state ────────────────────────────────────────────────────
+  // -- Stream-based state --
   List<Product> _allProducts = [];
   bool _isLoading = true;
   Object? _loadError;
   StreamSubscription<List<Product>>? _productSub;
 
-  /// In-memory search filter — zero network calls.
+  /// In-memory search filter -- zero network calls.
   List<Product> get _filtered {
     if (_query.isEmpty) return _allProducts;
     final q = _query.toLowerCase();
@@ -97,15 +87,15 @@ class _ProductsScreenState extends State<ProductsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: _buildAppBar(),
       floatingActionButton: widget.selectionMode
           ? null
           : FloatingActionButton(
               onPressed: _openAddProduct,
-              backgroundColor: _kPrimary,
+              backgroundColor: kPrimary,
               foregroundColor: Colors.white,
-              elevation: 6,
+              elevation: 2,
               child: const Icon(Icons.add_rounded),
             ),
       body: RefreshIndicator(
@@ -135,7 +125,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         ? 'Add products to use them in invoices'
                         : 'Try a different search term',
                     actionLabel: _query.isEmpty && !widget.selectionMode ? 'Add Product' : null,
-                    iconColor: _kPrimary,
+                    iconColor: kPrimary,
                     onAction: _query.isEmpty && !widget.selectionMode ? _openAddProduct : null,
                   ),
                 ],
@@ -166,29 +156,25 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // ── AppBar ────────────────────────────────────────────────────────────────
+  // -- AppBar --
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
+      backgroundColor: kSurface,
+      foregroundColor: kOnSurface,
       elevation: 0,
-      scrolledUnderElevation: 2,
-      shadowColor: Colors.black26,
+      scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
-      ),
       title: _isSearching
           ? TextField(
               controller: _searchCtrl,
               autofocus: true,
               style: const TextStyle(
-                  color: Colors.white, fontWeight: FontWeight.w600),
-              cursorColor: Colors.white,
+                  color: kOnSurface, fontWeight: FontWeight.w600),
+              cursorColor: kPrimary,
               decoration: const InputDecoration(
-                hintText: 'Search products…',
-                hintStyle: TextStyle(color: Colors.white60),
+                hintText: 'Search products\u2026',
+                hintStyle: TextStyle(color: kTextTertiary),
                 border: InputBorder.none,
               ),
               onChanged: _handleSearchChanged,
@@ -196,7 +182,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           : Text(
               widget.selectionMode ? 'Select Product' : 'Products',
               style: const TextStyle(
-                color: Colors.white,
+                color: kOnSurface,
                 fontWeight: FontWeight.w700,
                 fontSize: 18,
               ),
@@ -205,7 +191,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         IconButton(
           icon: Icon(
             _isSearching ? Icons.close_rounded : Icons.search_rounded,
-            color: Colors.white,
+            color: kOnSurfaceVariant,
           ),
           onPressed: () {
             _searchDebounce?.cancel();
@@ -214,7 +200,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 _searchCtrl.clear();
                 _query = '';
                 _isSearching = false;
-                // No reload — in-memory filter clears instantly.
+                // No reload -- in-memory filter clears instantly.
               } else {
                 _isSearching = true;
               }
@@ -223,7 +209,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
         ),
         if (!widget.selectionMode)
           IconButton(
-            icon: const Icon(Icons.add_rounded, color: Colors.white),
+            icon: const Icon(Icons.add_rounded, color: kOnSurfaceVariant),
             onPressed: _openAddProduct,
             tooltip: 'Add Product',
           ),
@@ -231,20 +217,18 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
-  // ── Logic ────────────────────────────────────────────────────────────────
+  // -- Logic --
 
   void _handleProductTap(Product product) {
     if (widget.selectionMode) {
       Navigator.of(context).pop(product);
-    } else if (product.trackInventory) {
+    } else {
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => ProductMovementsScreen(product: product),
         ),
       );
-    } else {
-      _openEditProduct(product);
     }
   }
 
@@ -253,7 +237,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context,
       MaterialPageRoute(builder: (_) => const ProductFormScreen()),
     );
-    // Stream auto-updates — no manual reload needed.
+    // Stream auto-updates -- no manual reload needed.
   }
 
   Future<void> _openEditProduct(Product product) async {
@@ -261,7 +245,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       context,
       MaterialPageRoute(builder: (_) => ProductFormScreen(initialProduct: product)),
     );
-    // Stream auto-updates — no manual reload needed.
+    // Stream auto-updates -- no manual reload needed.
   }
 
   Future<void> _confirmDelete(Product product) async {
@@ -277,7 +261,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete', style: TextStyle(color: Color(0xFFEF4444))),
+            child: const Text('Delete', style: TextStyle(color: kOverdue)),
           ),
         ],
       ),
@@ -286,7 +270,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     if (confirmed != true || !mounted) return;
     try {
       await _svc.deleteProduct(product.id);
-      // Stream auto-updates — list refreshes automatically.
+      // Stream auto-updates -- list refreshes automatically.
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -299,14 +283,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
     _searchDebounce?.cancel();
     _searchDebounce = Timer(const Duration(milliseconds: 150), () {
       if (!mounted) return;
-      // Filter in-memory — no Firestore round-trip on every keystroke.
+      // Filter in-memory -- no Firestore round-trip on every keystroke.
       setState(() => _query = value.trim());
     });
   }
 
 }
 
-// ── Product card ──────────────────────────────────────────────────────────────
+// -- Product card --
 
 class _ProductCard extends StatelessWidget {
   const _ProductCard({
@@ -334,34 +318,20 @@ class _ProductCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: isPreselected ? const Color(0xFFEFF6FF) : Colors.white,
+          color: isPreselected ? kPrimaryContainer : kSurfaceLowest,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: isPreselected
-                ? const Color(0xFF4361EE).withValues(alpha: 0.5)
-                : const Color(0xFFBDD5F0),
-            width: isPreselected ? 1.5 : 1.2,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: isPreselected
-                  ? const Color(0x150F4A75)
-                  : const Color(0x0C0F4A75),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: const [kSubtleShadow],
         ),
         child: Row(
           children: [
             // Avatar
             CircleAvatar(
               radius: 22,
-              backgroundColor: const Color(0xFFEFF6FF),
+              backgroundColor: kSurfaceContainerLow,
               child: Text(
                 product.initials,
                 style: const TextStyle(
-                  color: _kPrimary,
+                  color: kPrimary,
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                 ),
@@ -379,7 +349,7 @@ class _ProductCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,
-                      color: _kTitle,
+                      color: kOnSurface,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -394,7 +364,7 @@ class _ProductCard extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: _kPrimary,
+                          color: kPrimary,
                         ),
                       ),
                     ],
@@ -404,16 +374,14 @@ class _ProductCard extends StatelessWidget {
                     Text(
                       product.description,
                       style: const TextStyle(
-                          fontSize: 12, color: _kLabel),
+                          fontSize: 12, color: kOnSurfaceVariant),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                   // Stock badge
-                  if (product.trackInventory) ...[
-                    const SizedBox(height: 6),
-                    _StockBadge(product: product),
-                  ],
+                  const SizedBox(height: 6),
+                  _StockBadge(product: product),
                 ],
               ),
             ),
@@ -422,7 +390,7 @@ class _ProductCard extends StatelessWidget {
             if (!selectionMode) ...[
               IconButton(
                 icon: const Icon(Icons.edit_outlined,
-                    size: 18, color: _kLabel),
+                    size: 18, color: kOnSurfaceVariant),
                 onPressed: onEdit,
                 tooltip: 'Edit',
                 padding: EdgeInsets.zero,
@@ -431,7 +399,7 @@ class _ProductCard extends StatelessWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.delete_outline,
-                    size: 18, color: Color(0xFFEF4444)),
+                    size: 18, color: kOverdue),
                 onPressed: onDelete,
                 tooltip: 'Delete',
                 padding: EdgeInsets.zero,
@@ -440,7 +408,7 @@ class _ProductCard extends StatelessWidget {
               ),
             ] else
               const Icon(Icons.chevron_right_rounded,
-                  color: _kLabel, size: 20),
+                  color: kOnSurfaceVariant, size: 20),
           ],
         ),
       ),
@@ -448,7 +416,7 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
-// ── Stock badge ───────────────────────────────────────────────────────────────
+// -- Stock badge --
 
 class _StockBadge extends StatelessWidget {
   const _StockBadge({required this.product});
@@ -461,20 +429,20 @@ class _StockBadge extends StatelessWidget {
     final String label;
 
     if (product.currentStock <= 0) {
-      bgColor = const Color(0xFFFFE5E5);
-      textColor = const Color(0xFFD32F2F);
+      bgColor = kOverdueBg;
+      textColor = kOverdue;
       label = 'Out of Stock';
     } else if (product.minStockAlert > 0 &&
         product.currentStock <= product.minStockAlert) {
-      bgColor = const Color(0xFFFFF3E0);
-      textColor = const Color(0xFFE65100);
+      bgColor = kPendingBg;
+      textColor = kPending;
       final qty = product.currentStock == product.currentStock.truncateToDouble()
           ? product.currentStock.toStringAsFixed(0)
           : product.currentStock.toStringAsFixed(2);
       label = '\u26a0 Low Stock: $qty';
     } else {
-      bgColor = const Color(0xFFE8F5E9);
-      textColor = const Color(0xFF2E7D32);
+      bgColor = kPaidBg;
+      textColor = kPaid;
       final qty = product.currentStock == product.currentStock.truncateToDouble()
           ? product.currentStock.toStringAsFixed(0)
           : product.currentStock.toStringAsFixed(2);
@@ -509,16 +477,15 @@ class _UnitPill extends StatelessWidget {
       padding:
           const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFFF0F4FF),
+        color: kSurfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFBDD5F0)),
       ),
       child: Text(
         unit,
         style: const TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: _kLabel,
+          color: kOnSurfaceVariant,
         ),
       ),
     );

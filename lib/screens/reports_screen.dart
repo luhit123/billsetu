@@ -5,23 +5,11 @@ import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show NumberFormat;
 
-// ── Brand colours ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF4361EE);
-const _kNavy = Color(0xFF1E3A8A);
-const _kTeal = Color(0xFF6366F1);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kLabel = Color(0xFF5B7A9A);
-const _kTitle = Color(0xFF1E3A8A);
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
-
+// Status colours (kept as semantic)
 const _kPaid = Color(0xFF22C55E);
 const _kPaidBg = Color(0xFFDCFCE7);
 const _kAmber = Color(0xFFF59E0B);
@@ -241,7 +229,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 
   Color _ageBucketColor(int days) {
-    if (days <= 30) return _kTeal;
+    if (days <= 30) return kPrimary;
     if (days <= 60) return _kAmber;
     if (days <= 90) return const Color(0xFFEA580C);
     return _kRed;
@@ -269,23 +257,36 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget build(BuildContext context) {
     if (!PlanService.instance.hasReports) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Reports')),
+        backgroundColor: kSurface,
+        appBar: AppBar(
+          title: const Text('Reports'),
+          backgroundColor: kSurface,
+          foregroundColor: kOnSurface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 64, color: Color(0xFFBDD5F0)),
+                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
                 const SizedBox(height: 16),
-                const Text('Reports & Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF1E3A8A))),
+                const Text('Reports & Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
                 const SizedBox(height: 8),
-                const Text('Upgrade to Maharaja plan to access detailed reports.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF5B7A9A))),
+                const Text('Upgrade to Maharaja plan to access detailed reports.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Reports'))),
                   icon: const Icon(Icons.workspace_premium),
                   label: const Text('Upgrade Now'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
                 ),
               ],
             ),
@@ -295,31 +296,27 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        backgroundColor: kSurface,
+        foregroundColor: kOnSurface,
         elevation: 0,
-        scrolledUnderElevation: 2,
-        shadowColor: Colors.black26,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
-        ),
         title: const Text(
           'Financial Reports',
           style: TextStyle(
-            color: Colors.white,
+            color: kOnSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
         ),
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          indicatorColor: kPrimary,
           indicatorWeight: 3,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white54,
+          labelColor: kOnSurface,
+          unselectedLabelColor: kOnSurfaceVariant,
           labelStyle: const TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
@@ -435,8 +432,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                             height: 22,
                             decoration: BoxDecoration(
                               color: rank == 1
-                                  ? _kNavy
-                                  : _kBackground,
+                                  ? kPrimary
+                                  : kSurfaceContainerLow,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Center(
@@ -447,7 +444,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                                   fontWeight: FontWeight.w700,
                                   color: rank == 1
                                       ? Colors.white
-                                      : _kLabel,
+                                      : kOnSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -459,7 +456,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                               style: const TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: _kTitle,
+                                color: kOnSurface,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -469,7 +466,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                             style: const TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: _kPrimary,
+                              color: kPrimary,
                             ),
                           ),
                         ],
@@ -480,9 +477,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                         child: LinearProgressIndicator(
                           value: barFraction,
                           minHeight: 5,
-                          backgroundColor: _kBackground,
+                          backgroundColor: kSurfaceContainerLow,
                           valueColor:
-                              const AlwaysStoppedAnimation(_kTeal),
+                              const AlwaysStoppedAnimation(kPrimary),
                         ),
                       ),
                     ],
@@ -497,6 +494,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           const SizedBox(height: 20),
           _emptyState(
             icon: Icons.bar_chart_rounded,
+            iconColor: const Color(0xFF5856D6),
             title: 'No revenue data',
             subtitle: 'No invoices found for this period.',
           ),
@@ -537,28 +535,15 @@ class _ReportsScreenState extends State<ReportsScreen>
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  gradient: selected ? _kGradient : null,
-                  color: selected ? null : Colors.white,
+                  color: selected ? kPrimary : kSurfaceLowest,
                   borderRadius: BorderRadius.circular(50),
-                  border: Border.all(
-                    color: selected ? Colors.transparent : _kBorder,
-                  ),
-                  boxShadow: selected
-                      ? [
-                          BoxShadow(
-                            color: _kNavy.withValues(alpha: 0.22),
-                            blurRadius: 8,
-                            offset: const Offset(0, 3),
-                          ),
-                        ]
-                      : null,
                 ),
                 child: Text(
                   label,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : _kLabel,
+                    color: selected ? Colors.white : kOnSurfaceVariant,
                   ),
                 ),
               ),
@@ -648,7 +633,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           bucket.key,
                           style: const TextStyle(
                             fontSize: 13,
-                            color: _kLabel,
+                            color: kOnSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -659,7 +644,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
                           color:
-                              bucket.value > 0 ? color : _kLabel,
+                              bucket.value > 0 ? color : kOnSurfaceVariant,
                         ),
                       ),
                     ],
@@ -676,6 +661,7 @@ class _ReportsScreenState extends State<ReportsScreen>
         if (invoices.isEmpty)
           _emptyState(
             icon: Icons.check_circle_outline_rounded,
+            iconColor: const Color(0xFF34C759),
             title: 'All caught up!',
             subtitle: 'No outstanding receivables at the moment.',
           ),
@@ -703,16 +689,9 @@ class _ReportsScreenState extends State<ReportsScreen>
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _kBorder),
-          boxShadow: [
-            BoxShadow(
-              color: _kNavy.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 3),
-            ),
-          ],
+          boxShadow: const [kSubtleShadow],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -726,7 +705,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                     style: const TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: _kTitle,
+                      color: kOnSurface,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -735,7 +714,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                     inv.invoiceNumber,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: _kLabel,
+                      color: kOnSurfaceVariant,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -779,7 +758,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 const Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: _kLabel,
+                  color: kOnSurfaceVariant,
                 ),
               ],
             ),
@@ -804,6 +783,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     if (stats.isEmpty) {
       return _emptyState(
         icon: Icons.inventory_2_outlined,
+        iconColor: const Color(0xFFFF9500),
         title: 'No product data yet',
         subtitle: 'Create invoices with line items to see product performance.',
       );
@@ -835,8 +815,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                           height: 32,
                           decoration: BoxDecoration(
                             color: i == 0
-                                ? _kNavy
-                                : _kBackground,
+                                ? kPrimary
+                                : kSurfaceContainerLow,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(
@@ -847,7 +827,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                                 fontWeight: FontWeight.w700,
                                 color: i == 0
                                     ? Colors.white
-                                    : _kLabel,
+                                    : kOnSurfaceVariant,
                               ),
                             ),
                           ),
@@ -862,7 +842,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: _kTitle,
+                                  color: kOnSurface,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -887,7 +867,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
-                            color: _kPrimary,
+                            color: kPrimary,
                           ),
                         ),
                       ],
@@ -896,7 +876,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   if (!isLast)
                     Container(
                       height: 1,
-                      color: _kBackground,
+                      color: kSurfaceContainerLow,
                       margin: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                 ],
@@ -913,14 +893,14 @@ class _ReportsScreenState extends State<ReportsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: _kBackground,
+        color: kSurfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
         style: const TextStyle(
           fontSize: 11,
-          color: _kLabel,
+          color: kOnSurfaceVariant,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -939,20 +919,14 @@ class _ReportsScreenState extends State<ReportsScreen>
     required double value,
     required IconData icon,
     required String subtitle,
-    Color color = _kPrimary,
+    Color color = kPrimary,
   }) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: _kGradient,
+        gradient: kSignatureGradient,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: _kNavy.withValues(alpha: 0.28),
-            blurRadius: 18,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: const [kWhisperShadow],
       ),
       child: Row(
         children: [
@@ -1024,7 +998,6 @@ class _ReportsScreenState extends State<ReportsScreen>
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1062,7 +1035,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             width: 4,
             height: 16,
             decoration: BoxDecoration(
-              color: _kTeal,
+              color: kPrimary,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -1072,7 +1045,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             style: const TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: _kTeal,
+              color: kPrimary,
               letterSpacing: 1.1,
             ),
           ),
@@ -1084,7 +1057,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget _loadingWidget() {
     return const Center(
       child: CircularProgressIndicator(
-        valueColor: AlwaysStoppedAnimation(_kTeal),
+        valueColor: AlwaysStoppedAnimation(kPrimary),
       ),
     );
   }
@@ -1107,14 +1080,14 @@ class _ReportsScreenState extends State<ReportsScreen>
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: _kTitle,
+                color: kOnSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: _kLabel),
+              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
@@ -1122,7 +1095,7 @@ class _ReportsScreenState extends State<ReportsScreen>
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _kPrimary,
+                backgroundColor: kPrimary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1140,7 +1113,9 @@ class _ReportsScreenState extends State<ReportsScreen>
     required IconData icon,
     required String title,
     required String subtitle,
+    Color? iconColor,
   }) {
+    final effectiveColor = iconColor ?? kOnSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 32),
@@ -1151,11 +1126,10 @@ class _ReportsScreenState extends State<ReportsScreen>
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: _kBackground,
+                color: effectiveColor.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
-                border: Border.all(color: _kBorder, width: 1.5),
               ),
-              child: Icon(icon, size: 36, color: _kLabel),
+              child: Icon(icon, size: 36, color: effectiveColor),
             ),
             const SizedBox(height: 20),
             Text(
@@ -1164,14 +1138,14 @@ class _ReportsScreenState extends State<ReportsScreen>
               style: const TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: _kTitle,
+                color: kOnSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: _kLabel),
+              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
             ),
           ],
         ),
@@ -1181,14 +1155,7 @@ class _ReportsScreenState extends State<ReportsScreen>
 }
 
 BoxDecoration _cardDeco() => BoxDecoration(
-      color: Colors.white,
+      color: kSurfaceLowest,
       borderRadius: BorderRadius.circular(16),
-      border: Border.all(color: _kBorder, width: 1.2),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0E0F4A75),
-          blurRadius: 14,
-          offset: Offset(0, 4),
-        ),
-      ],
+      boxShadow: const [kSubtleShadow],
     );

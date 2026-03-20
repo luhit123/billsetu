@@ -22,6 +22,7 @@ import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -33,25 +34,6 @@ Widget homescreen() => const HomeScreen();
 enum InvoiceFilter { all, paid, pending, overdue }
 
 enum InvoicePeriodFilter { allTime, today, thisWeek, currentMonth, customRange }
-
-// ─── Primary brand colours (onboarding-inspired palette) ─────────────────────
-const _kPrimary = Color(0xFF4361EE);
-const _kNavy = Color(0xFF1E3A8A);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kTextPrimary = Color(0xFF1E3A8A);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kPaid = Color(0xFF22C55E);
-const _kPaidBg = Color(0xFFDCFCE7);
-const _kPending = Color(0xFFF59E0B);
-const _kPendingBg = Color(0xFFFEF3C7);
-const _kOverdue = Color(0xFFEF4444);
-const _kOverdueBg = Color(0xFFFEE2E2);
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
 
 // ─── Shell: manages tab index + bottom nav ────────────────────────────────────
 
@@ -89,15 +71,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildBottomNav(AppStrings s) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(top: BorderSide(color: _kBorder)),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x120F4A75),
-            blurRadius: 16,
-            offset: Offset(0, -3),
-          ),
-        ],
+        color: kSurfaceLowest,
+        boxShadow: [kWhisperShadow],
       ),
       child: SafeArea(
         top: false,
@@ -107,24 +82,28 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.home_rounded,
               label: s.homeBottomHome,
               isActive: _selectedTab == 0,
+              activeColor: const Color(0xFF007AFF),
               onTap: () => setState(() => _selectedTab = 0),
             ),
             _BottomNavItem(
               icon: Icons.receipt_long_rounded,
               label: s.homeBottomInvoices,
               isActive: _selectedTab == 1,
+              activeColor: const Color(0xFF5856D6),
               onTap: () => setState(() => _selectedTab = 1),
             ),
             _BottomNavItem(
               icon: Icons.people_alt_rounded,
               label: s.homeBottomClients,
               isActive: _selectedTab == 2,
+              activeColor: const Color(0xFF34C759),
               onTap: () => setState(() => _selectedTab = 2),
             ),
             _BottomNavItem(
               icon: Icons.inventory_2_rounded,
               label: s.homeBottomProducts,
               isActive: _selectedTab == 3,
+              activeColor: const Color(0xFFFF9500),
               onTap: () => setState(() => _selectedTab = 3),
             ),
           ],
@@ -232,7 +211,7 @@ class _DashboardPageState extends State<_DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       drawer: _buildDrawer(),
       drawerScrimColor: Colors.black45,
       appBar: _buildAppBar(),
@@ -251,7 +230,7 @@ class _DashboardPageState extends State<_DashboardPage> {
       }
       if (_injectedInvoices == null) {
         return const Center(
-          child: CircularProgressIndicator(color: _kPrimary),
+          child: CircularProgressIndicator(color: kPrimary),
         );
       }
       return _buildScrollContent(_injectedInvoices!);
@@ -267,7 +246,7 @@ class _DashboardPageState extends State<_DashboardPage> {
 
     if (_invoicesLoading && _allInvoices.isEmpty) {
       return const Center(
-        child: CircularProgressIndicator(color: _kPrimary),
+        child: CircularProgressIndicator(color: kPrimary),
       );
     }
 
@@ -399,7 +378,7 @@ class _DashboardPageState extends State<_DashboardPage> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
-                      color: _kTextPrimary,
+                      color: kOnSurface,
                     ),
                   ),
                   const Spacer(),
@@ -415,7 +394,7 @@ class _DashboardPageState extends State<_DashboardPage> {
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: _kPrimary,
+                        color: kPrimary,
                       ),
                     ),
                   ),
@@ -470,20 +449,16 @@ class _DashboardPageState extends State<_DashboardPage> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
+      backgroundColor: kSurface,
+      foregroundColor: kOnSurface,
       elevation: 0,
-      scrolledUnderElevation: 2,
-      shadowColor: Colors.black26,
+      scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       centerTitle: false,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
-      ),
       leading: Builder(
         builder: (context) => IconButton(
           onPressed: () => Scaffold.of(context).openDrawer(),
-          icon: const Icon(Icons.menu_rounded, color: Colors.white),
+          icon: const Icon(Icons.menu_rounded, color: kOnSurface),
           tooltip: 'Open menu',
         ),
       ),
@@ -491,24 +466,25 @@ class _DashboardPageState extends State<_DashboardPage> {
           ? TextField(
               controller: _searchController,
               autofocus: true,
-              cursorColor: Colors.white,
+              cursorColor: kPrimary,
               style: const TextStyle(
-                color: Colors.white,
+                color: kOnSurface,
                 fontWeight: FontWeight.w600,
               ),
               decoration: InputDecoration(
                 hintText: _s.homeSearchHint,
-                hintStyle: const TextStyle(color: Colors.white60),
+                hintStyle: const TextStyle(color: kTextTertiary),
                 border: InputBorder.none,
               ),
               onChanged: _handleSearchChanged,
             )
-          : Text(
-              _s.homeTitle,
-              style: const TextStyle(
-                color: Colors.white,
+          : const Text(
+              'BillEasy',
+              style: TextStyle(
+                color: kOnSurface,
                 fontWeight: FontWeight.w700,
                 fontSize: 20,
+                letterSpacing: -0.4,
               ),
             ),
       actions: [
@@ -516,13 +492,13 @@ class _DashboardPageState extends State<_DashboardPage> {
           onPressed: _toggleSearch,
           icon: Icon(
             _isSearching ? Icons.close_rounded : Icons.search_rounded,
-            color: Colors.white,
+            color: kOnSurface,
           ),
           tooltip: _isSearching ? _s.homeCloseSearch : _s.homeSearchTooltip,
         ),
         IconButton(
           onPressed: _showPeriodPicker,
-          icon: const Icon(Icons.calendar_today_rounded, color: Colors.white),
+          icon: const Icon(Icons.calendar_today_rounded, color: kOnSurfaceVariant),
           tooltip: _s.homeFilterPeriodTooltip,
         ),
         Padding(
@@ -769,7 +745,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             child: _DashboardStatCard(
               label: _s.homeStatOutstanding,
               value: _currencyFormat.format(outstanding),
-              accentColor: _kPrimary,
+              accentColor: kPrimary,
               icon: Icons.account_balance_wallet_rounded,
               fullWidth: false,
             ),
@@ -779,7 +755,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             child: _DashboardStatCard(
               label: _s.homeStatCollected,
               value: _currencyFormat.format(collected),
-              accentColor: _kPaid,
+              accentColor: kPaid,
               icon: Icons.check_circle_rounded,
             ),
           ),
@@ -788,7 +764,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             child: _DashboardStatCard(
               label: _s.homeStatDiscounts,
               value: _currencyFormat.format(discounts),
-              accentColor: _kPending,
+              accentColor: kPending,
               icon: Icons.local_offer_rounded,
             ),
           ),
@@ -880,7 +856,7 @@ class _DashboardPageState extends State<_DashboardPage> {
     }
   }
 
-  // ─── Drawer (unchanged) ───────────────────────────────────────────────────
+  // ─── Drawer ───────────────────────────────────────────────────────────────
 
   Widget _buildDrawer() {
     return Drawer(
@@ -892,16 +868,16 @@ class _DashboardPageState extends State<_DashboardPage> {
         ),
       ),
       child: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              const Color(0xFF1E3A8A),
-              const Color(0xFF4361EE),
+              kPrimaryDark,
+              kPrimary,
               Colors.white,
             ],
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            stops: const [0, 0.35, 0.35],
+            stops: [0, 0.35, 0.35],
           ),
         ),
         child: SafeArea(
@@ -986,47 +962,54 @@ class _DashboardPageState extends State<_DashboardPage> {
                   _DrawerMenuTile(
                     icon: Icons.badge_outlined,
                     title: _s.drawerMyProfile,
+                    iconBgColor: const Color(0xFF007AFF),
                     onTap: () => _openDrawerScreen(const ProfileSetupScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.inventory_2_outlined,
                     title: _s.drawerProducts,
+                    iconBgColor: const Color(0xFFFF9500),
                     onTap: () => _openDrawerScreen(const ProductsScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.groups_2_outlined,
                     title: _s.drawerCustomers,
+                    iconBgColor: const Color(0xFF34C759),
                     onTap: () => _openDrawerScreen(const CustomersScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.shopping_cart_outlined,
                     title: _s.drawerPurchases,
+                    iconBgColor: const Color(0xFFFF2D55),
                     onTap: () => _openDrawerScreen(const PurchaseOrdersScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.query_stats_outlined,
                     title: _s.drawerAnalytics,
+                    iconBgColor: const Color(0xFF00C7BE),
                     onTap: () => _openDrawerPlaceholder(
                       title: _s.drawerAnalytics,
                       icon: Icons.query_stats_outlined,
                       description: _s.drawerAnalyticsDesc,
-                      accentColor: const Color(0xFF005C6B),
+                      accentColor: kPrimary,
                     ),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.receipt_long_outlined,
                     title: _s.drawerGst,
+                    iconBgColor: const Color(0xFFAF52DE),
                     onTap: () => _openDrawerScreen(const GstReportScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
                     icon: Icons.settings_outlined,
                     title: _s.drawerSettings,
+                    iconBgColor: const Color(0xFF8E8E93),
                     onTap: () => _openDrawerScreen(const SettingsScreen()),
                   ),
                 ],
@@ -1038,16 +1021,16 @@ class _DashboardPageState extends State<_DashboardPage> {
             icon: authActionIcon,
             title: authActionLabel,
             backgroundColor: user == null
-                ? const Color(0xFFE7F0FF)
+                ? kPrimaryContainer
                 : const Color(0xFFFFECEC),
             borderColor: user == null
-                ? const Color(0xFFC7DAFF)
+                ? kPrimaryContainer
                 : const Color(0xFFFFD1D1),
             iconColor: user == null
-                ? const Color(0xFF4361EE)
+                ? kPrimary
                 : const Color(0xFFB3261E),
             textColor: user == null
-                ? const Color(0xFF4361EE)
+                ? kPrimary
                 : const Color(0xFFB3261E),
             onTap: () => _handleDrawerAuthAction(user),
           ),
@@ -1134,23 +1117,16 @@ class _PeriodBanner extends StatelessWidget {
         margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: _kBorder, width: 1.2),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0E0F4A75),
-              blurRadius: 12,
-              offset: Offset(0, 3),
-            ),
-          ],
+          boxShadow: const [kSubtleShadow],
         ),
         child: Row(
           children: [
             const Icon(
               Icons.calendar_today_rounded,
               size: 16,
-              color: _kPrimary,
+              color: kPrimary,
             ),
             const SizedBox(width: 8),
             Text(
@@ -1158,14 +1134,14 @@ class _PeriodBanner extends StatelessWidget {
               style: const TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
-                color: _kNavy,
+                color: kOnSurface,
               ),
             ),
             const Spacer(),
             const Icon(
               Icons.keyboard_arrow_down_rounded,
               size: 18,
-              color: Color(0xFF9CA3AF),
+              color: kTextTertiary,
             ),
           ],
         ),
@@ -1213,7 +1189,7 @@ class _DashboardStatCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
-                      color: _kTextSecondary,
+                      color: kOnSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1222,7 +1198,7 @@ class _DashboardStatCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
-                      color: _kTextPrimary,
+                      color: kOnSurface,
                     ),
                   ),
                 ],
@@ -1246,7 +1222,7 @@ class _DashboardStatCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
-                  color: _kTextSecondary,
+                  color: kOnSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1255,7 +1231,7 @@ class _DashboardStatCard extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 17,
                   fontWeight: FontWeight.w800,
-                  color: _kTextPrimary,
+                  color: kOnSurface,
                 ),
               ),
             ],
@@ -1265,26 +1241,9 @@ class _DashboardStatCard extends StatelessWidget {
       width: fullWidth ? double.infinity : null,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            accentColor.withValues(alpha: 0.13),
-            accentColor.withValues(alpha: 0.05),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: accentColor.withValues(alpha: 0.22),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withValues(alpha: 0.14),
-            blurRadius: 18,
-            offset: const Offset(0, 5),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       child: inner,
     );
@@ -1357,7 +1316,7 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
       if (m.isBefore(earliest)) earliest = m;
     }
 
-    // Generate every month from earliest → now
+    // Generate every month from earliest to now
     _months = [];
     var cursor = DateTime(earliest.year, earliest.month);
     final nowMonth = DateTime(now.year, now.month);
@@ -1412,16 +1371,9 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kBorder, width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0E0F4A75),
-            blurRadius: 18,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [kWhisperShadow],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1439,7 +1391,7 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: _kTextSecondary,
+                        color: kOnSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1451,7 +1403,7 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                         style: const TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w700,
-                          color: _kTextPrimary,
+                          color: kOnSurface,
                         ),
                       ),
                     ),
@@ -1467,16 +1419,15 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFEFF6FF),
+                    color: kSurfaceContainerLow,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: _kBorder),
                   ),
                   child: Text(
                     DateFormat('MMM yyyy').format(selectedMonth),
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: _kPrimary,
+                      color: kPrimary,
                     ),
                   ),
                 ),
@@ -1485,13 +1436,13 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
           ),
           const SizedBox(height: 4),
           // Scroll hint
-          Row(
-            children: const [
-              Icon(Icons.swipe_rounded, size: 13, color: Color(0xFF9CA3AF)),
+          const Row(
+            children: [
+              Icon(Icons.swipe_rounded, size: 13, color: kTextTertiary),
               SizedBox(width: 4),
               Text(
                 'Scroll to see all months · Tap a bar',
-                style: TextStyle(fontSize: 10, color: Color(0xFF9CA3AF)),
+                style: TextStyle(fontSize: 10, color: kTextTertiary),
               ),
             ],
           ),
@@ -1537,21 +1488,11 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                                   width: _barW,
                                   height: barHeight,
                                   decoration: BoxDecoration(
-                                    gradient: isSelected
-                                        ? const LinearGradient(
-                                            colors: [
-                                              Color(0xFF6366F1),
-                                              Color(0xFF4361EE),
-                                            ],
-                                            begin: Alignment.topCenter,
-                                            end: Alignment.bottomCenter,
-                                          )
-                                        : null,
                                     color: isSelected
-                                        ? null
+                                        ? kPrimary
                                         : _totals[i] > 0
-                                        ? const Color(0xFFBDD5F0)
-                                        : const Color(0xFFE5E7EB),
+                                        ? kSurfaceContainer
+                                        : kSurfaceContainerLow,
                                     borderRadius: const BorderRadius.vertical(
                                       top: Radius.circular(8),
                                     ),
@@ -1568,8 +1509,8 @@ class _MonthlyRevenueCardState extends State<_MonthlyRevenueCard> {
                                     ? FontWeight.w700
                                     : FontWeight.w400,
                                 color: isSelected
-                                    ? _kPrimary
-                                    : const Color(0xFF9CA3AF),
+                                    ? kPrimary
+                                    : kTextTertiary,
                               ),
                             ),
                           ],
@@ -1614,7 +1555,7 @@ class _QuickActionsSection extends StatelessWidget {
           style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w700,
-            color: _kTextPrimary,
+            color: kOnSurface,
           ),
         ),
         const SizedBox(height: 10),
@@ -1640,21 +1581,8 @@ class _QuickActionsSection extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: _ActionButton(
-                icon: Icons.shopping_cart_outlined,
-                label: s.newPurchaseOrder,
-                filled: false,
-                onTap: onNewPurchase,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(
-              child: _ActionButton(
                 icon: Icons.bar_chart_rounded,
-                label: 'Financial Reports',
+                label: 'Reports',
                 filled: false,
                 onTap: onViewReports,
               ),
@@ -1691,41 +1619,22 @@ class _ActionButton extends StatelessWidget {
           padding: const EdgeInsets.symmetric(vertical: 16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(14),
-            gradient: filled
-                ? const LinearGradient(
-                    colors: [Color(0xFF4361EE), Color(0xFF1E3A8A)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  )
-                : null,
-            color: filled ? null : Colors.white,
-            border: filled ? null : Border.all(color: _kBorder, width: 1.2),
+            gradient: filled ? kSignatureGradient : null,
+            color: filled ? null : kSurfaceLowest,
             boxShadow: filled
-                ? [
-                    const BoxShadow(
-                      color: Color(0x350F4A75),
-                      blurRadius: 14,
-                      offset: Offset(0, 4),
-                    ),
-                  ]
-                : [
-                    const BoxShadow(
-                      color: Color(0x0C0F4A75),
-                      blurRadius: 10,
-                      offset: Offset(0, 3),
-                    ),
-                  ],
+                ? null
+                : const [kSubtleShadow],
           ),
           child: Column(
             children: [
-              Icon(icon, size: 22, color: filled ? Colors.white : _kPrimary),
+              Icon(icon, size: 22, color: filled ? Colors.white : kPrimary),
               const SizedBox(height: 6),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: filled ? Colors.white : _kPrimary,
+                  color: filled ? Colors.white : kPrimary,
                 ),
               ),
             ],
@@ -1754,20 +1663,13 @@ class _ReferralBanner extends StatelessWidget {
             end: Alignment.bottomRight,
           ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x30FF6D00),
-              blurRadius: 12,
-              offset: Offset(0, 4),
-            ),
-          ],
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -1845,9 +1747,9 @@ class _RecentInvoiceTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (badgeColor, badgeBg, statusLabel) = switch (invoice.status) {
-      InvoiceStatus.paid => (_kPaid, _kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (_kPending, _kPendingBg, 'PENDING'),
-      InvoiceStatus.overdue => (_kOverdue, _kOverdueBg, 'OVERDUE'),
+      InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
+      InvoiceStatus.pending => (kPending, kPendingBg, 'PENDING'),
+      InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
     };
 
     return GestureDetector(
@@ -1856,16 +1758,9 @@ class _RecentInvoiceTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _kBorder, width: 1),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0C0F4A75),
-              blurRadius: 14,
-              offset: Offset(0, 3),
-            ),
-          ],
+          boxShadow: const [kSubtleShadow],
         ),
         child: Row(
           children: [
@@ -1873,13 +1768,13 @@ class _RecentInvoiceTile extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: _kPrimary.withValues(alpha: 0.12),
+                color: kPrimaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
                 Icons.description_rounded,
                 size: 18,
-                color: _kPrimary,
+                color: kPrimary,
               ),
             ),
             const SizedBox(width: 12),
@@ -1892,7 +1787,7 @@ class _RecentInvoiceTile extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: _kTextPrimary,
+                      color: kOnSurface,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -1900,7 +1795,7 @@ class _RecentInvoiceTile extends StatelessWidget {
                     '${invoice.invoiceNumber} · ${_timeAgo(invoice.createdAt)}',
                     style: const TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF9CA3AF),
+                      color: kTextTertiary,
                     ),
                   ),
                 ],
@@ -1914,7 +1809,7 @@ class _RecentInvoiceTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: _kTextPrimary,
+                    color: kOnSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1926,9 +1821,6 @@ class _RecentInvoiceTile extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: badgeColor.withValues(alpha: 0.3),
-                    ),
                   ),
                   child: Text(
                     statusLabel,
@@ -1961,18 +1853,7 @@ class _AvatarWidget extends StatelessWidget {
       height: 36,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [Color(0xFF4361EE), Color(0xFF1E3A8A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0x300F4A75),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
-        ],
+        color: kPrimary,
       ),
       child: Center(
         child: Text(
@@ -1995,12 +1876,14 @@ class _BottomNavItem extends StatelessWidget {
     required this.label,
     required this.isActive,
     this.onTap,
+    this.activeColor = kPrimary,
   });
 
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback? onTap;
+  final Color activeColor;
 
   @override
   Widget build(BuildContext context) {
@@ -2021,14 +1904,14 @@ class _BottomNavItem extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: isActive
-                      ? _kPrimary.withValues(alpha: 0.12)
+                      ? activeColor.withValues(alpha: 0.12)
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Icon(
                   icon,
                   size: 22,
-                  color: isActive ? _kPrimary : const Color(0xFF9CA3AF),
+                  color: isActive ? activeColor : kTextTertiary,
                 ),
               ),
               const SizedBox(height: 3),
@@ -2037,7 +1920,7 @@ class _BottomNavItem extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? _kPrimary : const Color(0xFF9CA3AF),
+                  color: isActive ? activeColor : kTextTertiary,
                 ),
               ),
             ],
@@ -2055,10 +1938,11 @@ class _DrawerMenuTile extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.onTap,
-    this.backgroundColor = const Color(0xFFF4F8FF),
-    this.borderColor = const Color(0xFFD5E4FF),
-    this.iconColor = const Color(0xFF4361EE),
-    this.textColor = Colors.black87,
+    this.backgroundColor = kSurfaceContainerLow,
+    this.borderColor = kSurfaceContainerLow,
+    this.iconColor = kPrimary,
+    this.textColor = kOnSurface,
+    this.iconBgColor,
   });
 
   final IconData icon;
@@ -2068,9 +1952,22 @@ class _DrawerMenuTile extends StatelessWidget {
   final Color borderColor;
   final Color iconColor;
   final Color textColor;
+  final Color? iconBgColor;
 
   @override
   Widget build(BuildContext context) {
+    final iconWidget = iconBgColor != null
+        ? Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: iconBgColor,
+              borderRadius: BorderRadius.circular(7),
+            ),
+            child: Icon(icon, color: Colors.white, size: 17),
+          )
+        : Icon(icon, color: iconColor);
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -2081,11 +1978,10 @@ class _DrawerMenuTile extends StatelessWidget {
           decoration: BoxDecoration(
             color: backgroundColor,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: borderColor),
           ),
           child: Row(
             children: [
-              Icon(icon, color: iconColor),
+              iconWidget,
               const SizedBox(width: 12),
               Text(
                 title,
@@ -2140,7 +2036,7 @@ class _PeriodOptionTile extends StatelessWidget {
     return ListTile(
       leading: Icon(
         isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-        color: isSelected ? _kPrimary : Colors.grey.shade500,
+        color: isSelected ? kPrimary : kTextTertiary,
       ),
       title: Text(
         title,

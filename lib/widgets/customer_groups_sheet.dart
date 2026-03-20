@@ -1,6 +1,7 @@
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/customer_group.dart';
 import 'package:billeasy/services/customer_group_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 
 class CustomerGroupSelection {
@@ -77,8 +78,8 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             s.groupsSubtitle,
-                            style: TextStyle(
-                              color: Colors.blueGrey.shade700,
+                            style: const TextStyle(
+                              color: kOnSurfaceVariant,
                               height: 1.4,
                             ),
                           ),
@@ -113,13 +114,13 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: Colors.blueGrey.shade50,
+                      color: kSurfaceContainerLow,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: Text(
                       s.groupsEmpty,
-                      style: TextStyle(
-                        color: Colors.blueGrey.shade700,
+                      style: const TextStyle(
+                        color: kOnSurfaceVariant,
                         height: 1.45,
                       ),
                     ),
@@ -135,14 +136,13 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                         final group = groups[index];
                         return Container(
                           decoration: BoxDecoration(
-                            color: Colors.white,
+                            color: kSurfaceLowest,
                             borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: Colors.blueGrey.shade100),
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: const Color(0xFFE4F7F8),
-                              foregroundColor: const Color(0xFF6366F1),
+                              backgroundColor: kPrimaryContainer,
+                              foregroundColor: kPrimary,
                               child: Text(
                                 group.name.trim().isEmpty
                                     ? '?'
@@ -160,7 +160,7 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                             ),
                             subtitle: Text(
                               s.groupsRenameHint,
-                              style: TextStyle(color: Colors.blueGrey.shade600),
+                              style: const TextStyle(color: kOnSurfaceVariant),
                             ),
                             trailing: IconButton(
                               onPressed: () => _openGroupDialog(
@@ -311,8 +311,8 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             s.groupsPickerSubtitle,
-                            style: TextStyle(
-                              color: Colors.blueGrey.shade700,
+                            style: const TextStyle(
+                              color: kOnSurfaceVariant,
                               height: 1.4,
                             ),
                           ),
@@ -345,6 +345,7 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                 else ...[
                   _GroupPickerTile(
                     icon: Icons.folder_off_outlined,
+                    iconBackgroundColor: const Color(0xFF8E8E93),
                     title: s.groupsUngrouped,
                     subtitle: s.groupsUngroupedSubtitle,
                     isSelected: initialGroupId.isEmpty,
@@ -363,13 +364,13 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                       margin: const EdgeInsets.only(top: 12),
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: Colors.blueGrey.shade50,
+                        color: kSurfaceContainerLow,
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
                         s.groupsPickerEmpty,
-                        style: TextStyle(
-                          color: Colors.blueGrey.shade700,
+                        style: const TextStyle(
+                          color: kOnSurfaceVariant,
                           height: 1.45,
                         ),
                       ),
@@ -385,6 +386,7 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                           final group = groups[index];
                           return _GroupPickerTile(
                             icon: Icons.folder_open_rounded,
+                            iconBackgroundColor: const Color(0xFFFF9500),
                             title: group.name,
                             subtitle: s.groupsMoveInto(group.name),
                             isSelected: initialGroupId == group.id,
@@ -417,9 +419,11 @@ class _GroupPickerTile extends StatelessWidget {
     required this.subtitle,
     required this.isSelected,
     required this.onTap,
+    this.iconBackgroundColor,
   });
 
   final IconData icon;
+  final Color? iconBackgroundColor;
   final String title;
   final String subtitle;
   final bool isSelected;
@@ -435,21 +439,19 @@ class _GroupPickerTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFFEAF8FF) : Colors.white,
+            color: isSelected ? kPrimaryContainer : kSurfaceLowest,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF123C85)
-                  : Colors.blueGrey.shade100,
-              width: isSelected ? 1.2 : 1,
-            ),
           ),
           child: Row(
             children: [
-              CircleAvatar(
-                backgroundColor: const Color(0xFFE4F7F8),
-                foregroundColor: const Color(0xFF6366F1),
-                child: Icon(icon),
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: iconBackgroundColor ?? kPrimaryContainer,
+                  borderRadius: BorderRadius.circular(7),
+                ),
+                child: Icon(icon, color: Colors.white, size: 15),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -463,8 +465,8 @@ class _GroupPickerTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: TextStyle(
-                        color: Colors.blueGrey.shade600,
+                      style: const TextStyle(
+                        color: kOnSurfaceVariant,
                         height: 1.4,
                       ),
                     ),
@@ -477,8 +479,8 @@ class _GroupPickerTile extends StatelessWidget {
                     ? Icons.check_circle_rounded
                     : Icons.chevron_right_rounded,
                 color: isSelected
-                    ? const Color(0xFF123C85)
-                    : Colors.blueGrey.shade400,
+                    ? kPrimary
+                    : kTextTertiary,
               ),
             ],
           ),

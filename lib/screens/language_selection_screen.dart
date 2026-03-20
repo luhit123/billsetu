@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:billeasy/theme/app_colors.dart';
 
 enum AppLanguage { english, hindi, assamese, gujarati, tamil }
 
@@ -44,215 +45,155 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF1E3A8A),
-              Color(0xFF4361EE),
-              Color(0xFF6366F1),
-            ],
-          ),
-        ),
-        child: Stack(
-          children: [
-            // Ambient orbs
-            _orb(top: -60, right: -40, size: 220, opacity: 0.07),
-            _orb(bottom: 80, left: -60, size: 200, opacity: 0.05),
+      backgroundColor: kSurface,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const SizedBox(height: 56),
 
-            SafeArea(
-              child: FadeTransition(
-                opacity: _fadeAnimation,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 28),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      const SizedBox(height: 56),
-
-                      // App icon badge
-                      Container(
-                        width: 64,
-                        height: 64,
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            colors: [Color(0xFF00E5FF), Color(0xFF00897B)],
-                          ),
-                          borderRadius: BorderRadius.circular(18),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF00897B).withOpacity(0.4),
-                              blurRadius: 20,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.receipt_long_rounded,
-                          color: Colors.white,
-                          size: 32,
-                        ),
-                      ),
-
-                      const SizedBox(height: 32),
-
-                      // Multilingual title
-                      const Text(
-                        'Select Language',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'ভাষা বাছক  •  भाषा चुनें  •  ભાષા પસંદ કરો  •  மொழி தேர்ந்தெடு',
-                        style: TextStyle(
-                          color: Colors.white60,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-
-                      const SizedBox(height: 36),
-
-                      // Language cards
-                      Expanded(
-                        child: SingleChildScrollView(
-                          child: Column(
-                            children: [
-                              _LanguageCard(
-                                nativeLabel: 'English',
-                                subLabel: 'English',
-                                emoji: '🇬🇧',
-                                isSelected: _selected == AppLanguage.english,
-                                onTap: () =>
-                                    setState(() => _selected = AppLanguage.english),
-                              ),
-                              const SizedBox(height: 14),
-                              _LanguageCard(
-                                nativeLabel: 'हिन्दी',
-                                subLabel: 'Hindi',
-                                emoji: '🇮🇳',
-                                isSelected: _selected == AppLanguage.hindi,
-                                onTap: () =>
-                                    setState(() => _selected = AppLanguage.hindi),
-                              ),
-                              const SizedBox(height: 14),
-                              _LanguageCard(
-                                nativeLabel: 'অসমীয়া',
-                                subLabel: 'Assamese',
-                                emoji: '🌿',
-                                isSelected: _selected == AppLanguage.assamese,
-                                onTap: () =>
-                                    setState(() => _selected = AppLanguage.assamese),
-                              ),
-                              const SizedBox(height: 14),
-                              _LanguageCard(
-                                nativeLabel: 'ગુજરાતી',
-                                subLabel: 'Gujarati',
-                                emoji: '🏛️',
-                                isSelected: _selected == AppLanguage.gujarati,
-                                onTap: () =>
-                                    setState(() => _selected = AppLanguage.gujarati),
-                              ),
-                              const SizedBox(height: 14),
-                              _LanguageCard(
-                                nativeLabel: 'தமிழ்',
-                                subLabel: 'Tamil',
-                                emoji: '🌺',
-                                isSelected: _selected == AppLanguage.tamil,
-                                onTap: () =>
-                                    setState(() => _selected = AppLanguage.tamil),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 20),
-
-                      // Continue button
-                      AnimatedOpacity(
-                        opacity: _selected != null ? 1.0 : 0.35,
-                        duration: const Duration(milliseconds: 250),
-                        child: GestureDetector(
-                          onTap: _selected != null ? _confirm : null,
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 18),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(50),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.2),
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 8),
-                                ),
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Continue',
-                                  style: TextStyle(
-                                    color: Color(0xFF1E3A8A),
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.3,
-                                  ),
-                                ),
-                                SizedBox(width: 8),
-                                Icon(
-                                  Icons.arrow_forward_rounded,
-                                  color: Color(0xFF1E3A8A),
-                                  size: 18,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 40),
-                    ],
+                // App icon badge
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    gradient: kSignatureGradient,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: const [kWhisperShadow],
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_rounded,
+                    color: Colors.white,
+                    size: 32,
                   ),
                 ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _orb({
-    double? top,
-    double? bottom,
-    double? left,
-    double? right,
-    required double size,
-    required double opacity,
-  }) {
-    return Positioned(
-      top: top,
-      bottom: bottom,
-      left: left,
-      right: right,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [Colors.white.withOpacity(opacity), Colors.transparent],
+                const SizedBox(height: 32),
+
+                // Title
+                const Text(
+                  'Select Language',
+                  style: TextStyle(
+                    color: kOnSurface,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '\u09ad\u09be\u09b7\u09be \u09ac\u09be\u099b\u0995  \u2022  \u092d\u093e\u0937\u093e \u091a\u0941\u0928\u0947\u0902  \u2022  \u0aad\u0abe\u0ab7\u0abe \u0aaa\u0ab8\u0a82\u0aa6 \u0a95\u0ab0\u0acb  \u2022  \u0bae\u0bca\u0bb4\u0bbf \u0ba4\u0bc7\u0bb0\u0bcd\u0ba8\u0bcd\u0ba4\u0bc6\u0b9f\u0bc1',
+                  style: TextStyle(
+                    color: kTextTertiary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+
+                const SizedBox(height: 36),
+
+                // Language cards
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        _LanguageCard(
+                          nativeLabel: 'English',
+                          subLabel: 'English',
+                          emoji: '\ud83c\uddec\ud83c\udde7',
+                          isSelected: _selected == AppLanguage.english,
+                          onTap: () =>
+                              setState(() => _selected = AppLanguage.english),
+                        ),
+                        const SizedBox(height: 14),
+                        _LanguageCard(
+                          nativeLabel: '\u0939\u093f\u0928\u094d\u0926\u0940',
+                          subLabel: 'Hindi',
+                          emoji: '\ud83c\uddee\ud83c\uddf3',
+                          isSelected: _selected == AppLanguage.hindi,
+                          onTap: () =>
+                              setState(() => _selected = AppLanguage.hindi),
+                        ),
+                        const SizedBox(height: 14),
+                        _LanguageCard(
+                          nativeLabel: '\u0985\u09b8\u09ae\u09c0\u09af\u09bc\u09be',
+                          subLabel: 'Assamese',
+                          emoji: '\ud83c\udf3f',
+                          isSelected: _selected == AppLanguage.assamese,
+                          onTap: () =>
+                              setState(() => _selected = AppLanguage.assamese),
+                        ),
+                        const SizedBox(height: 14),
+                        _LanguageCard(
+                          nativeLabel: '\u0a97\u0ac1\u0a9c\u0ab0\u0abe\u0aa4\u0ac0',
+                          subLabel: 'Gujarati',
+                          emoji: '\ud83c\udfdb\ufe0f',
+                          isSelected: _selected == AppLanguage.gujarati,
+                          onTap: () =>
+                              setState(() => _selected = AppLanguage.gujarati),
+                        ),
+                        const SizedBox(height: 14),
+                        _LanguageCard(
+                          nativeLabel: '\u0ba4\u0bae\u0bbf\u0bb4\u0bcd',
+                          subLabel: 'Tamil',
+                          emoji: '\ud83c\udf3a',
+                          isSelected: _selected == AppLanguage.tamil,
+                          onTap: () =>
+                              setState(() => _selected = AppLanguage.tamil),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Continue button
+                AnimatedOpacity(
+                  opacity: _selected != null ? 1.0 : 0.35,
+                  duration: const Duration(milliseconds: 250),
+                  child: GestureDetector(
+                    onTap: _selected != null ? _confirm : null,
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      decoration: BoxDecoration(
+                        gradient: kSignatureGradient,
+                        borderRadius: BorderRadius.circular(50),
+                        boxShadow: const [kWhisperShadow],
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'Continue',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          SizedBox(width: 8),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 40),
+              ],
+            ),
           ),
         ),
       ),
@@ -283,22 +224,10 @@ class _LanguageCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
         decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.white.withOpacity(0.18)
-              : Colors.white.withOpacity(0.07),
+          color: isSelected ? kPrimaryContainer : kSurfaceLowest,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isSelected ? Colors.white : Colors.white.withOpacity(0.15),
-            width: isSelected ? 1.8 : 1,
-          ),
           boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Colors.white.withOpacity(0.08),
-                    blurRadius: 16,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
+              ? const [kSubtleShadow]
               : [],
         ),
         child: Row(
@@ -311,7 +240,7 @@ class _LanguageCard extends StatelessWidget {
                 Text(
                   nativeLabel,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: kOnSurface,
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
                     height: 1.1,
@@ -320,8 +249,8 @@ class _LanguageCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   subLabel,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
+                  style: const TextStyle(
+                    color: kTextTertiary,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                     letterSpacing: 0.5,
@@ -336,17 +265,17 @@ class _LanguageCard extends StatelessWidget {
               height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: isSelected ? Colors.white : Colors.transparent,
+                color: isSelected ? kPrimary : Colors.transparent,
                 border: Border.all(
                   color: isSelected
-                      ? Colors.white
-                      : Colors.white.withOpacity(0.3),
+                      ? kPrimary
+                      : kTextTertiary,
                   width: 2,
                 ),
               ),
               child: isSelected
                   ? const Icon(Icons.check_rounded,
-                      color: Color(0xFF1E3A8A), size: 14)
+                      color: Colors.white, size: 14)
                   : null,
             ),
           ],

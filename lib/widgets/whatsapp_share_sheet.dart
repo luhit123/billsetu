@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -67,7 +68,7 @@ class WhatsAppShareSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -82,7 +83,7 @@ class WhatsAppShareSheet extends StatelessWidget {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFBDD5F0),
+                  color: kSurfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -90,7 +91,7 @@ class WhatsAppShareSheet extends StatelessWidget {
             const Text(
               'Share Invoice',
               style: TextStyle(
-                color: Color(0xFF1E3A8A),
+                color: kOnSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -99,7 +100,7 @@ class WhatsAppShareSheet extends StatelessWidget {
             Text(
               invoice.invoiceNumber,
               style: const TextStyle(
-                color: Color(0xFF5B7A9A),
+                color: kOnSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -113,16 +114,16 @@ class WhatsAppShareSheet extends StatelessWidget {
               onTap: () => _shareWhatsApp(context),
             ),
             if (pdfFile != null) ...[
-              const Divider(height: 1, color: Color(0xFFEFF6FF)),
+              const Divider(height: 1, color: kSurfaceContainerLow),
               _OptionTile(
                 icon: Icons.picture_as_pdf_rounded,
-                iconColor: const Color(0xFF1A73E8),
+                iconColor: kPrimary,
                 title: 'Share PDF',
                 subtitle: 'Share invoice PDF via any app',
                 onTap: () => _sharePdf(context),
               ),
             ],
-            const Divider(height: 1, color: Color(0xFFEFF6FF)),
+            const Divider(height: 1, color: kSurfaceContainerLow),
             _OptionTile(
               icon: Icons.sms_rounded,
               iconColor: const Color(0xFFF97316),
@@ -130,10 +131,10 @@ class WhatsAppShareSheet extends StatelessWidget {
               subtitle: 'Send invoice details via text message',
               onTap: () => _shareSms(context),
             ),
-            const Divider(height: 1, color: Color(0xFFEFF6FF)),
+            const Divider(height: 1, color: kSurfaceContainerLow),
             _OptionTile(
               icon: Icons.copy_rounded,
-              iconColor: const Color(0xFF7C3AED),
+              iconColor: kPrimary,
               title: 'Copy Invoice Link',
               subtitle: 'Copy a text summary to clipboard',
               onTap: () => _copyToClipboard(context),
@@ -276,7 +277,7 @@ class _OptionTile extends StatelessWidget {
                   Text(
                     title,
                     style: const TextStyle(
-                      color: Color(0xFF1E3A8A),
+                      color: kOnSurface,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -285,14 +286,14 @@ class _OptionTile extends StatelessWidget {
                   Text(
                     subtitle,
                     style: const TextStyle(
-                      color: Color(0xFF5B7A9A),
+                      color: kOnSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFFBDD5F0), size: 20),
+            const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
           ],
         ),
       ),

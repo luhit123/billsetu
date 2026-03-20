@@ -68,7 +68,6 @@ class PaymentService {
         'createdAt': Timestamp.fromDate(now),
         'updatedAt': Timestamp.fromDate(now),
         'priceInPaise': priceInPaise,
-        'launchOffer': false,
         'demoMode': true,
       });
 
@@ -163,9 +162,11 @@ class PaymentService {
 
   int _getPrice(String planId, String billingCycle) {
     if (planId == 'raja') {
-      return billingCycle == 'annual' ? 119900 : 14900; // ₹1,199 or ₹149
+      return billingCycle == 'annual' ? 99900 : 12000; // ₹999 or ₹120
     } else if (planId == 'maharaja') {
-      return billingCycle == 'annual' ? 299900 : 39900; // ₹2,999 or ₹399
+      return billingCycle == 'annual' ? 199900 : 23900; // ₹1,999 or ₹239
+    } else if (planId == 'king') {
+      return billingCycle == 'annual' ? 499900 : 55500; // ₹4,999 or ₹555
     }
     return 0;
   }

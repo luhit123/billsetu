@@ -1,13 +1,7 @@
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
-
-// Brand colors
-const _kPrimary = Color(0xFF4361EE);
-const _kNavy = Color(0xFF1E3A8A);
-const _kTeal = Color(0xFF6366F1);
-const _kBackground = Color(0xFFF8FAFC);
-const _kBorder = Color(0xFFCBD5E1);
 
 /// Bottom sheet that lets the user pick an [InvoiceTemplate].
 ///
@@ -40,7 +34,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
   Widget build(BuildContext context) {
     return Container(
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -55,7 +49,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _kBorder,
+                  color: kSurfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -64,7 +58,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
             const Text(
               'Choose Template',
               style: TextStyle(
-                color: _kNavy,
+                color: kOnSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -72,7 +66,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
             const SizedBox(height: 4),
             const Text(
               'Select a design for your invoice PDF',
-              style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              style: TextStyle(color: kOnSurfaceVariant, fontSize: 13),
             ),
             const SizedBox(height: 20),
             // Template cards — horizontal row
@@ -84,7 +78,6 @@ class _TemplatePickerState extends State<TemplatePicker> {
                     icon: Icons.receipt_long_rounded,
                     name: 'Classic',
                     description: 'Clean, professional layout with gradient accents',
-                    accentColor: _kPrimary,
                     selected: _selected == InvoiceTemplate.classic,
                     onTap: () => setState(() => _selected = InvoiceTemplate.classic),
                   ),
@@ -95,8 +88,7 @@ class _TemplatePickerState extends State<TemplatePicker> {
                     template: InvoiceTemplate.modern,
                     icon: Icons.auto_awesome_rounded,
                     name: 'Modern',
-                    description: 'Bold navy header with teal highlights',
-                    accentColor: _kTeal,
+                    description: 'Bold header with accent highlights',
                     selected: _selected == InvoiceTemplate.modern,
                     locked: !PlanService.instance.canUseTemplate(1),
                     onTap: () {
@@ -117,7 +109,6 @@ class _TemplatePickerState extends State<TemplatePicker> {
                     icon: Icons.compress_rounded,
                     name: 'Compact',
                     description: 'Dense single-page, ideal for thermal printers',
-                    accentColor: const Color(0xFF374151),
                     selected: _selected == InvoiceTemplate.compact,
                     locked: !PlanService.instance.canUseTemplate(2),
                     onTap: () {
@@ -137,20 +128,27 @@ class _TemplatePickerState extends State<TemplatePicker> {
             // Confirm button
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () => Navigator.pop(context, _selected),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _kPrimary,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: kSignatureGradient,
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Text(
-                  'Use This Template',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context, _selected),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text(
+                    'Use This Template',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  ),
                 ),
               ),
             ),
@@ -167,7 +165,6 @@ class _TemplateCard extends StatelessWidget {
     required this.icon,
     required this.name,
     required this.description,
-    required this.accentColor,
     required this.selected,
     required this.onTap,
     this.locked = false,
@@ -177,7 +174,6 @@ class _TemplateCard extends StatelessWidget {
   final IconData icon;
   final String name;
   final String description;
-  final Color accentColor;
   final bool selected;
   final VoidCallback onTap;
   final bool locked;
@@ -191,19 +187,11 @@ class _TemplateCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: locked
-              ? const Color(0xFFF3F4F6)
+              ? kSurfaceDim
               : selected
-                  ? accentColor.withValues(alpha: 0.07)
-                  : _kBackground,
+                  ? kPrimaryContainer
+                  : kSurfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: locked
-                ? const Color(0xFFD1D5DB)
-                : selected
-                    ? accentColor
-                    : _kBorder,
-            width: selected ? 2.0 : 1.2,
-          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -215,10 +203,12 @@ class _TemplateCard extends StatelessWidget {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: locked ? 0.06 : 0.12),
+                    color: locked
+                        ? kSurfaceContainerHigh
+                        : kPrimary.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: Icon(icon, color: locked ? const Color(0xFF9CA3AF) : accentColor, size: 20),
+                  child: Icon(icon, color: locked ? kTextTertiary : kPrimary, size: 20),
                 ),
                 if (locked)
                   Positioned(
@@ -240,7 +230,7 @@ class _TemplateCard extends StatelessWidget {
             Text(
               name,
               style: TextStyle(
-                color: selected ? accentColor : _kNavy,
+                color: selected ? kPrimary : kOnSurface,
                 fontSize: 13,
                 fontWeight: FontWeight.w700,
               ),
@@ -249,21 +239,21 @@ class _TemplateCard extends StatelessWidget {
             Text(
               description,
               style: const TextStyle(
-                color: Color(0xFF64748B),
+                color: kOnSurfaceVariant,
                 fontSize: 10,
                 height: 1.4,
               ),
             ),
             if (selected) ...[
               const SizedBox(height: 8),
-              Row(
+              const Row(
                 children: [
-                  Icon(Icons.check_circle_rounded, color: accentColor, size: 14),
-                  const SizedBox(width: 4),
+                  Icon(Icons.check_circle_rounded, color: kPrimary, size: 14),
+                  SizedBox(width: 4),
                   Text(
                     'Selected',
                     style: TextStyle(
-                      color: accentColor,
+                      color: kPrimary,
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
                     ),

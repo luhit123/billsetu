@@ -68,6 +68,14 @@ class GstPeriodSummary {
     required this.igstAmount,
     required this.totalTax,
     required this.grandTotal,
+    this.inputPoCount = 0,
+    this.inputTaxableAmount = 0,
+    this.inputDiscountAmount = 0,
+    this.inputCgstAmount = 0,
+    this.inputSgstAmount = 0,
+    this.inputIgstAmount = 0,
+    this.inputTotalTax = 0,
+    this.inputGrandTotal = 0,
     this.updatedAt,
   });
 
@@ -81,7 +89,18 @@ class GstPeriodSummary {
   final double igstAmount;
   final double totalTax;
   final double grandTotal;
+  final int inputPoCount;
+  final double inputTaxableAmount;
+  final double inputDiscountAmount;
+  final double inputCgstAmount;
+  final double inputSgstAmount;
+  final double inputIgstAmount;
+  final double inputTotalTax;
+  final double inputGrandTotal;
   final DateTime? updatedAt;
+
+  double get outputTax => totalTax;
+  double get netGstPayable => totalTax - inputTotalTax;
 
   factory GstPeriodSummary.fromMap(Map<String, dynamic> map) {
     return GstPeriodSummary(
@@ -95,6 +114,14 @@ class GstPeriodSummary {
       igstAmount: _doubleFromMapValue(map['igstAmount']),
       totalTax: _doubleFromMapValue(map['totalTax']),
       grandTotal: _doubleFromMapValue(map['grandTotal']),
+      inputPoCount: _intFromMapValue(map['inputPoCount']),
+      inputTaxableAmount: _doubleFromMapValue(map['inputTaxableAmount']),
+      inputDiscountAmount: _doubleFromMapValue(map['inputDiscountAmount']),
+      inputCgstAmount: _doubleFromMapValue(map['inputCgstAmount']),
+      inputSgstAmount: _doubleFromMapValue(map['inputSgstAmount']),
+      inputIgstAmount: _doubleFromMapValue(map['inputIgstAmount']),
+      inputTotalTax: _doubleFromMapValue(map['inputTotalTax']),
+      inputGrandTotal: _doubleFromMapValue(map['inputGrandTotal']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
     );
   }

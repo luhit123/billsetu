@@ -1,14 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:billeasy/theme/app_colors.dart';
 
 import '../services/plan_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../screens/subscription_screen.dart';
 import '../screens/upgrade_screen.dart';
-
-// ─── Brand colours ───────────────────────────────────────────────────────────
-const _kNavy = Color(0xFF1E3A8A);
-const _kPrimary = Color(0xFF4361EE);
-const _kTeal = Color(0xFF6366F1);
 
 /// Compact subscription usage card for embedding in the home screen.
 ///
@@ -54,30 +50,9 @@ class _UsageDashboardState extends State<UsageDashboard> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            width: 1.5,
-            color: Colors.transparent,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.blueGrey.withValues(alpha: 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(22),
-          border: GradientBorder(
-            gradient: const LinearGradient(
-              colors: [_kNavy, _kTeal],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            width: 1.5,
-          ),
+          boxShadow: const [kWhisperShadow],
         ),
         child: Column(
           children: [
@@ -87,11 +62,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [_kNavy, _kTeal],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
+                    gradient: kSignatureGradient,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Row(
@@ -220,20 +191,20 @@ class _CompactButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: const Color(0xFFEAF8FF),
+            color: kPrimaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: _kPrimary),
+              Icon(icon, size: 14, color: kPrimary),
               const SizedBox(width: 5),
               Text(
                 label,
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: _kPrimary,
+                  color: kPrimary,
                 ),
               ),
             ],
@@ -260,9 +231,9 @@ class _MetricPill extends StatelessWidget {
   final double ratio;
 
   Color get _color {
-    if (ratio > 0.9) return Colors.red;
-    if (ratio > 0.7) return Colors.amber.shade700;
-    return _kTeal;
+    if (ratio > 0.9) return kOverdue;
+    if (ratio > 0.7) return kPending;
+    return kPrimary;
   }
 
   @override
@@ -273,7 +244,6 @@ class _MetricPill extends StatelessWidget {
         decoration: BoxDecoration(
           color: _color.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _color.withValues(alpha: 0.2)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -296,55 +266,4 @@ class _MetricPill extends StatelessWidget {
       ),
     );
   }
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// ─── Gradient Border Decoration ──────────────────────────────────────────────
-// ═════════════════════════════════════════════════════════════════════════════
-
-class GradientBorder extends BoxBorder {
-  const GradientBorder({
-    required this.gradient,
-    required this.width,
-  });
-
-  final Gradient gradient;
-  final double width;
-
-  @override
-  BorderSide get top => BorderSide.none;
-  @override
-  BorderSide get bottom => BorderSide.none;
-  @override
-  bool get isUniform => true;
-  @override
-  EdgeInsetsGeometry get dimensions => EdgeInsets.all(width);
-
-  @override
-  void paint(
-    Canvas canvas,
-    Rect rect, {
-    TextDirection? textDirection,
-    BoxShape shape = BoxShape.rectangle,
-    BorderRadius? borderRadius,
-  }) {
-    final paint = Paint()
-      ..shader = gradient.createShader(rect)
-      ..strokeWidth = width
-      ..style = PaintingStyle.stroke;
-
-    final rRect = borderRadius != null
-        ? borderRadius.toRRect(rect).deflate(width / 2)
-        : RRect.fromRectAndRadius(
-            rect.deflate(width / 2),
-            Radius.circular(22 - width / 2),
-          );
-    canvas.drawRRect(rRect, paint);
-  }
-
-  @override
-  ShapeBorder scale(double t) => GradientBorder(
-        gradient: gradient,
-        width: width * t,
-      );
 }

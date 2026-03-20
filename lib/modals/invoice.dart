@@ -94,21 +94,27 @@ class Invoice {
   double get taxableAmount =>
       storedTaxableAmount ?? _roundCurrency(subtotal - discountAmount);
 
-  /// CGST = half of the GST rate on taxable amount (intrastate only).
+  /// Ratio to apply discount proportionally to each item.
+  double get _discountRatio =>
+      subtotal > 0 ? (subtotal - discountAmount) / subtotal : 0;
+
+  /// CGST computed per-item then summed (intrastate only).
   double get cgstAmount =>
       storedCgstAmount ??
-      ((gstEnabled && gstType == 'cgst_sgst' && gstRate > 0)
-          ? _roundCurrency(taxableAmount * gstRate / 200)
+      ((gstEnabled && gstType == 'cgst_sgst')
+          ? _roundCurrency(items.fold(
+              0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 200))
           : 0);
 
   /// SGST = equal to CGST (intrastate).
   double get sgstAmount => storedSgstAmount ?? cgstAmount;
 
-  /// IGST = full GST rate on taxable amount (interstate only).
+  /// IGST computed per-item then summed (interstate only).
   double get igstAmount =>
       storedIgstAmount ??
-      ((gstEnabled && gstType == 'igst' && gstRate > 0)
-          ? _roundCurrency(taxableAmount * gstRate / 100)
+      ((gstEnabled && gstType == 'igst')
+          ? _roundCurrency(items.fold(
+              0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 100))
           : 0);
 
   double get totalTax =>
@@ -122,6 +128,33 @@ class Invoice {
 
   factory Invoice.fromMap(Map<String, dynamic> map, {String? docId}) {
     final rawItems = map['items'] as List<dynamic>? ?? const [];
+    final orderGstRate = _doubleFromMapValue(map['gstRate']) > 0
+        ? _doubleFromMapValue(map['gstRate'])
+        : 18.0;
+    final orderGstEnabled = map['gstEnabled'] as bool? ?? false;
+    var parsedItems = rawItems
+        .map(
+          (item) => LineItem.fromMap(Map<String, dynamic>.from(item as Map)),
+        )
+        .toList();
+
+    // Backward compat: if GST enabled but all items have gstRate 0
+    // (saved before per-item GST), backfill with order-level rate.
+    if (orderGstEnabled &&
+        orderGstRate > 0 &&
+        parsedItems.isNotEmpty &&
+        parsedItems.every((i) => i.gstRate == 0)) {
+      parsedItems = parsedItems
+          .map((i) => LineItem(
+                description: i.description,
+                quantity: i.quantity,
+                unitPrice: i.unitPrice,
+                unit: i.unit,
+                hsnCode: i.hsnCode,
+                gstRate: orderGstRate,
+              ))
+          .toList();
+    }
 
     return Invoice(
       id: docId ?? (map['id'] as String? ?? ''),
@@ -130,11 +163,7 @@ class Invoice {
       clientId: map['clientId'] as String? ?? '',
       clientName:
           map['clientName'] as String? ?? (map['clientId'] as String? ?? ''),
-      items: rawItems
-          .map(
-            (item) => LineItem.fromMap(Map<String, dynamic>.from(item as Map)),
-          )
-          .toList(),
+      items: parsedItems,
       createdAt: _dateTimeFromMapValue(map['createdAt']),
       status: _statusFromMapValue(map['status']),
       dueDate: _nullableDateTimeFromMapValue(map['dueDate'] ?? map['dueAt']),

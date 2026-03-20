@@ -65,22 +65,98 @@ class BillRajaApp extends StatelessWidget {
             colorScheme: ColorScheme.fromSeed(
               seedColor: kPrimary,
               brightness: Brightness.light,
+              surface: kSurface,
+              onSurface: kOnSurface,
+              primary: kPrimary,
+              onPrimary: kOnPrimary,
+              error: kError,
             ),
-            scaffoldBackgroundColor: Colors.white,
+            scaffoldBackgroundColor: kSurface,
             appBarTheme: const AppBarTheme(
-              backgroundColor: kPrimary,
-              foregroundColor: Colors.white,
+              backgroundColor: kSurface,
+              foregroundColor: kOnSurface,
               centerTitle: false,
               elevation: 0,
+              scrolledUnderElevation: 0,
+              surfaceTintColor: Colors.transparent,
             ),
             floatingActionButtonTheme: const FloatingActionButtonThemeData(
               backgroundColor: kPrimary,
-              foregroundColor: Colors.white,
+              foregroundColor: kOnPrimary,
+              elevation: 0,
+              shape: StadiumBorder(),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
               style: ElevatedButton.styleFrom(
                 backgroundColor: kPrimary,
-                foregroundColor: Colors.white,
+                foregroundColor: kOnPrimary,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style: OutlinedButton.styleFrom(
+                foregroundColor: kOnSurface,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                side: BorderSide.none,
+                backgroundColor: kSurfaceContainerLow,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              ),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(
+                foregroundColor: kPrimary,
+              ),
+            ),
+            inputDecorationTheme: InputDecorationTheme(
+              filled: true,
+              fillColor: kSurfaceLowest,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              hintStyle: const TextStyle(color: kTextTertiary),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: UnderlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: const BorderSide(color: kPrimary, width: 2),
+              ),
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: kSurfaceLowest,
+              selectedItemColor: kPrimary,
+              unselectedItemColor: kTextTertiary,
+              type: BottomNavigationBarType.fixed,
+              elevation: 0,
+              selectedLabelStyle: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+              unselectedLabelStyle: TextStyle(fontSize: 11),
+            ),
+            cardTheme: CardThemeData(
+              color: kSurfaceLowest,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+                side: BorderSide.none,
+              ),
+            ),
+            dividerTheme: const DividerThemeData(
+              color: kSurfaceContainerLow,
+              thickness: 1,
+            ),
+            chipTheme: ChipThemeData(
+              backgroundColor: kSurfaceContainerLow,
+              side: BorderSide.none,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
               ),
             ),
           ),

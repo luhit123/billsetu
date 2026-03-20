@@ -19,8 +19,6 @@ class Subscription {
   final DateTime createdAt;
   final DateTime updatedAt;
   final int priceInPaise; // 14900 = ₹149.00
-  final bool launchOffer;
-  final int? launchOfferSlot;
 
   const Subscription({
     required this.id,
@@ -39,8 +37,6 @@ class Subscription {
     required this.createdAt,
     required this.updatedAt,
     this.priceInPaise = 0,
-    this.launchOffer = false,
-    this.launchOfferSlot,
   });
 
   bool get isActive => status == SubscriptionStatus.active;
@@ -68,8 +64,6 @@ class Subscription {
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       priceInPaise: map['priceInPaise'] as int? ?? 0,
-      launchOffer: map['launchOffer'] as bool? ?? false,
-      launchOfferSlot: map['launchOfferSlot'] as int?,
     );
   }
 
@@ -91,8 +85,6 @@ class Subscription {
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'priceInPaise': priceInPaise,
-      'launchOffer': launchOffer,
-      'launchOfferSlot': launchOfferSlot,
     };
   }
 

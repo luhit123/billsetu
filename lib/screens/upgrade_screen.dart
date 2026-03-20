@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/plan_service.dart';
 import '../services/payment_service.dart';
+import '../theme/app_colors.dart';
 
 class UpgradeScreen extends StatefulWidget {
   final String? featureName;
@@ -14,12 +15,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     with TickerProviderStateMixin {
   bool _isAnnual = true;
 
-  // Brand colors
-  static const _navy = Color(0xFF1E3A8A);
-  static const _primary = Color(0xFF4361EE);
-  static const _teal = Color(0xFF6366F1);
-  static const _background = Color(0xFFF8FAFC);
-  static const _border = Color(0xFFCBD5E1);
+  // Plan accent colors (kept for plan identity differentiation)
   static const _gold = Color(0xFFD4A017);
   static const _purple = Color(0xFF7B1FA2);
 
@@ -47,7 +43,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
   Future<void> _handlePurchase(AppPlan plan) async {
     if (_currentPlan == plan) return;
 
-    final planId = plan == AppPlan.raja ? 'raja' : 'maharaja';
+    final planId = plan.name;
     final billingCycle = _isAnnual ? 'annual' : 'monthly';
 
     // Show loading dialog
@@ -64,12 +60,12 @@ class _UpgradeScreenState extends State<UpgradeScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                SizedBox(
+                const SizedBox(
                   width: 48,
                   height: 48,
                   child: CircularProgressIndicator(
                     strokeWidth: 3,
-                    color: plan == AppPlan.raja ? _gold : _purple,
+                    color: kPrimary,
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -78,7 +74,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: _navy,
+                    color: kOnSurface,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -145,11 +141,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 height: 72,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: plan == AppPlan.raja
-                        ? [_gold, const Color(0xFFF5D060)]
-                        : [_purple, const Color(0xFFAB47BC)],
-                  ),
+                  gradient: kSignatureGradient,
                 ),
                 child: const Icon(
                   Icons.check_rounded,
@@ -163,7 +155,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: _navy,
+                  color: kOnSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -181,8 +173,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 width: double.infinity,
                 child: FilledButton(
                   style: FilledButton.styleFrom(
-                    backgroundColor:
-                        plan == AppPlan.raja ? _gold : _purple,
+                    backgroundColor: kPrimary,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -212,7 +203,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: kSurface,
       body: CustomScrollView(
         physics: const BouncingScrollPhysics(),
         slivers: [
@@ -228,7 +219,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                   const SizedBox(height: 20),
                   _buildPlanCard(
                     plan: AppPlan.free,
-                    accentColor: const Color(0xFF78909C),
+                    accentColor: kOnSurfaceVariant,
                     icon: Icons.account_circle_outlined,
                     badgeText: null,
                   ),
@@ -237,14 +228,14 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                     plan: AppPlan.raja,
                     accentColor: _gold,
                     icon: Icons.emoji_events_rounded,
-                    badgeText: 'Most Popular',
+                    badgeText: null,
                   ),
                   const SizedBox(height: 16),
                   _buildPlanCard(
                     plan: AppPlan.maharaja,
                     accentColor: _purple,
                     icon: Icons.diamond_rounded,
-                    badgeText: null,
+                    badgeText: 'Most Popular',
                   ),
                   const SizedBox(height: 16),
                   _buildPlanCard(
@@ -253,8 +244,6 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                     icon: Icons.workspace_premium_rounded,
                     badgeText: 'Everything Unlimited',
                   ),
-                  const SizedBox(height: 24),
-                  _buildLaunchOfferBanner(),
                   const SizedBox(height: 24),
                   _buildCtaButtons(),
                   const SizedBox(height: 12),
@@ -295,7 +284,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     return SliverAppBar(
       expandedHeight: 180,
       pinned: true,
-      backgroundColor: _navy,
+      backgroundColor: kPrimary,
       leading: IconButton(
         icon: const Icon(Icons.close, color: Colors.white),
         onPressed: () => Navigator.pop(context),
@@ -303,11 +292,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [_navy, _teal],
-            ),
+            gradient: kSignatureGradient,
           ),
           child: SafeArea(
             child: Column(
@@ -370,16 +355,9 @@ class _UpgradeScreenState extends State<UpgradeScreen>
   Widget _buildBillingToggle() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: _border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(8),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       padding: const EdgeInsets.all(4),
       child: Row(
@@ -391,14 +369,14 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: !_isAnnual ? _primary : Colors.transparent,
+                  color: !_isAnnual ? kPrimary : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
                   child: Text(
                     'Monthly',
                     style: TextStyle(
-                      color: !_isAnnual ? Colors.white : Colors.grey.shade600,
+                      color: !_isAnnual ? Colors.white : kOnSurfaceVariant,
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
                     ),
@@ -414,7 +392,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 duration: const Duration(milliseconds: 200),
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: _isAnnual ? _primary : Colors.transparent,
+                  color: _isAnnual ? kPrimary : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
@@ -425,7 +403,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                         'Annual',
                         style: TextStyle(
                           color:
-                              _isAnnual ? Colors.white : Colors.grey.shade600,
+                              _isAnnual ? Colors.white : kOnSurfaceVariant,
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
                         ),
@@ -482,20 +460,16 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isCurrentPlan ? accentColor : _border,
-          width: isCurrentPlan ? 2.5 : 1,
-        ),
         boxShadow: [
-          BoxShadow(
-            color: isCurrentPlan
-                ? accentColor.withAlpha(30)
-                : Colors.black.withAlpha(10),
-            blurRadius: isCurrentPlan ? 16 : 8,
-            offset: const Offset(0, 4),
-          ),
+          isCurrentPlan
+              ? BoxShadow(
+                  color: accentColor.withAlpha(30),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                )
+              : kSubtleShadow,
         ],
       ),
       child: Column(
@@ -505,12 +479,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           Container(
             padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  accentColor,
-                  accentColor.withAlpha(200),
-                ],
-              ),
+              color: accentColor,
               borderRadius: const BorderRadius.vertical(
                 top: Radius.circular(16),
               ),
@@ -539,12 +508,6 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                         decoration: BoxDecoration(
                           color: Colors.amber,
                           borderRadius: BorderRadius.circular(20),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withAlpha(25),
-                              blurRadius: 4,
-                            ),
-                          ],
                         ),
                         child: Text(
                           badgeText,
@@ -698,7 +661,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
                 style: TextStyle(
                   fontSize: 13,
                   color:
-                      item.enabled ? Colors.grey.shade800 : Colors.grey.shade400,
+                      item.enabled ? kOnSurface : Colors.grey.shade400,
                   fontWeight: item.enabled ? FontWeight.w500 : FontWeight.normal,
                 ),
               ),
@@ -736,78 +699,6 @@ class _UpgradeScreenState extends State<UpgradeScreen>
     }).toList();
   }
 
-  Widget _buildLaunchOfferBanner() {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          colors: [Color(0xFFFFF8E1), Color(0xFFFFECB3)],
-        ),
-        border: Border.all(color: _gold.withAlpha(80)),
-        boxShadow: [
-          BoxShadow(
-            color: _gold.withAlpha(25),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [_gold, _gold.withAlpha(180)],
-              ),
-            ),
-            child: const Icon(
-              Icons.local_fire_department_rounded,
-              color: Colors.white,
-              size: 24,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Save up to 33% with Annual Billing',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: _navy,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Raja \u20B9799/yr  \u2022  Maharaja \u20B91,499/yr',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.brown.shade700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'vs \u20B999/mo and \u20B9199/mo billed monthly',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.brown.shade400,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildCtaButtons() {
     final isOnRaja = _currentPlan == AppPlan.raja;
     final isOnMaharaja = _currentPlan == AppPlan.maharaja;
@@ -821,10 +712,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           label: isOnRaja
               ? 'Current Plan \u2014 Raja'
               : 'Start Raja \u2014 ${_ctaPriceLabel(AppPlan.raja)}',
-          gradient: const LinearGradient(
-            colors: [_gold, Color(0xFFE8B830)],
-          ),
-          shadowColor: _gold,
+          color: _gold,
           icon: Icons.emoji_events_rounded,
           enabled: !isOnRaja,
           onPressed: isOnRaja ? null : () => _handlePurchase(AppPlan.raja),
@@ -835,10 +723,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           label: isOnMaharaja
               ? 'Current Plan \u2014 Maharaja'
               : 'Go Maharaja \u2014 ${_ctaPriceLabel(AppPlan.maharaja)}',
-          gradient: const LinearGradient(
-            colors: [_purple, Color(0xFF9C27B0)],
-          ),
-          shadowColor: _purple,
+          color: _purple,
           icon: Icons.diamond_rounded,
           enabled: !isOnMaharaja,
           onPressed:
@@ -850,10 +735,7 @@ class _UpgradeScreenState extends State<UpgradeScreen>
           label: isOnKing
               ? 'Current Plan \u2014 King'
               : 'Go King \u2014 ${_ctaPriceLabel(AppPlan.king)}',
-          gradient: const LinearGradient(
-            colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-          ),
-          shadowColor: const Color(0xFF0F172A),
+          color: const Color(0xFF0F172A),
           icon: Icons.workspace_premium_rounded,
           enabled: !isOnKing,
           onPressed: isOnKing ? null : () => _handlePurchase(AppPlan.king),
@@ -879,16 +761,14 @@ class _FeatureRow {
 
 class _CtaButton extends StatelessWidget {
   final String label;
-  final Gradient gradient;
-  final Color shadowColor;
+  final Color color;
   final IconData icon;
   final bool enabled;
   final VoidCallback? onPressed;
 
   const _CtaButton({
     required this.label,
-    required this.gradient,
-    required this.shadowColor,
+    required this.color,
     required this.icon,
     required this.enabled,
     required this.onPressed,
@@ -902,11 +782,11 @@ class _CtaButton extends StatelessWidget {
       child: Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(14),
-          gradient: gradient,
+          color: color,
           boxShadow: enabled
               ? [
                   BoxShadow(
-                    color: shadowColor.withAlpha(60),
+                    color: color.withAlpha(60),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),

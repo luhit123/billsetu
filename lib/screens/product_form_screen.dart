@@ -1,20 +1,7 @@
 import 'package:billeasy/modals/product.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/services/product_service.dart';
 import 'package:flutter/material.dart';
-
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary    = Color(0xFF4361EE);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder     = Color(0xFFBDD5F0);
-const _kCardBg     = Colors.white;
-const _kLabel      = Color(0xFF5B7A9A);
-const _kTitle      = Color(0xFF1E3A8A);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
 
 const _kUnits = [
   'pcs', 'kg', 'g', 'ltr', 'ml',
@@ -24,7 +11,7 @@ const _kUnits = [
 class ProductFormScreen extends StatefulWidget {
   const ProductFormScreen({super.key, this.initialProduct});
 
-  /// Pass an existing product to edit; `null` → create new.
+  /// Pass an existing product to edit; `null` -> create new.
   final Product? initialProduct;
 
   @override
@@ -47,7 +34,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   bool   _isSaving = false;
   bool   _gstApplicable = false;
   double _gstRate = 18.0;
-  bool   _trackInventory = false;
+  final bool _trackInventory = true;
 
   bool get _isEditing => widget.initialProduct != null;
 
@@ -64,11 +51,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
       _hsnCtrl.text      = p.hsnCode;
       _gstApplicable     = p.gstApplicable;
       _gstRate           = p.gstRate;
-      _trackInventory    = p.trackInventory;
-      if (p.trackInventory) {
-        _currentStockCtrl.text = p.currentStock > 0 ? p.currentStock.toString() : '';
-        _minStockCtrl.text     = p.minStockAlert > 0 ? p.minStockAlert.toString() : '';
-      }
+      _currentStockCtrl.text = p.currentStock > 0 ? p.currentStock.toString() : '';
+      _minStockCtrl.text     = p.minStockAlert > 0 ? p.minStockAlert.toString() : '';
     }
   }
 
@@ -89,36 +73,36 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         labelText: label,
         hintText: hint,
         helperText: helperText,
-        labelStyle: const TextStyle(color: _kLabel, fontSize: 13),
-        hintStyle:  const TextStyle(color: _kLabel),
-        helperStyle: const TextStyle(color: _kLabel, fontSize: 11),
+        labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
+        hintStyle:  const TextStyle(color: kTextTertiary),
+        helperStyle: const TextStyle(color: kTextTertiary, fontSize: 11),
         prefixIcon: icon != null
-            ? Icon(icon, color: _kLabel, size: 20)
+            ? Icon(icon, color: kOnSurfaceVariant, size: 20)
             : null,
         filled: true,
-        fillColor: const Color(0xFFF5F8FF),
+        fillColor: kSurfaceContainerLow,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kBorder),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _kPrimary, width: 1.5),
+          borderSide: const BorderSide(color: kPrimary, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: Color(0xFFEF4444)),
+          borderSide: const BorderSide(color: kOverdue),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
           borderSide:
-              const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+              const BorderSide(color: kOverdue, width: 1.5),
         ),
       );
 
@@ -128,21 +112,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         _isEditing ? 'Edit Product' : 'Add Product';
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        backgroundColor: kSurface,
+        foregroundColor: kOnSurface,
         elevation: 0,
-        scrolledUnderElevation: 2,
-        shadowColor: Colors.black26,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
-        ),
         title: Text(
           title,
           style: const TextStyle(
-            color: Colors.white,
+            color: kOnSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
@@ -155,7 +135,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
             padding:
                 const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             children: [
-              // ── Avatar preview ─────────────────────────────────────────
+              // -- Avatar preview --
               Center(
                 child: AnimatedBuilder(
                   animation: _nameCtrl,
@@ -171,11 +151,11 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             .join();
                     return CircleAvatar(
                       radius: 34,
-                      backgroundColor: const Color(0xFFEEF2FF),
+                      backgroundColor: kPrimaryContainer,
                       child: Text(
                         initials,
                         style: const TextStyle(
-                          color: _kPrimary,
+                          color: kPrimary,
                           fontWeight: FontWeight.w800,
                           fontSize: 20,
                         ),
@@ -186,7 +166,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ── Product details card ───────────────────────────────────
+              // -- Product details card --
               _card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -200,7 +180,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       textCapitalization: TextCapitalization.words,
                       decoration: _dec(
                         'Product Name',
-                        hint: 'e.g. Rice, Notebook, Service…',
+                        hint: 'e.g. Rice, Notebook, Service\u2026',
                         icon: Icons.inventory_2_outlined,
                       ),
                       validator: (v) =>
@@ -229,7 +209,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       textCapitalization: TextCapitalization.words,
                       decoration: _dec(
                         'Category (optional)',
-                        hint: 'e.g. Food, Stationery…',
+                        hint: 'e.g. Food, Stationery\u2026',
                         icon: Icons.label_outline_rounded,
                       ),
                     ),
@@ -238,7 +218,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ── Pricing card ───────────────────────────────────────────
+              // -- Pricing card --
               _card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -258,7 +238,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 const TextInputType.numberWithOptions(
                                     decimal: true),
                             decoration: _dec(
-                              'Unit Price (₹)',
+                              'Unit Price (\u20b9)',
                               hint: '0',
                               icon: Icons.currency_rupee_rounded,
                             ),
@@ -310,15 +290,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 horizontal: 12, vertical: 6),
                             decoration: BoxDecoration(
                               color: sel
-                                  ? const Color(0xFFEEF2FF)
-                                  : const Color(0xFFF0F4FF),
+                                  ? kPrimaryContainer
+                                  : kSurfaceContainerLow,
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: sel
-                                    ? _kPrimary.withValues(alpha: 0.35)
-                                    : _kBorder,
-                                width: sel ? 1.5 : 1,
-                              ),
                             ),
                             child: Text(
                               u,
@@ -327,7 +301,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 fontWeight: sel
                                     ? FontWeight.w700
                                     : FontWeight.w500,
-                                color: sel ? _kPrimary : _kLabel,
+                                color: sel ? kPrimary : kOnSurfaceVariant,
                               ),
                             ),
                           ),
@@ -339,7 +313,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ── GST & Compliance card ──────────────────────────────────
+              // -- GST & Compliance card --
               _card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -353,7 +327,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       keyboardType: TextInputType.number,
                       decoration: _dec(
                         'HSN / SAC Code (optional)',
-                        hint: 'e.g. 8471, 9983…',
+                        hint: 'e.g. 8471, 9983\u2026',
                         icon: Icons.tag_rounded,
                         helperText: 'Required for GST invoice compliance',
                       ),
@@ -363,7 +337,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     // GST Applicable toggle
                     Row(
                       children: [
-                        Icon(Icons.percent_rounded, color: _kLabel, size: 20),
+                        Icon(Icons.percent_rounded, color: kOnSurfaceVariant, size: 20),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
@@ -371,13 +345,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             style: const TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: _kTitle,
+                              color: kOnSurface,
                             ),
                           ),
                         ),
                         Switch.adaptive(
                           value: _gstApplicable,
-                          activeTrackColor: _kPrimary,
+                          activeTrackColor: kPrimary,
                           activeThumbColor: Colors.white,
                           onChanged: (_) =>
                               setState(() => _gstApplicable = !_gstApplicable),
@@ -385,14 +359,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       ],
                     ),
 
-                    // GST Rate pills — only when GST is applicable
+                    // GST Rate pills -- only when GST is applicable
                     if (_gstApplicable) ...[
                       const SizedBox(height: 10),
                       Text(
                         'GST Rate',
                         style: const TextStyle(
                           fontSize: 13,
-                          color: _kLabel,
+                          color: kOnSurfaceVariant,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -409,20 +383,16 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                   horizontal: 14, vertical: 7),
                               decoration: BoxDecoration(
                                 color: sel
-                                    ? _kPrimary
-                                    : const Color(0xFFF0F6FF),
+                                    ? kPrimary
+                                    : kSurfaceContainerLow,
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: sel ? _kPrimary : _kBorder,
-                                  width: sel ? 1.5 : 1,
-                                ),
                               ),
                               child: Text(
                                 '${rate.toStringAsFixed(0)}%',
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: sel ? Colors.white : _kLabel,
+                                  color: sel ? Colors.white : kOnSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -435,7 +405,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // ── Inventory Tracking card ────────────────────────────────
+              // -- Inventory Tracking card --
               _card(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -447,42 +417,34 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     Row(
                       children: [
                         Icon(Icons.inventory_rounded,
-                            color: _kPrimary, size: 20),
+                            color: kPrimary, size: 20),
                         const SizedBox(width: 10),
-                        Expanded(
+                        const Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Track Inventory',
-                                style: const TextStyle(
+                                'Inventory',
+                                style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: _kTitle,
+                                  color: kOnSurface,
                                   fontSize: 14,
                                 ),
                               ),
                               Text(
-                                'Monitor stock levels & movements',
-                                style: const TextStyle(
+                                'Stock levels & movement tracking',
+                                style: TextStyle(
                                   fontSize: 11,
-                                  color: _kLabel,
+                                  color: kOnSurfaceVariant,
                                 ),
                               ),
                             ],
                           ),
                         ),
-                        Switch(
-                          value: _trackInventory,
-                          onChanged: (v) =>
-                              setState(() => _trackInventory = v),
-                          activeColor: _kPrimary,
-                        ),
                       ],
                     ),
 
-                    // Stock fields — only shown when tracking is on
-                    if (_trackInventory) ...[
-                      const SizedBox(height: 14),
+                    const SizedBox(height: 14),
                       TextFormField(
                         controller: _currentStockCtrl,
                         keyboardType:
@@ -508,13 +470,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                               'Get alerted when stock falls below this level',
                         ),
                       ),
-                    ],
                   ],
                 ),
               ),
               const SizedBox(height: 24),
 
-              // ── Save button ────────────────────────────────────────────
+              // -- Save button --
               SizedBox(
                 height: 56,
                 child: ElevatedButton.icon(
@@ -531,7 +492,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       : const Icon(Icons.save_outlined),
                   label: Text(
                     _isSaving
-                        ? 'Saving…'
+                        ? 'Saving\u2026'
                         : _isEditing
                             ? 'Save Changes'
                             : 'Add Product',
@@ -541,13 +502,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
+                    backgroundColor: kPrimary,
                     foregroundColor: Colors.white,
                     disabledBackgroundColor:
-                        _kPrimary.withValues(alpha: 0.45),
+                        kPrimary.withValues(alpha: 0.45),
                     disabledForegroundColor: Colors.white,
-                    elevation: 3,
-                    shadowColor: const Color(0x402563EB),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -562,22 +522,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     );
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────
+  // -- Helpers --
 
   Widget _card({required Widget child}) => Container(
         width: double.infinity,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: _kCardBg,
+          color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: _kBorder, width: 1.2),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0E2563EB),
-              blurRadius: 16,
-              offset: Offset(0, 4),
-            ),
-          ],
+          boxShadow: const [kWhisperShadow],
         ),
         child: child,
       );
@@ -585,13 +538,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   Widget _sectionLabel(String text) => Text(
         text,
         style: const TextStyle(
-          color: _kTitle,
+          color: kOnSurface,
           fontSize: 14,
           fontWeight: FontWeight.w700,
         ),
       );
 
-  // ── Logic ────────────────────────────────────────────────────────────────
+  // -- Logic --
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
@@ -612,13 +565,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
           hsnCode: _hsnCtrl.text.trim(),
           gstRate: _gstRate,
           gstApplicable: _gstApplicable,
-          trackInventory: _trackInventory,
-          currentStock: _trackInventory
-              ? (double.tryParse(_currentStockCtrl.text.trim()) ?? 0)
-              : 0,
-          minStockAlert: _trackInventory
-              ? (double.tryParse(_minStockCtrl.text.trim()) ?? 0)
-              : 0,
+          trackInventory: true,
+          currentStock: double.tryParse(_currentStockCtrl.text.trim()) ?? 0,
+          minStockAlert: double.tryParse(_minStockCtrl.text.trim()) ?? 0,
         ),
       );
       if (!mounted) return;

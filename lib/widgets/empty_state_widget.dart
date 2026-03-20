@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:billeasy/theme/app_colors.dart';
 
 class EmptyStateWidget extends StatelessWidget {
   final IconData icon;
@@ -20,7 +21,7 @@ class EmptyStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final effectiveIconColor = iconColor ?? kPrimary;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -30,26 +31,31 @@ class EmptyStateWidget extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: (iconColor ?? theme.colorScheme.primary).withOpacity(0.1),
+                color: effectiveIconColor.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 icon,
                 size: 64,
-                color: iconColor ?? theme.colorScheme.primary,
+                color: effectiveIconColor,
               ),
             ),
             const SizedBox(height: 24),
             Text(
               title,
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: kOnSurface,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurface.withOpacity(0.6),
+              style: const TextStyle(
+                color: kOnSurfaceVariant,
+                fontSize: 14,
               ),
               textAlign: TextAlign.center,
             ),

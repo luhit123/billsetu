@@ -161,7 +161,7 @@ class InvoicePdfService {
 
   static const PdfColor _modernNavy = PdfColor(0.04, 0.14, 0.31);  // 0xFF1E3A8A
   static const PdfColor _modernTeal = PdfColor(0.06, 0.49, 0.51);  // 0xFF6366F1
-  static const PdfColor _modernRowAlt = PdfColor(0.94, 0.96, 1.00); // 0xFFEFF6FF
+  static const PdfColor _modernRowAlt = PdfColor(0.94, 0.96, 1.00); // 0xFFF8FAFC
 
   Future<Uint8List> _buildModernPdf(
     Invoice invoice,
@@ -398,6 +398,7 @@ class InvoicePdfService {
 
   pw.Widget _modernItemsTable(Invoice invoice, AppStrings s) {
     final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
+    final hasGst = invoice.gstEnabled;
 
     final rows = <pw.TableRow>[
       // Teal header row
@@ -408,6 +409,7 @@ class InvoicePdfService {
           _modernCell(s.detailsItemQty, header: true, align: pw.Alignment.center),
           _modernCell(s.detailsItemUnitPrice, header: true, align: pw.Alignment.centerRight),
           _modernCell(s.pdfAmount, header: true, align: pw.Alignment.centerRight),
+          if (hasGst) _modernCell('GST%', header: true, align: pw.Alignment.center),
           if (hasHsn) _modernCell('HSN/SAC', header: true, align: pw.Alignment.center),
         ],
       ),
@@ -425,6 +427,11 @@ class InvoicePdfService {
             _modernCell(item.quantityLabel, align: pw.Alignment.center),
             _modernCell(_fmt(item.unitPrice), align: pw.Alignment.centerRight),
             _modernCell(_fmt(item.total), align: pw.Alignment.centerRight, bold: true),
+            if (hasGst)
+              _modernCell(
+                '${item.gstRate.toStringAsFixed(0)}%',
+                align: pw.Alignment.center,
+              ),
             if (hasHsn)
               _modernCell(
                 item.hsnCode.isEmpty ? '-' : item.hsnCode,
@@ -434,6 +441,16 @@ class InvoicePdfService {
         ),
       );
     }
+
+    int colIdx = 4;
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: pw.FlexColumnWidth(hasHsn || hasGst ? 3.5 : 4.5),
+      1: const pw.FlexColumnWidth(1.1),
+      2: const pw.FlexColumnWidth(1.9),
+      3: const pw.FlexColumnWidth(1.9),
+    };
+    if (hasGst) colWidths[colIdx++] = const pw.FlexColumnWidth(1.0);
+    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.5);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -450,13 +467,7 @@ class InvoicePdfService {
         pw.SizedBox(height: 8),
         pw.Table(
           border: pw.TableBorder.all(color: _border, width: 0.5),
-          columnWidths: {
-            0: pw.FlexColumnWidth(hasHsn ? 3.5 : 4.5),
-            1: const pw.FlexColumnWidth(1.1),
-            2: const pw.FlexColumnWidth(1.9),
-            3: const pw.FlexColumnWidth(1.9),
-            if (hasHsn) 4: const pw.FlexColumnWidth(1.5),
-          },
+          columnWidths: colWidths,
           children: rows,
         ),
       ],
@@ -486,13 +497,6 @@ class InvoicePdfService {
   }
 
   pw.Widget _modernTotalsSection(Invoice invoice, AppStrings s) {
-    final halfRate = (invoice.gstRate / 2).truncateToDouble() == (invoice.gstRate / 2)
-        ? (invoice.gstRate / 2).toStringAsFixed(0)
-        : (invoice.gstRate / 2).toStringAsFixed(1);
-    final fullRate = invoice.gstRate.truncateToDouble() == invoice.gstRate
-        ? invoice.gstRate.toStringAsFixed(0)
-        : invoice.gstRate.toStringAsFixed(1);
-
     return pw.Align(
       alignment: pw.Alignment.centerRight,
       child: pw.Container(
@@ -516,11 +520,11 @@ class InvoicePdfService {
             if (invoice.hasGst) ...[
               pw.SizedBox(height: 8),
               if (invoice.gstType == 'cgst_sgst') ...[
-                _modernSummaryRow('CGST @ $halfRate%', _fmt(invoice.cgstAmount), valueColor: _modernNavy),
+                _modernSummaryRow('CGST', _fmt(invoice.cgstAmount), valueColor: _modernNavy),
                 pw.SizedBox(height: 6),
-                _modernSummaryRow('SGST @ $halfRate%', _fmt(invoice.sgstAmount), valueColor: _modernNavy),
+                _modernSummaryRow('SGST', _fmt(invoice.sgstAmount), valueColor: _modernNavy),
               ] else
-                _modernSummaryRow('IGST @ $fullRate%', _fmt(invoice.igstAmount), valueColor: _modernNavy),
+                _modernSummaryRow('IGST', _fmt(invoice.igstAmount), valueColor: _modernNavy),
             ],
             pw.SizedBox(height: 4),
             pw.Divider(color: _modernNavy, height: 16, thickness: 0.6),
@@ -756,6 +760,7 @@ class InvoicePdfService {
 
   pw.Widget _compactItemsTable(Invoice invoice, AppStrings s) {
     final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
+    final hasGst = invoice.gstEnabled;
 
     final rows = <pw.TableRow>[
       pw.TableRow(
@@ -765,6 +770,7 @@ class InvoicePdfService {
           _compactCell(s.detailsItemQty, header: true, align: pw.Alignment.center),
           _compactCell(s.detailsItemUnitPrice, header: true, align: pw.Alignment.centerRight),
           _compactCell(s.pdfAmount, header: true, align: pw.Alignment.centerRight),
+          if (hasGst) _compactCell('GST%', header: true, align: pw.Alignment.center),
           if (hasHsn) _compactCell('HSN', header: true, align: pw.Alignment.center),
         ],
       ),
@@ -779,6 +785,11 @@ class InvoicePdfService {
             _compactCell(item.quantityLabel, align: pw.Alignment.center),
             _compactCell(_fmt(item.unitPrice), align: pw.Alignment.centerRight),
             _compactCell(_fmt(item.total), align: pw.Alignment.centerRight, bold: true),
+            if (hasGst)
+              _compactCell(
+                '${item.gstRate.toStringAsFixed(0)}%',
+                align: pw.Alignment.center,
+              ),
             if (hasHsn)
               _compactCell(
                 item.hsnCode.isEmpty ? '-' : item.hsnCode,
@@ -789,15 +800,19 @@ class InvoicePdfService {
       );
     }
 
+    int colIdx = 4;
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: pw.FlexColumnWidth(hasHsn || hasGst ? 3.5 : 4.5),
+      1: const pw.FlexColumnWidth(1.0),
+      2: const pw.FlexColumnWidth(1.8),
+      3: const pw.FlexColumnWidth(1.8),
+    };
+    if (hasGst) colWidths[colIdx++] = const pw.FlexColumnWidth(0.9);
+    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.2);
+
     return pw.Table(
       border: pw.TableBorder.all(color: _compactBorder, width: 0.4),
-      columnWidths: {
-        0: pw.FlexColumnWidth(hasHsn ? 3.5 : 4.5),
-        1: const pw.FlexColumnWidth(1.0),
-        2: const pw.FlexColumnWidth(1.8),
-        3: const pw.FlexColumnWidth(1.8),
-        if (hasHsn) 4: const pw.FlexColumnWidth(1.2),
-      },
+      columnWidths: colWidths,
       children: rows,
     );
   }
@@ -825,13 +840,6 @@ class InvoicePdfService {
   }
 
   pw.Widget _compactTotalsSection(Invoice invoice, AppStrings s) {
-    final halfRate = (invoice.gstRate / 2).truncateToDouble() == (invoice.gstRate / 2)
-        ? (invoice.gstRate / 2).toStringAsFixed(0)
-        : (invoice.gstRate / 2).toStringAsFixed(1);
-    final fullRate = invoice.gstRate.truncateToDouble() == invoice.gstRate
-        ? invoice.gstRate.toStringAsFixed(0)
-        : invoice.gstRate.toStringAsFixed(1);
-
     return pw.Align(
       alignment: pw.Alignment.centerRight,
       child: pw.SizedBox(
@@ -843,10 +851,10 @@ class InvoicePdfService {
               _compactTotalRow(s.detailsDiscount, '-${_fmt(invoice.discountAmount)}'),
             if (invoice.hasGst) ...[
               if (invoice.gstType == 'cgst_sgst') ...[
-                _compactTotalRow('CGST @ $halfRate%', _fmt(invoice.cgstAmount)),
-                _compactTotalRow('SGST @ $halfRate%', _fmt(invoice.sgstAmount)),
+                _compactTotalRow('CGST', _fmt(invoice.cgstAmount)),
+                _compactTotalRow('SGST', _fmt(invoice.sgstAmount)),
               ] else
-                _compactTotalRow('IGST @ $fullRate%', _fmt(invoice.igstAmount)),
+                _compactTotalRow('IGST', _fmt(invoice.igstAmount)),
             ],
             pw.Container(height: 0.5, color: _compactBorder),
             pw.SizedBox(height: 3),
@@ -1154,6 +1162,7 @@ class InvoicePdfService {
 
   pw.Widget _itemsTable(Invoice invoice, AppStrings s) {
     final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
+    final hasGst = invoice.gstEnabled;
 
     final headerCells = [
       _cell(s.pdfItem, header: true),
@@ -1164,6 +1173,8 @@ class InvoicePdfService {
         align: pw.Alignment.centerRight,
       ),
       _cell(s.pdfAmount, header: true, align: pw.Alignment.centerRight),
+      if (hasGst)
+        _cell('GST%', header: true, align: pw.Alignment.center),
       if (hasHsn)
         _cell('HSN/SAC', header: true, align: pw.Alignment.center),
     ];
@@ -1194,6 +1205,11 @@ class InvoicePdfService {
               color: _bodyText,
               bold: true,
             ),
+            if (hasGst)
+              _cell(
+                '${item.gstRate.toStringAsFixed(0)}%',
+                align: pw.Alignment.center,
+              ),
             if (hasHsn)
               _cell(
                 item.hsnCode.isEmpty ? '-' : item.hsnCode,
@@ -1203,6 +1219,16 @@ class InvoicePdfService {
         ),
       );
     }
+
+    int colIdx = 4;
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: pw.FlexColumnWidth(hasHsn || hasGst ? 3.5 : 4.5),
+      1: const pw.FlexColumnWidth(1.1),
+      2: const pw.FlexColumnWidth(1.9),
+      3: const pw.FlexColumnWidth(1.9),
+    };
+    if (hasGst) colWidths[colIdx++] = const pw.FlexColumnWidth(1.0);
+    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.5);
 
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1219,13 +1245,7 @@ class InvoicePdfService {
               right: pw.BorderSide(color: _border, width: 0.6),
               bottom: pw.BorderSide(color: _border, width: 0.6),
             ),
-            columnWidths: {
-              0: pw.FlexColumnWidth(hasHsn ? 3.5 : 4.5),
-              1: const pw.FlexColumnWidth(1.1),
-              2: const pw.FlexColumnWidth(1.9),
-              3: const pw.FlexColumnWidth(1.9),
-              if (hasHsn) 4: const pw.FlexColumnWidth(1.5),
-            },
+            columnWidths: colWidths,
             children: rows,
           ),
         ),
@@ -1239,13 +1259,6 @@ class InvoicePdfService {
 
   pw.Widget _totalsSection(Invoice invoice, AppStrings s) {
     final discLabel = _discountLabel(invoice, s);
-    final halfRate = (invoice.gstRate / 2)
-        .truncateToDouble() == (invoice.gstRate / 2)
-        ? (invoice.gstRate / 2).toStringAsFixed(0)
-        : (invoice.gstRate / 2).toStringAsFixed(1);
-    final fullRate = invoice.gstRate.truncateToDouble() == invoice.gstRate
-        ? invoice.gstRate.toStringAsFixed(0)
-        : invoice.gstRate.toStringAsFixed(1);
 
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1286,8 +1299,8 @@ class InvoicePdfService {
                   pw.SizedBox(height: 8),
                   pw.Text(
                     invoice.gstType == 'igst'
-                        ? 'IGST @ $fullRate%  =  ${_fmt(invoice.igstAmount)}'
-                        : 'CGST @ $halfRate% + SGST @ $halfRate%  =  ${_fmt(invoice.totalTax)}',
+                        ? 'IGST  =  ${_fmt(invoice.igstAmount)}'
+                        : 'CGST + SGST  =  ${_fmt(invoice.totalTax)}',
                     style: pw.TextStyle(
                       color: _navy,
                       fontSize: 10,
@@ -1334,19 +1347,19 @@ class InvoicePdfService {
                 pw.SizedBox(height: 10),
                 if (invoice.gstType == 'cgst_sgst') ...[
                   _summaryRow(
-                    'CGST @ $halfRate%',
+                    'CGST',
                     _fmt(invoice.cgstAmount),
                     valueColor: _navy,
                   ),
                   pw.SizedBox(height: 6),
                   _summaryRow(
-                    'SGST @ $halfRate%',
+                    'SGST',
                     _fmt(invoice.sgstAmount),
                     valueColor: _navy,
                   ),
                 ] else
                   _summaryRow(
-                    'IGST @ $fullRate%',
+                    'IGST',
                     _fmt(invoice.igstAmount),
                     valueColor: _navy,
                   ),

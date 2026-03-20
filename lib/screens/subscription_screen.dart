@@ -9,15 +9,8 @@ import '../modals/payment.dart';
 import '../services/plan_service.dart';
 import '../services/payment_service.dart';
 import '../services/usage_tracking_service.dart';
+import '../theme/app_colors.dart';
 import 'upgrade_screen.dart';
-
-// ─── Brand colours ───────────────────────────────────────────────────────────
-const _kNavy = Color(0xFF1E3A8A);
-const _kPrimary = Color(0xFF4361EE);
-const _kTeal = Color(0xFF6366F1);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kLabel = Color(0xFF5B7A9A);
 
 class SubscriptionScreen extends StatefulWidget {
   const SubscriptionScreen({super.key});
@@ -96,64 +89,58 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final isGrace = PlanService.instance.isInGracePeriod;
 
     return Scaffold(
+      backgroundColor: kSurface,
       appBar: AppBar(
         title: const Text('Subscription'),
-        backgroundColor: Colors.transparent,
+        backgroundColor: kSurface,
         elevation: 0,
-        foregroundColor: _kNavy,
+        scrolledUnderElevation: 0,
+        surfaceTintColor: Colors.transparent,
+        foregroundColor: kOnSurface,
       ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFEAF3FF), Color(0xFFF5FBFF), Colors.white],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: RefreshIndicator(
-          onRefresh: _loadUsage,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // ── Grace-period warning ─────────────────────────
-              if (isGrace) _buildGraceWarning(),
+      body: RefreshIndicator(
+        onRefresh: _loadUsage,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // ── Grace-period warning ─────────────────────────
+            if (isGrace) _buildGraceWarning(),
 
-              // ── Plan header card ─────────────────────────────
-              _PlanHeaderCard(
-                plan: plan,
-                limits: limits,
-                status: status,
-                billingCycle: billingCycle,
-                periodEnd: periodEnd,
-                cancelAtPeriodEnd: _cancelAtPeriodEnd,
-                isGrace: isGrace,
-              ),
-              const SizedBox(height: 20),
+            // ── Plan header card ─────────────────────────────
+            _PlanHeaderCard(
+              plan: plan,
+              limits: limits,
+              status: status,
+              billingCycle: billingCycle,
+              periodEnd: periodEnd,
+              cancelAtPeriodEnd: _cancelAtPeriodEnd,
+              isGrace: isGrace,
+            ),
+            const SizedBox(height: 20),
 
-              // ── Usage dashboard ──────────────────────────────
-              _buildSectionHeader('Usage This Month', 'Track your current plan usage'),
-              const SizedBox(height: 12),
-              _isLoadingUsage
-                  ? const Center(child: Padding(
-                      padding: EdgeInsets.all(24),
-                      child: CircularProgressIndicator(),
-                    ))
-                  : _buildUsageGrid(limits),
-              const SizedBox(height: 20),
+            // ── Usage dashboard ──────────────────────────────
+            _buildSectionHeader('Usage This Month', 'Track your current plan usage'),
+            const SizedBox(height: 12),
+            _isLoadingUsage
+                ? const Center(child: Padding(
+                    padding: EdgeInsets.all(24),
+                    child: CircularProgressIndicator(),
+                  ))
+                : _buildUsageGrid(limits),
+            const SizedBox(height: 20),
 
-              // ── Subscription actions ─────────────────────────
-              _buildSectionHeader('Manage Subscription', 'Upgrade, change, or cancel your plan'),
-              const SizedBox(height: 12),
-              _buildActions(plan),
-              const SizedBox(height: 20),
+            // ── Subscription actions ─────────────────────────
+            _buildSectionHeader('Manage Subscription', 'Upgrade, change, or cancel your plan'),
+            const SizedBox(height: 12),
+            _buildActions(plan),
+            const SizedBox(height: 20),
 
-              // ── Payment history ──────────────────────────────
-              _buildSectionHeader('Payment History', 'Your recent transactions'),
-              const SizedBox(height: 12),
-              _buildPaymentHistory(),
-              const SizedBox(height: 24),
-            ],
-          ),
+            // ── Payment history ──────────────────────────────
+            _buildSectionHeader('Payment History', 'Your recent transactions'),
+            const SizedBox(height: 12),
+            _buildPaymentHistory(),
+            const SizedBox(height: 24),
+          ],
         ),
       ),
     );
@@ -174,7 +161,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         decoration: BoxDecoration(
           color: Colors.amber.shade50,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.amber.shade300),
         ),
         child: Row(
           children: [
@@ -222,16 +208,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             style: const TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: _kNavy,
+              color: kOnSurface,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 13.5,
               height: 1.45,
-              color: Colors.blueGrey.shade700,
+              color: kOnSurfaceVariant,
             ),
           ),
         ],
@@ -254,24 +240,28 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         _UsageCard(
           label: 'Invoices',
           icon: Icons.receipt_long_rounded,
+          iconColor: const Color(0xFF007AFF),
           current: usage['invoices'] ?? 0,
           max: limits.maxInvoicesPerMonth,
         ),
         _UsageCard(
           label: 'Customers',
           icon: Icons.people_rounded,
+          iconColor: const Color(0xFF34C759),
           current: usage['customers'] ?? 0,
           max: limits.maxCustomers,
         ),
         _UsageCard(
           label: 'Products',
           icon: Icons.inventory_2_rounded,
+          iconColor: const Color(0xFFFF9500),
           current: usage['products'] ?? 0,
           max: limits.maxProducts,
         ),
         _UsageCard(
           label: 'WhatsApp',
           icon: Icons.chat_rounded,
+          iconColor: const Color(0xFF25D366),
           current: usage['whatsappShares'] ?? 0,
           max: limits.maxWhatsAppSharesPerMonth,
         ),
@@ -284,16 +274,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Widget _buildActions(AppPlan plan) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(26),
-        border: Border.all(color: const Color(0xFFD7E2F3)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blueGrey.withValues(alpha: 0.08),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       child: Column(
         children: [
@@ -445,18 +428,18 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           return Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: kSurfaceLowest,
               borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: const Color(0xFFD7E2F3)),
+              boxShadow: const [kSubtleShadow],
             ),
-            child: Column(
+            child: const Column(
               children: [
-                Icon(Icons.receipt_long_outlined, size: 40, color: _kLabel),
-                const SizedBox(height: 12),
+                Icon(Icons.receipt_long_outlined, size: 40, color: kOnSurfaceVariant),
+                SizedBox(height: 12),
                 Text(
                   'No payments yet',
                   style: TextStyle(
-                    color: _kLabel,
+                    color: kOnSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -467,16 +450,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
         return Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: kSurfaceLowest,
             borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: const Color(0xFFD7E2F3)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.blueGrey.withValues(alpha: 0.08),
-                blurRadius: 18,
-                offset: const Offset(0, 10),
-              ),
-            ],
+            boxShadow: const [kSubtleShadow],
           ),
           child: ListView.separated(
             shrinkWrap: true,
@@ -523,6 +499,7 @@ class _PlanHeaderCard extends StatelessWidget {
     AppPlan.free => Icons.star_border_rounded,
     AppPlan.raja => Icons.star_rounded,
     AppPlan.maharaja => Icons.diamond_rounded,
+    AppPlan.king => Icons.workspace_premium_rounded,
   };
 
   String get _statusLabel {
@@ -549,18 +526,8 @@ class _PlanHeaderCard extends StatelessWidget {
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        gradient: const LinearGradient(
-          colors: [_kNavy, _kTeal],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x22000000),
-            blurRadius: 24,
-            offset: Offset(0, 14),
-          ),
-        ],
+        gradient: kSignatureGradient,
+        boxShadow: const [kWhisperShadow],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -720,10 +687,12 @@ class _UsageCard extends StatelessWidget {
     required this.icon,
     required this.current,
     required this.max,
+    this.iconColor = kPrimary,
   });
 
   final String label;
   final IconData icon;
+  final Color iconColor;
   final int current;
   final int max; // -1 = unlimited, 0 = disabled
 
@@ -733,40 +702,33 @@ class _UsageCard extends StatelessWidget {
     final isDisabled = max == 0;
     final ratio = isUnlimited || isDisabled ? 0.0 : (max > 0 ? current / max : 0.0);
     final progressColor = isUnlimited
-        ? const Color(0xFF6366F1)
+        ? kPrimary
         : ratio > 0.9
             ? Colors.red
             : ratio > 0.7
                 ? Colors.amber.shade700
-                : const Color(0xFF6366F1);
+                : kPrimary;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: _kBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blueGrey.withValues(alpha: 0.06),
-            blurRadius: 12,
-            offset: const Offset(0, 6),
-          ),
-        ],
+        boxShadow: const [kSubtleShadow],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: _kPrimary),
+              Icon(icon, size: 18, color: iconColor),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: _kNavy,
+                  color: kOnSurface,
                 ),
               ),
             ],
@@ -775,14 +737,14 @@ class _UsageCard extends StatelessWidget {
           if (isUnlimited) ...[
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF6366F1)),
+                const Icon(Icons.check_circle_rounded, size: 18, color: kPrimary),
                 const SizedBox(width: 6),
                 Text(
                   '$current used',
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: _kNavy,
+                    color: kOnSurface,
                   ),
                 ),
               ],
@@ -792,23 +754,23 @@ class _UsageCard extends StatelessWidget {
               'Unlimited',
               style: TextStyle(
                 fontSize: 12,
-                color: Color(0xFF6366F1),
+                color: kPrimary,
                 fontWeight: FontWeight.w600,
               ),
             ),
           ] else if (isDisabled) ...[
-            Text(
+            const Text(
               'Not available',
               style: TextStyle(
                 fontSize: 13,
-                color: _kLabel,
+                color: kOnSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 4),
-            Text(
+            const Text(
               'Upgrade to unlock',
-              style: TextStyle(fontSize: 11, color: _kLabel),
+              style: TextStyle(fontSize: 11, color: kOnSurfaceVariant),
             ),
           ] else ...[
             Row(
@@ -826,7 +788,7 @@ class _UsageCard extends StatelessWidget {
                           child: CircularProgressIndicator(
                             value: ratio.clamp(0.0, 1.0),
                             strokeWidth: 4,
-                            backgroundColor: _kBorder,
+                            backgroundColor: kSurfaceDim,
                             valueColor: AlwaysStoppedAnimation(progressColor),
                           ),
                         ),
@@ -850,7 +812,7 @@ class _UsageCard extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: _kNavy,
+                      color: kOnSurface,
                     ),
                   ),
                 ),
@@ -899,7 +861,7 @@ class _ActionTile extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFEAF8FF),
+                  color: kPrimaryContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: isLoading
@@ -907,7 +869,7 @@ class _ActionTile extends StatelessWidget {
                         padding: EdgeInsets.all(12),
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    : Icon(icon, color: titleColor ?? _kPrimary),
+                    : Icon(icon, color: titleColor ?? kPrimary),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -919,23 +881,23 @@ class _ActionTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: titleColor ?? _kNavy,
+                        color: titleColor ?? kOnSurface,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       subtitle,
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 13,
                         height: 1.45,
-                        color: Colors.blueGrey.shade700,
+                        color: kOnSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              Icon(Icons.chevron_right_rounded, color: Colors.blueGrey.shade400),
+              const Icon(Icons.chevron_right_rounded, color: kOnSurfaceVariant),
             ],
           ),
         ),
@@ -954,7 +916,7 @@ class _PaymentTile extends StatelessWidget {
   final Payment payment;
 
   Color get _statusColor => switch (payment.status) {
-    'captured' => const Color(0xFF6366F1),
+    'captured' => kPrimary,
     'refunded' => Colors.amber.shade700,
     _ => Colors.red,
   };
@@ -1002,15 +964,15 @@ class _PaymentTile extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: _kNavy,
+                    color: kOnSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'Base ${fmt.format(baseInRupees)} + GST ${fmt.format(gstInRupees)}',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.blueGrey.shade600,
+                    color: kOnSurfaceVariant,
                   ),
                 ),
               ],
@@ -1024,7 +986,7 @@ class _PaymentTile extends StatelessWidget {
                 style: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: _kLabel,
+                  color: kOnSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1034,10 +996,10 @@ class _PaymentTile extends StatelessWidget {
                   if (payment.method != null) ...[
                     Text(
                       payment.method!.toUpperCase(),
-                      style: TextStyle(
+                      style: const TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: Colors.blueGrey.shade500,
+                        color: kTextTertiary,
                       ),
                     ),
                     const SizedBox(width: 6),

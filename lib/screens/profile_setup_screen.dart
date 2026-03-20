@@ -1,9 +1,8 @@
-import 'dart:ui';
-
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -83,262 +82,231 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
               ),
           ],
         ),
-        body: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                Color(0xFFF0FBFB),
-                Color(0xFFF6FAFF),
-                Color(0xFFEFF4FF),
-              ],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-          ),
-          child: SafeArea(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : Center(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 520),
-                        child: ClipRRect(
+        backgroundColor: kSurface,
+        body: SafeArea(
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Container(
+                        padding: const EdgeInsets.all(28),
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(32),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                            child: Container(
-                              padding: const EdgeInsets.all(28),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(32),
-                                border: Border.all(
-                                  color: Colors.white.withAlpha(170),
-                                ),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withAlpha(195),
-                                    Colors.white.withAlpha(150),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x14000000),
-                                    blurRadius: 28,
-                                    offset: Offset(0, 16),
-                                  ),
-                                ],
+                          color: kSurfaceLowest,
+                          boxShadow: const [kWhisperShadow],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 8,
                               ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF123C85).withAlpha(18),
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: const Color(0xFF123C85).withAlpha(30),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      currentUser?.email ?? s.profileBadgeFallback,
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                        color: Color(0xFF123C85),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 18),
-                                  Text(
-                                    promptTitle,
-                                    style: const TextStyle(
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w800,
-                                      color: Color(0xFF102746),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    promptBody,
-                                    style: TextStyle(
-                                      color: Colors.blueGrey.shade700,
-                                      fontSize: 15,
-                                      height: 1.55,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 26),
-
-                                  // ── Business Info ──────────────────────────
-                                  TextField(
-                                    controller: _storeNameController,
-                                    textCapitalization: TextCapitalization.words,
-                                    decoration: _inputDecoration(
-                                      label: s.profileStoreLabel,
-                                      hint: s.profileOptionalHint,
-                                      icon: Icons.storefront_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextField(
-                                    controller: _addressController,
-                                    textCapitalization: TextCapitalization.sentences,
-                                    maxLines: 3,
-                                    decoration: _inputDecoration(
-                                      label: s.profileAddressLabel,
-                                      hint: s.profileOptionalHint,
-                                      icon: Icons.location_on_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextField(
-                                    controller: _phoneController,
-                                    keyboardType: TextInputType.phone,
-                                    decoration: _inputDecoration(
-                                      label: s.profilePhoneLabel,
-                                      hint: s.profileOptionalHint,
-                                      icon: Icons.call_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-                                  TextField(
-                                    controller: _gstinController,
-                                    textCapitalization: TextCapitalization.characters,
-                                    decoration: _inputDecoration(
-                                      label: s.profileGstinLabel,
-                                      hint: s.profileGstinHint,
-                                      icon: Icons.receipt_long_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 26),
-
-                                  // ── UPI ID ─────────────────────────────────
-                                  TextField(
-                                    controller: _upiIdController,
-                                    decoration: _inputDecoration(
-                                      label: 'UPI ID',
-                                      hint: 'e.g. yourname@upi',
-                                      icon: Icons.payment_outlined,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 16),
-
-                                  // ── Bank Details Toggle ────────────────────
-                                  InkWell(
-                                    onTap: () => setState(() => _showBankDetails = !_showBankDetails),
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFEAF3FF),
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(color: const Color(0xFFD4E2F8)),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.account_balance_outlined, color: Color(0xFF123C85)),
-                                          const SizedBox(width: 12),
-                                          const Expanded(
-                                            child: Text(
-                                              'Bank Account Details',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                color: Color(0xFF123C85),
-                                              ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            _showBankDetails
-                                                ? Icons.keyboard_arrow_up_rounded
-                                                : Icons.keyboard_arrow_down_rounded,
-                                            color: const Color(0xFF123C85),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-
-                                  if (_showBankDetails) ...[
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      controller: _bankAccountNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      decoration: _inputDecoration(
-                                        label: 'Account Holder Name',
-                                        hint: s.profileOptionalHint,
-                                        icon: Icons.person_outline,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      controller: _bankAccountNumberController,
-                                      keyboardType: TextInputType.number,
-                                      decoration: _inputDecoration(
-                                        label: 'Account Number',
-                                        hint: s.profileOptionalHint,
-                                        icon: Icons.credit_card_outlined,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      controller: _bankIfscController,
-                                      textCapitalization: TextCapitalization.characters,
-                                      decoration: _inputDecoration(
-                                        label: 'IFSC Code',
-                                        hint: 'e.g. SBIN0001234',
-                                        icon: Icons.code_outlined,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    TextField(
-                                      controller: _bankNameController,
-                                      textCapitalization: TextCapitalization.words,
-                                      decoration: _inputDecoration(
-                                        label: 'Bank Name',
-                                        hint: s.profileOptionalHint,
-                                        icon: Icons.account_balance_outlined,
-                                      ),
-                                    ),
-                                  ],
-
-                                  const SizedBox(height: 26),
-                                  SizedBox(
-                                    width: double.infinity,
-                                    child: ElevatedButton(
-                                      onPressed: _isSaving ? null : _saveProfile,
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF123C85),
-                                        foregroundColor: Colors.white,
-                                        padding: const EdgeInsets.symmetric(
-                                          vertical: 16,
-                                        ),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(18),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        _isSaving
-                                            ? s.profileSaving
-                                            : widget.isRequiredSetup
-                                            ? s.profileSaveAndContinue
-                                            : s.profileSave,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                              decoration: BoxDecoration(
+                                color: kPrimaryContainer,
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                currentUser?.email ?? s.profileBadgeFallback,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: kPrimary,
+                                ),
                               ),
                             ),
-                          ),
+                            const SizedBox(height: 18),
+                            Text(
+                              promptTitle,
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                color: kOnSurface,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              promptBody,
+                              style: const TextStyle(
+                                color: kOnSurfaceVariant,
+                                fontSize: 15,
+                                height: 1.55,
+                              ),
+                            ),
+                            const SizedBox(height: 26),
+
+                            // ── Business Info ──────────────────────────
+                            TextField(
+                              controller: _storeNameController,
+                              textCapitalization: TextCapitalization.words,
+                              decoration: _inputDecoration(
+                                label: s.profileStoreLabel,
+                                hint: s.profileOptionalHint,
+                                icon: Icons.storefront_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _addressController,
+                              textCapitalization: TextCapitalization.sentences,
+                              maxLines: 3,
+                              decoration: _inputDecoration(
+                                label: s.profileAddressLabel,
+                                hint: s.profileOptionalHint,
+                                icon: Icons.location_on_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _phoneController,
+                              keyboardType: TextInputType.phone,
+                              decoration: _inputDecoration(
+                                label: s.profilePhoneLabel,
+                                hint: s.profileOptionalHint,
+                                icon: Icons.call_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            TextField(
+                              controller: _gstinController,
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: _inputDecoration(
+                                label: s.profileGstinLabel,
+                                hint: s.profileGstinHint,
+                                icon: Icons.receipt_long_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 26),
+
+                            // ── UPI ID ─────────────────────────────────
+                            TextField(
+                              controller: _upiIdController,
+                              decoration: _inputDecoration(
+                                label: 'UPI ID',
+                                hint: 'e.g. yourname@upi',
+                                icon: Icons.payment_outlined,
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+
+                            // ── Bank Details Toggle ────────────────────
+                            InkWell(
+                              onTap: () => setState(() => _showBankDetails = !_showBankDetails),
+                              borderRadius: BorderRadius.circular(14),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                decoration: BoxDecoration(
+                                  color: kPrimaryContainer,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.account_balance_outlined, color: kPrimary),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Text(
+                                        'Bank Account Details',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: kPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    Icon(
+                                      _showBankDetails
+                                          ? Icons.keyboard_arrow_up_rounded
+                                          : Icons.keyboard_arrow_down_rounded,
+                                      color: kPrimary,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
+                            if (_showBankDetails) ...[
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _bankAccountNameController,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: _inputDecoration(
+                                  label: 'Account Holder Name',
+                                  hint: s.profileOptionalHint,
+                                  icon: Icons.person_outline,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _bankAccountNumberController,
+                                keyboardType: TextInputType.number,
+                                decoration: _inputDecoration(
+                                  label: 'Account Number',
+                                  hint: s.profileOptionalHint,
+                                  icon: Icons.credit_card_outlined,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _bankIfscController,
+                                textCapitalization: TextCapitalization.characters,
+                                decoration: _inputDecoration(
+                                  label: 'IFSC Code',
+                                  hint: 'e.g. SBIN0001234',
+                                  icon: Icons.code_outlined,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              TextField(
+                                controller: _bankNameController,
+                                textCapitalization: TextCapitalization.words,
+                                decoration: _inputDecoration(
+                                  label: 'Bank Name',
+                                  hint: s.profileOptionalHint,
+                                  icon: Icons.account_balance_outlined,
+                                ),
+                              ),
+                            ],
+
+                            const SizedBox(height: 26),
+                            SizedBox(
+                              width: double.infinity,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: kSignatureGradient,
+                                  borderRadius: BorderRadius.circular(18),
+                                ),
+                                child: ElevatedButton(
+                                  onPressed: _isSaving ? null : _saveProfile,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    _isSaving
+                                        ? s.profileSaving
+                                        : widget.isRequiredSetup
+                                        ? s.profileSaveAndContinue
+                                        : s.profileSave,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-          ),
+                ),
         ),
       ),
     );
@@ -354,19 +322,19 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       hintText: hint,
       prefixIcon: Icon(icon),
       filled: true,
-      fillColor: Colors.white.withAlpha(180),
+      fillColor: kSurfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: Color(0xFFD4E2F8)),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
-        borderSide: const BorderSide(color: Color(0xFFD4E2F8)),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(18),
         borderSide: const BorderSide(
-          color: Color(0xFF123C85),
+          color: kPrimary,
           width: 1.4,
         ),
       ),

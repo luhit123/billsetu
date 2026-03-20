@@ -1,7 +1,6 @@
-import 'dart:ui';
-
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/services/auth_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -20,149 +19,95 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF1E3A8A), Color(0xFF123C85), Color(0xFF6366F1)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Stack(
-          children: [
-            const Positioned(
-              top: -80,
-              right: -40,
-              child: _GlowOrb(
-                size: 220,
-                colors: [Color(0x66BDEBFF), Color(0x00BDEBFF)],
-              ),
-            ),
-            const Positioned(
-              left: -70,
-              bottom: -30,
-              child: _GlowOrb(
-                size: 260,
-                colors: [Color(0x55A8FFE8), Color(0x00A8FFE8)],
-              ),
-            ),
-            SafeArea(
-              child: Center(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 440),
+      backgroundColor: kSurface,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 440),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'BillEasy',
+                    style: TextStyle(
+                      color: kOnSurface,
+                      fontSize: 42,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    s.loginTagline,
+                    style: const TextStyle(
+                      color: kOnSurfaceVariant,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 28),
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(32),
+                      color: kSurfaceLowest,
+                      boxShadow: const [kWhisperShadow],
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'BillRaja',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 42,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -1.2,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimaryContainer,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            s.loginBadgeLabel,
+                            style: const TextStyle(
+                              color: kPrimary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 22),
+                        Text(
+                          s.loginWelcome,
+                          style: const TextStyle(
+                            color: kOnSurface,
+                            fontSize: 30,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          s.loginTagline,
-                          style: TextStyle(
-                            color: Colors.white.withAlpha(210),
-                            fontSize: 16,
+                          s.loginSubtitle,
+                          style: const TextStyle(
+                            color: kOnSurfaceVariant,
+                            fontSize: 15,
                             height: 1.5,
                           ),
                         ),
                         const SizedBox(height: 28),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(32),
-                          child: BackdropFilter(
-                            filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                            child: Container(
-                              padding: const EdgeInsets.all(28),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(32),
-                                border: Border.all(
-                                  color: Colors.white.withAlpha(65),
-                                  width: 1.2,
-                                ),
-                                gradient: LinearGradient(
-                                  colors: [
-                                    Colors.white.withAlpha(46),
-                                    Colors.white.withAlpha(18),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0x33000000),
-                                    blurRadius: 30,
-                                    offset: Offset(0, 18),
-                                  ),
-                                ],
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 12,
-                                      vertical: 8,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white.withAlpha(32),
-                                      borderRadius: BorderRadius.circular(999),
-                                      border: Border.all(
-                                        color: Colors.white.withAlpha(44),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      s.loginBadgeLabel,
-                                      style: TextStyle(
-                                        color: Colors.white.withAlpha(220),
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 22),
-                                  Text(
-                                    s.loginWelcome,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Text(
-                                    s.loginSubtitle,
-                                    style: TextStyle(
-                                      color: Colors.white.withAlpha(210),
-                                      fontSize: 15,
-                                      height: 1.5,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 28),
-                                  _GoogleSignInButton(
-                                    isLoading: _isSigningIn,
-                                    onPressed: _isSigningIn
-                                        ? null
-                                        : _handleGoogleSignIn,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                        _GoogleSignInButton(
+                          isLoading: _isSigningIn,
+                          onPressed: _isSigningIn
+                              ? null
+                              : _handleGoogleSignIn,
                         ),
                       ],
                     ),
                   ),
-                ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -235,58 +180,46 @@ class _GoogleSignInButton extends StatelessWidget {
     final s = AppStrings.of(context);
     return SizedBox(
       width: double.infinity,
-      child: Material(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          onTap: onPressed,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: kSignatureGradient,
           borderRadius: BorderRadius.circular(20),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                if (isLoading)
-                  const SizedBox(
-                    width: 22,
-                    height: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2.2),
-                  )
-                else
-                  const _GoogleLogo(size: 22),
-                const SizedBox(width: 12),
-                Text(
-                  isLoading ? s.loginSigningIn : s.loginContinueGoogle,
-                  style: const TextStyle(
-                    color: Colors.black87,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(20),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (isLoading)
+                    const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.2,
+                        color: Colors.white,
+                      ),
+                    )
+                  else
+                    const _GoogleLogo(size: 22),
+                  const SizedBox(width: 12),
+                  Text(
+                    isLoading ? s.loginSigningIn : s.loginContinueGoogle,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _GlowOrb extends StatelessWidget {
-  const _GlowOrb({required this.size, required this.colors});
-
-  final double size;
-  final List<Color> colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(colors: colors),
         ),
       ),
     );

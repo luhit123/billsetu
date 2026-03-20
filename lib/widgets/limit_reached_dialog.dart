@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import '../screens/upgrade_screen.dart';
 import '../services/plan_service.dart';
 
@@ -75,16 +76,16 @@ class LimitReachedDialog extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: usageFraction,
                 minHeight: 8,
-                backgroundColor: const Color(0xFFE5E7EB),
+                backgroundColor: kSurfaceContainerHigh,
                 valueColor: AlwaysStoppedAnimation(
-                  usageFraction >= 1.0 ? const Color(0xFFEF4444) : const Color(0xFF4361EE),
+                  usageFraction >= 1.0 ? kOverdue : kPrimary,
                 ),
               ),
             ),
             const SizedBox(height: 6),
             Text(
               '${(usageFraction * 100).toStringAsFixed(0)}% used',
-              style: const TextStyle(fontSize: 12, color: Color(0xFF5B7A9A)),
+              style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
             ),
           ],
           const SizedBox(height: 12),
@@ -93,7 +94,7 @@ class LimitReachedDialog extends StatelessWidget {
             style: const TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF6366F1),
+              color: kPrimary,
             ),
           ),
         ],

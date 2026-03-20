@@ -3,25 +3,12 @@ import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/services/po_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// ── Brand tokens ─────────────────────────────────────────────────────────────
-const _kPrimary = Color(0xFF4361EE);
-const _kBackground = Color(0xFFEFF6FF);
-const _kBorder = Color(0xFFBDD5F0);
-const _kLabel = Color(0xFF5B7A9A);
-const _kTitle = Color(0xFF1E3A8A);
-const _kTeal = Color(0xFF6366F1);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
-
-// Status colours
+// Status colours (kept as semantic)
 const _kDraft = Color(0xFF6B7280);
 const _kDraftBg = Color(0xFFF3F4F6);
 const _kConfirmed = Color(0xFFF59E0B);
@@ -32,16 +19,9 @@ const _kCancelled = Color(0xFFEF4444);
 const _kCancelledBg = Color(0xFFFEE2E2);
 
 BoxDecoration _cardDeco() => BoxDecoration(
-      color: Colors.white,
+      color: kSurfaceLowest,
       borderRadius: const BorderRadius.all(Radius.circular(16)),
-      border: Border.all(color: _kBorder, width: 1.2),
-      boxShadow: const [
-        BoxShadow(
-          color: Color(0x0E0F4A75),
-          blurRadius: 12,
-          offset: Offset(0, 3),
-        ),
-      ],
+      boxShadow: const [kSubtleShadow],
     );
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -136,7 +116,7 @@ class _PurchaseOrderDetailsScreenState
 
   Future<void> _sendToSupplier() async {
     final phone = _order.supplierPhone.trim().replaceAll(RegExp(r'\D'), '');
-    final amount = _currencyFormat.format(_order.subtotal);
+    final amount = _currencyFormat.format(_order.grandTotal);
     final message =
         'Dear ${_order.supplierName}, here is our Purchase Order #${_order.orderNumber}. '
         'Total: $amount. Please confirm receipt.';
@@ -183,10 +163,10 @@ class _PurchaseOrderDetailsScreenState
           title,
           style: const TextStyle(
             fontWeight: FontWeight.w700,
-            color: _kTitle,
+            color: kOnSurface,
           ),
         ),
-        content: Text(message, style: const TextStyle(color: _kLabel)),
+        content: Text(message, style: const TextStyle(color: kOnSurfaceVariant)),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -223,7 +203,7 @@ class _PurchaseOrderDetailsScreenState
       builder: (context, profileSnap) {
         final profile = profileSnap.data;
         return Scaffold(
-          backgroundColor: _kBackground,
+          backgroundColor: kSurface,
           appBar: _buildAppBar(profile),
           body: SafeArea(
             child: Stack(
@@ -268,22 +248,18 @@ class _PurchaseOrderDetailsScreenState
 
   PreferredSizeWidget _buildAppBar(BusinessProfile? profile) {
     return AppBar(
-      backgroundColor: Colors.transparent,
-      foregroundColor: Colors.white,
+      backgroundColor: kSurface,
+      foregroundColor: kOnSurface,
       elevation: 0,
-      scrolledUnderElevation: 2,
-      shadowColor: Colors.black26,
+      scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
-      flexibleSpace: Container(
-        decoration: const BoxDecoration(gradient: _kGradient),
-      ),
       title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             _order.orderNumber,
             style: const TextStyle(
-              color: Colors.white,
+              color: kOnSurface,
               fontWeight: FontWeight.w700,
               fontSize: 17,
             ),
@@ -291,7 +267,7 @@ class _PurchaseOrderDetailsScreenState
           Text(
             _order.supplierName,
             style: const TextStyle(
-              color: Colors.white70,
+              color: kOnSurfaceVariant,
               fontSize: 12,
               fontWeight: FontWeight.w400,
             ),
@@ -301,7 +277,7 @@ class _PurchaseOrderDetailsScreenState
       actions: [
         IconButton(
           onPressed: () => _downloadPdf(profile),
-          icon: const Icon(Icons.picture_as_pdf_outlined, color: Colors.white),
+          icon: const Icon(Icons.picture_as_pdf_outlined, color: kOnSurface),
           tooltip: 'Download / Share PDF',
         ),
       ],
@@ -330,12 +306,12 @@ class _PurchaseOrderDetailsScreenState
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: _kPrimary.withAlpha(18),
+                  color: kPrimaryContainer,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.shopping_cart_outlined,
-                  color: _kPrimary,
+                  color: kPrimary,
                   size: 22,
                 ),
               ),
@@ -349,7 +325,7 @@ class _PurchaseOrderDetailsScreenState
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,
-                        color: _kTitle,
+                        color: kOnSurface,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -357,7 +333,7 @@ class _PurchaseOrderDetailsScreenState
                       'Created ${_dateFormat.format(_order.createdAt)}',
                       style: const TextStyle(
                         fontSize: 12,
-                        color: _kLabel,
+                        color: kOnSurfaceVariant,
                       ),
                     ),
                   ],
@@ -386,19 +362,19 @@ class _PurchaseOrderDetailsScreenState
           ),
           if (_order.expectedDate != null) ...[
             const SizedBox(height: 12),
-            const Divider(height: 1, color: Color(0xFFE5E7EB)),
+            Divider(height: 1, color: kSurfaceDim),
             const SizedBox(height: 12),
             Row(
               children: [
                 const Icon(
                   Icons.calendar_today_outlined,
                   size: 14,
-                  color: _kLabel,
+                  color: kOnSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
                 Text(
                   'Expected delivery: ${_dateFormat.format(_order.expectedDate!)}',
-                  style: const TextStyle(fontSize: 13, color: _kLabel),
+                  style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
                 ),
               ],
             ),
@@ -462,7 +438,7 @@ class _PurchaseOrderDetailsScreenState
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             decoration: BoxDecoration(
-              color: _kPrimary,
+              color: kPrimary,
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Row(
@@ -526,10 +502,7 @@ class _PurchaseOrderDetailsScreenState
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
               decoration: BoxDecoration(
-                color: isEven ? Colors.white : const Color(0xFFF8FAFF),
-                border: const Border(
-                  bottom: BorderSide(color: Color(0xFFEEF2FB), width: 1),
-                ),
+                color: isEven ? kSurfaceLowest : kSurfaceContainerLow,
               ),
               child: Row(
                 children: [
@@ -543,7 +516,7 @@ class _PurchaseOrderDetailsScreenState
                           style: const TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: _kTitle,
+                            color: kOnSurface,
                           ),
                         ),
                         if (item.hsnCode.isNotEmpty)
@@ -551,9 +524,29 @@ class _PurchaseOrderDetailsScreenState
                             'HSN: ${item.hsnCode}',
                             style: const TextStyle(
                               fontSize: 10,
-                              color: _kLabel,
+                              color: kOnSurfaceVariant,
                             ),
                           ),
+                      if (_order.gstEnabled && item.gstRate > 0)
+                        Container(
+                          margin: const EdgeInsets.only(top: 3),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: kPrimaryContainer,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'GST: ${item.gstRate.toStringAsFixed(0)}%',
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              color: kPrimary,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -562,7 +555,7 @@ class _PurchaseOrderDetailsScreenState
                     child: Text(
                       item.quantityLabel,
                       textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 12, color: _kTitle),
+                      style: const TextStyle(fontSize: 12, color: kOnSurface),
                     ),
                   ),
                   SizedBox(
@@ -570,7 +563,7 @@ class _PurchaseOrderDetailsScreenState
                     child: Text(
                       '₹${item.unitPrice.toStringAsFixed(2)}',
                       textAlign: TextAlign.end,
-                      style: const TextStyle(fontSize: 12, color: _kLabel),
+                      style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
                     ),
                   ),
                   SizedBox(
@@ -581,7 +574,7 @@ class _PurchaseOrderDetailsScreenState
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: _kTitle,
+                        color: kOnSurface,
                       ),
                     ),
                   ),
@@ -600,45 +593,63 @@ class _PurchaseOrderDetailsScreenState
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
+          _totalsRow('Subtotal', _currencyFormat.format(_order.subtotal)),
+          if (_order.hasDiscount) ...[
+            const SizedBox(height: 6),
+            _totalsRow(
+                'Discount${_order.discountType == 'percentage' ? ' (${_order.discountValue.toStringAsFixed(0)}%)' : ''}',
+                '- ${_currencyFormat.format(_order.discountAmount)}',
+                color: Colors.red.shade600),
+          ],
+          if (_order.hasGst) ...[
+            const SizedBox(height: 6),
+            if (_order.gstType == 'cgst_sgst') ...[
+              _totalsRow(
+                  'CGST',
+                  _currencyFormat.format(_order.cgstAmount),
+                  color: kPrimary),
+              const SizedBox(height: 4),
+              _totalsRow(
+                  'SGST',
+                  _currencyFormat.format(_order.sgstAmount),
+                  color: kPrimary),
+            ] else
+              _totalsRow(
+                  'IGST',
+                  _currencyFormat.format(_order.igstAmount),
+                  color: kPrimary),
+            const SizedBox(height: 4),
+            _totalsRow('Total Tax', _currencyFormat.format(_order.totalTax)),
+          ],
+          const SizedBox(height: 8),
+          Divider(color: kSurfaceDim),
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Subtotal',
-                style: TextStyle(fontSize: 14, color: _kLabel),
-              ),
-              Text(
-                _currencyFormat.format(_order.subtotal),
-                style: const TextStyle(fontSize: 14, color: _kLabel),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Divider(color: Color(0xFFE5E7EB)),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Total',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: _kTitle,
-                ),
-              ),
-              Text(
-                _currencyFormat.format(_order.subtotal),
-                style: const TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: _kPrimary,
-                ),
-              ),
+              const Text('Grand Total',
+                  style: TextStyle(fontSize: 17,
+                      fontWeight: FontWeight.w800, color: kOnSurface)),
+              Text(_currencyFormat.format(_order.grandTotal),
+                  style: const TextStyle(fontSize: 17,
+                      fontWeight: FontWeight.w800, color: kPrimary)),
             ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _totalsRow(String label, String value, {Color? color}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label,
+            style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant)),
+        Text(value,
+            style: TextStyle(fontSize: 14,
+                color: color ?? kOnSurfaceVariant, fontWeight: FontWeight.w600)),
+      ],
     );
   }
 
@@ -655,7 +666,7 @@ class _PurchaseOrderDetailsScreenState
             _order.notes,
             style: const TextStyle(
               fontSize: 13,
-              color: _kLabel,
+              color: kOnSurfaceVariant,
               height: 1.5,
             ),
           ),
@@ -693,7 +704,7 @@ class _PurchaseOrderDetailsScreenState
           _ActionButton(
             label: 'Download / Share PDF',
             icon: Icons.picture_as_pdf_outlined,
-            color: _kTeal,
+            color: kPrimary,
             onPressed: () => _downloadPdf(profile),
           ),
           const SizedBox(height: 10),
@@ -779,14 +790,14 @@ class _PurchaseOrderDetailsScreenState
   Widget _sectionTitle(String label, IconData icon) {
     return Row(
       children: [
-        Icon(icon, size: 17, color: _kPrimary),
+        Icon(icon, size: 17, color: kPrimary),
         const SizedBox(width: 7),
         Text(
           label,
           style: const TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: _kTitle,
+            color: kOnSurface,
           ),
         ),
       ],
@@ -805,7 +816,7 @@ class _PurchaseOrderDetailsScreenState
               label,
               style: const TextStyle(
                 fontSize: 12,
-                color: _kLabel,
+                color: kOnSurfaceVariant,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -815,7 +826,7 @@ class _PurchaseOrderDetailsScreenState
               value,
               style: const TextStyle(
                 fontSize: 13,
-                color: _kTitle,
+                color: kOnSurface,
                 fontWeight: FontWeight.w600,
               ),
             ),

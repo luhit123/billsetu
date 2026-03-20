@@ -6,6 +6,7 @@ class PurchaseLineItem {
     required this.unitPrice,
     this.unit = 'pcs',
     this.hsnCode = '',
+    this.gstRate = 0,
   });
 
   final String productId; // empty string if not linked to product catalog
@@ -14,6 +15,7 @@ class PurchaseLineItem {
   final double unitPrice; // PURCHASE / COST price per unit
   final String unit;
   final String hsnCode;
+  final double gstRate; // per-item GST rate (0, 5, 12, 18, 28)
 
   double get total => quantity * unitPrice;
 
@@ -31,6 +33,7 @@ class PurchaseLineItem {
     double? unitPrice,
     String? unit,
     String? hsnCode,
+    double? gstRate,
   }) {
     return PurchaseLineItem(
       productId: productId ?? this.productId,
@@ -39,6 +42,7 @@ class PurchaseLineItem {
       unitPrice: unitPrice ?? this.unitPrice,
       unit: unit ?? this.unit,
       hsnCode: hsnCode ?? this.hsnCode,
+      gstRate: gstRate ?? this.gstRate,
     );
   }
 
@@ -50,6 +54,7 @@ class PurchaseLineItem {
       unitPrice: (map['unitPrice'] as num? ?? 0).toDouble(),
       unit: map['unit'] as String? ?? 'pcs',
       hsnCode: map['hsnCode'] as String? ?? '',
+      gstRate: (map['gstRate'] as num? ?? 0).toDouble(),
     );
   }
 
@@ -60,5 +65,6 @@ class PurchaseLineItem {
         'unitPrice': unitPrice,
         'unit': unit,
         'hsnCode': hsnCode,
+        'gstRate': gstRate,
       };
 }

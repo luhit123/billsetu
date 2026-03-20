@@ -250,14 +250,13 @@ service cloud.firestore {
       }
     }
 
-    // Subscription doc — client can READ, only Cloud Functions can WRITE
+    // Subscription doc — client can read; write allowed in demo mode
+    // TODO: Remove client write access before production — use Cloud Functions only
     match /subscriptions/{userId} {
-      allow read: if isOwner(userId);
-      // No client write — only admin SDK (Cloud Functions) writes here
+      allow read, write: if isOwner(userId);
 
       match /payments/{paymentId} {
-        allow read: if isOwner(userId);
-        // No client write — only admin SDK writes
+        allow read, write: if isOwner(userId);
       }
     }
 

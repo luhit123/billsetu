@@ -1,19 +1,8 @@
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:flutter/material.dart';
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const _kPrimary       = Color(0xFF4361EE);
-const _kBackground    = Color(0xFFEFF6FF);
-const _kTextSecondary = Color(0xFF5B7A9A);
-const _kBorder        = Color(0xFFBDD5F0);
-
-const _kGradient = LinearGradient(
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-  colors: [Color(0xFF1E3A8A), Color(0xFF4361EE), Color(0xFF6366F1)],
-);
 
 class CustomerFormScreen extends StatefulWidget {
   const CustomerFormScreen({super.key, this.initialClient});
@@ -64,26 +53,22 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     final subtitle = _isEditing ? s.customerFormSubtitleEdit : s.customerFormSubtitleAdd;
 
     return Scaffold(
-      backgroundColor: _kBackground,
+      backgroundColor: kSurface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        foregroundColor: Colors.white,
+        backgroundColor: kSurface,
+        foregroundColor: kOnSurface,
         elevation: 0,
-        scrolledUnderElevation: 2,
-        shadowColor: Colors.black26,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(gradient: _kGradient),
-        ),
         title: Text(
           title,
           style: const TextStyle(
-            color: Colors.white,
+            color: kOnSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
         ),
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: const IconThemeData(color: kOnSurface),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -100,12 +85,12 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       width: 52,
                       height: 52,
                       decoration: BoxDecoration(
-                        color: _kPrimary.withValues(alpha: 0.10),
+                        color: kPrimaryContainer,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
                         Icons.person_add_alt_1_rounded,
-                        color: Color(0xFF4361EE),
+                        color: kPrimary,
                         size: 26,
                       ),
                     ),
@@ -119,7 +104,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             style: const TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF1E3A8A),
+                              color: kOnSurface,
                               letterSpacing: -0.3,
                             ),
                           ),
@@ -127,7 +112,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                           Text(
                             subtitle,
                             style: const TextStyle(
-                              color: Color(0xFF5B7A9A),
+                              color: kOnSurfaceVariant,
                               fontSize: 13,
                               height: 1.45,
                             ),
@@ -229,10 +214,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: _kPrimary,
-                    disabledBackgroundColor: _kPrimary.withValues(alpha: 0.50),
-                    elevation: 3,
-                    shadowColor: const Color(0x400F4A75),
+                    backgroundColor: kPrimary,
+                    disabledBackgroundColor: kPrimary.withValues(alpha: 0.50),
+                    elevation: 0,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
@@ -251,16 +235,9 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: _kBorder, width: 1.2),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0E0F4A75),
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [kWhisperShadow],
       ),
       child: child,
     );
@@ -272,7 +249,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       style: const TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: Color(0xFF5B7A9A),
+        color: kOnSurfaceVariant,
         letterSpacing: 0.1,
       ),
     );
@@ -284,23 +261,23 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: Color(0xFF9CA3AF), fontSize: 14),
+      hintStyle: const TextStyle(color: kTextTertiary, fontSize: 14),
       errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
-      prefixIcon: Icon(icon, color: _kTextSecondary, size: 20),
+      prefixIcon: Icon(icon, color: kOnSurfaceVariant, size: 20),
       filled: true,
-      fillColor: const Color(0xFFF5F8FF),
+      fillColor: kSurfaceContainerLow,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFBDD5F0)),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFBDD5F0)),
+        borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFF4361EE), width: 1.8),
+        borderSide: const BorderSide(color: kPrimary, width: 1.8),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
