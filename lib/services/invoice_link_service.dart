@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:billeasy/modals/invoice.dart';
@@ -5,6 +6,7 @@ import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
@@ -25,10 +27,14 @@ class InvoiceLinkService {
     return 'invoices/$ownerId/${invoice.id}/$fileName';
   }
 
-  /// Generates a short code from the invoice number.
-  /// e.g. "BR-2026-00001" → "BR202600001"
+  static const _chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+  static final _rng = Random.secure();
+
+  /// Generates a non-guessable short code using a hash of invoice ID + random suffix.
   static String _shortCode(Invoice invoice) {
-    return invoice.invoiceNumber.replaceAll('-', '');
+    final hash = sha256.convert('${invoice.id}${invoice.invoiceNumber}'.codeUnits).toString();
+    final suffix = List.generate(4, (_) => _chars[_rng.nextInt(_chars.length)]).join();
+    return '${hash.substring(0, 8)}$suffix';
   }
 
   /// Uploads [pdfBytes] for [invoice], writes shared metadata to Firestore,
