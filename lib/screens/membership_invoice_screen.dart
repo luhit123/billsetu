@@ -2,8 +2,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:billeasy/modals/business_profile.dart';
+import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/modals/line_item.dart';
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/modals/subscription_plan.dart';
+import 'package:billeasy/screens/template_picker_sheet.dart';
+import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +17,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 BoxDecoration _cardDeco() => const BoxDecoration(
       color: kSurfaceLowest,
@@ -44,9 +49,17 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     symbol: '\u20b9',
     decimalDigits: 0,
   );
+  // PDF-safe formatter (default fonts don't support ₹ glyph)
+  final NumberFormat _pdfCurrencyFormat = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: 'Rs. ',
+    decimalDigits: 0,
+  );
 
+  static const _kTemplatePrefsKey = 'membership_invoice_template';
   bool _isGeneratingPdf = false;
   BusinessProfile? _profile;
+  InvoiceTemplate _template = InvoiceTemplate.classic;
 
   Member get _member => widget.member;
   SubscriptionPlan get _plan => widget.plan;
@@ -96,6 +109,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   void initState() {
     super.initState();
     _loadProfile();
+    _loadTemplate();
   }
 
   Future<void> _loadProfile() async {
@@ -105,13 +119,76 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     } catch (_) {}
   }
 
+  Future<void> _loadTemplate() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kTemplatePrefsKey);
+    if (saved != null && mounted) {
+      final t = InvoiceTemplate.values.where((e) => e.name == saved);
+      if (t.isNotEmpty) setState(() => _template = t.first);
+    }
+  }
+
+  Future<void> _pickTemplate() async {
+    final picked = await showModalBottomSheet<InvoiceTemplate>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => TemplatePicker(current: _template),
+    );
+    if (picked != null && mounted) {
+      setState(() => _template = picked);
+      final prefs = await SharedPreferences.getInstance();
+      prefs.setString(_kTemplatePrefsKey, picked.name);
+    }
+  }
+
+  /// Convert membership data into an Invoice for the template-based PDF generator.
+  Invoice _toInvoice() {
+    final items = <LineItem>[
+      LineItem(
+        description: '${_plan.name} (${_plan.durationLabel}${_isRecurring ? ' - Recurring' : ' - Package'})',
+        quantity: 1,
+        unitPrice: _plan.price,
+      ),
+    ];
+    if (_isRecurring && _member.joiningFeePaid > 0) {
+      items.add(LineItem(
+        description: 'Joining Fee (one-time)',
+        quantity: 1,
+        unitPrice: _member.joiningFeePaid,
+      ));
+    }
+    return Invoice(
+      id: _invoiceNumber,
+      ownerId: _member.ownerId,
+      invoiceNumber: _invoiceNumber,
+      clientId: _member.id,
+      clientName: _member.name,
+      items: items,
+      createdAt: _member.startDate,
+      status: InvoiceStatus.paid,
+      dueDate: _member.endDate,
+      discountType: _plan.discountPercent > 0 ? InvoiceDiscountType.percentage : null,
+      discountValue: _plan.discountPercent,
+    );
+  }
+
   // ── Build ──────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kSurface,
-      appBar: kBuildGradientAppBar(titleText: 'Membership Invoice'),
+      appBar: kBuildGradientAppBar(
+        titleText: 'Membership Invoice',
+        actions: [
+          IconButton(
+            onPressed: _pickTemplate,
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Change Template',
+          ),
+        ],
+      ),
       bottomNavigationBar: _buildBottomBar(),
       body: SafeArea(
         child: ListView(
@@ -852,21 +929,21 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     pw.SizedBox(height: 8),
                     _pdfRow(
                       _isRecurring ? 'Plan Price' : 'Package Fee',
-                      _currencyFormat.format(_plan.price),
+                      _pdfCurrencyFormat.format(_plan.price),
                       bodyText,
                       bodyBold,
                     ),
                     if (_plan.discountPercent > 0)
                       _pdfRow(
                         'Discount (${_plan.discountPercent.toStringAsFixed(0)}%)',
-                        '-${_currencyFormat.format(_discountAmount)}',
+                        '-${_pdfCurrencyFormat.format(_discountAmount)}',
                         bodyText,
                         bodyBold,
                       ),
                     if (_isRecurring && _member.joiningFeePaid > 0)
                       _pdfRow(
                         'Joining Fee',
-                        _currencyFormat.format(_member.joiningFeePaid),
+                        _pdfCurrencyFormat.format(_member.joiningFeePaid),
                         bodyText,
                         bodyBold,
                       ),
@@ -876,7 +953,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                       children: [
                         pw.Text('Total Amount', style: titleStyle),
                         pw.Text(
-                          _currencyFormat.format(_totalAmount),
+                          _pdfCurrencyFormat.format(_totalAmount),
                           style: pw.TextStyle(
                             fontSize: 16,
                             fontWeight: pw.FontWeight.bold,
@@ -980,10 +1057,22 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
 
   // ── Actions ────────────────────────────────────────────────────────────────
 
+  Future<Uint8List> _generatePdf() async {
+    // Use the same template system as regular invoices
+    final invoice = _toInvoice();
+    final pdfService = InvoicePdfService();
+    return pdfService.buildInvoicePdf(
+      invoice: invoice,
+      profile: _profile,
+      template: _template,
+      includePayment: false,
+    );
+  }
+
   Future<void> _downloadPdf() async {
     setState(() => _isGeneratingPdf = true);
     try {
-      final bytes = await _buildMembershipPdf();
+      final bytes = await _generatePdf();
       await Printing.layoutPdf(
         name: 'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf',
         onLayout: (_) async => bytes,
@@ -1003,7 +1092,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   Future<void> _shareViaWhatsApp() async {
     setState(() => _isGeneratingPdf = true);
     try {
-      final bytes = await _buildMembershipPdf();
+      final bytes = await _generatePdf();
       final dir = await getTemporaryDirectory();
       final fileName =
           'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf';

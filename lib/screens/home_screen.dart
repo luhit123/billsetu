@@ -55,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
       const InvoicesScreen(),
       const CustomersScreen(),
       const ProductsScreen(),
-      const SubscriptionsScreen(),
     ];
   }
 
@@ -110,13 +109,6 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _selectedTab == 3,
               activeColor: const Color(0xFFFF9500),
               onTap: () => setState(() => _selectedTab = 3),
-            ),
-            _BottomNavItem(
-              icon: Icons.card_membership_rounded,
-              label: 'Members',
-              isActive: _selectedTab == 4,
-              activeColor: const Color(0xFFE91E63),
-              onTap: () => setState(() => _selectedTab = 4),
             ),
           ],
         ),
@@ -341,6 +333,86 @@ class _DashboardPageState extends State<_DashboardPage> {
                   context,
                   MaterialPageRoute(
                     builder: (_) => const ReferralScreen(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Membership & Subscriptions Card ────────────────────────
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+              child: GestureDetector(
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SubscriptionsScreen(),
+                  ),
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF7C3AED), Color(0xFFA855F7)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x307C3AED),
+                        blurRadius: 12,
+                        offset: Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.card_membership_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Memberships & Subscriptions',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            SizedBox(height: 3),
+                            Text(
+                              'Manage plans, members & attendance',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ],
                   ),
                 ),
               ),
