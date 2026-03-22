@@ -23,7 +23,22 @@ const _kOverdueBg = Color(0xFFFEE2E2);
 enum _Period { monthly, quarterly, yearly }
 
 // ─── Tab enum ──────────────────────────────────────────────────────────────────
-enum _GstTab { output, input, net }
+enum _GstTab { output, input, net, hsn }
+
+// ─── HSN aggregation model ────────────────────────────────────────────────────
+class _HsnAggregate {
+  _HsnAggregate(this.hsnCode);
+  final String hsnCode;
+  String description = '';
+  String unit = '';
+  double totalQuantity = 0;
+  double taxableAmount = 0;
+  double gstRate = 0;
+  double cgstAmount = 0;
+  double sgstAmount = 0;
+  double igstAmount = 0;
+  double totalTax = 0;
+}
 
 class GstReportScreen extends StatefulWidget {
   const GstReportScreen({super.key});
@@ -837,9 +852,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
       ),
       child: Row(
         children: [
-          _tabItem('Output (Sales)', _GstTab.output),
-          _tabItem('Input (Purchases)', _GstTab.input),
-          _tabItem('Net Summary', _GstTab.net),
+          _tabItem('Output', _GstTab.output),
+          _tabItem('Input', _GstTab.input),
+          _tabItem('Net', _GstTab.net),
+          _tabItem('HSN', _GstTab.hsn),
         ],
       ),
     );
@@ -1642,6 +1658,8 @@ class _GstReportScreenState extends State<GstReportScreen> {
                               _buildOutputTab(s, invoices)
                             else if (_activeTab == _GstTab.input)
                               _buildInputTab()
+                            else if (_activeTab == _GstTab.hsn)
+                              _buildHsnTab(invoices)
                             else
                               _netSummaryTab(
                                 outputTaxable: totalTaxable,
@@ -1722,6 +1740,227 @@ class _GstReportScreenState extends State<GstReportScreen> {
         );
       },
     );
+  }
+
+  // ─── HSN Summary tab content ─────────────────────────────────────────────
+
+  Widget _buildHsnTab(List<Invoice> invoices) {
+    // Aggregate line items by HSN code
+    final hsnMap = <String, _HsnAggregate>{};
+    for (final inv in invoices) {
+      for (final item in inv.items) {
+        final code = item.hsnCode.trim().isEmpty ? 'No HSN' : item.hsnCode.trim();
+        final agg = hsnMap.putIfAbsent(code, () => _HsnAggregate(code));
+        agg.description = item.description;
+        agg.totalQuantity += item.quantity;
+        agg.unit = item.unit.isNotEmpty ? item.unit : agg.unit;
+        agg.taxableAmount += item.total;
+        final itemGstRate = item.gstRate > 0 ? item.gstRate : inv.gstRate;
+        agg.gstRate = itemGstRate;
+        final isIgst = inv.gstType == 'igst';
+        final tax = item.total * itemGstRate / 100;
+        if (isIgst) {
+          agg.igstAmount += tax;
+        } else {
+          agg.cgstAmount += tax / 2;
+          agg.sgstAmount += tax / 2;
+        }
+        agg.totalTax += tax;
+      }
+    }
+
+    final hsnList = hsnMap.values.toList()
+      ..sort((a, b) => b.taxableAmount.compareTo(a.taxableAmount));
+
+    if (hsnList.isEmpty) {
+      return _emptyState(AppStrings.of(context));
+    }
+
+    final totalTaxable = hsnList.fold<double>(0, (s, h) => s + h.taxableAmount);
+    final totalTax = hsnList.fold<double>(0, (s, h) => s + h.totalTax);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          // Summary row
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPrimary.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 16, color: kPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'HSN summary for GSTR-1 filing — ${hsnList.length} HSN code${hsnList.length == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Header row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: kSurfaceContainerLow,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: const Row(
+              children: [
+                Expanded(flex: 3, child: Text('HSN Code', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+                Expanded(flex: 2, child: Text('Taxable', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+                Expanded(flex: 2, child: Text('Tax', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+              ],
+            ),
+          ),
+
+          // HSN rows
+          Container(
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: [
+                ...hsnList.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final h = entry.value;
+                  return Column(
+                    children: [
+                      _hsnRow(h),
+                      if (i < hsnList.length - 1)
+                        Container(height: 1, color: kSurfaceContainerLow, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                    ],
+                  );
+                }),
+                // Total row
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: kSurfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(flex: 3, child: Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
+                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTaxable), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
+                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kPrimary))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Detailed breakdown cards
+          const SizedBox(height: 20),
+          _sectionLabel('DETAILED BREAKDOWN'),
+          ...hsnList.map((h) => _hsnDetailCard(h)),
+          const SizedBox(height: 90),
+        ],
+      ),
+    );
+  }
+
+  Widget _hsnRow(_HsnAggregate h) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+                Text(h.description, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant), overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(_currencyFormat.format(h.taxableAmount), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(_currencyFormat.format(h.totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hsnDetailCard(_HsnAggregate h) {
+    final isIgst = h.igstAmount > 0 && h.cgstAmount == 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSurfaceLowest,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [kSubtleShadow],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: kPrimaryContainer, borderRadius: BorderRadius.circular(20)),
+                child: Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
+              ),
+              const SizedBox(width: 8),
+              _gstRateBadge(h.gstRate),
+              const Spacer(),
+              Text(
+                '${_formatQty(h.totalQuantity)}${h.unit.isNotEmpty ? ' ${h.unit}' : ''}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(h.description, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: kSurfaceContainerLow, borderRadius: BorderRadius.circular(10)),
+            child: Column(
+              children: [
+                _amountRow('Taxable', h.taxableAmount, kOnSurface),
+                if (isIgst) ...[
+                  const SizedBox(height: 4),
+                  _amountRow('IGST', h.igstAmount, kPrimary),
+                ] else ...[
+                  const SizedBox(height: 4),
+                  _amountRow('CGST', h.cgstAmount, kPrimary),
+                  const SizedBox(height: 4),
+                  _amountRow('SGST', h.sgstAmount, kPrimary),
+                ],
+                Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Divider(height: 1, color: kSurfaceDim)),
+                _amountRow('Total Tax', h.totalTax, kOnSurface, bold: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatQty(double qty) {
+    if (qty == qty.truncateToDouble()) return qty.toStringAsFixed(0);
+    return qty.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
   }
 
   // ─── Output (Sales) tab content ───────────────────────────────────────────
