@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:sms_autofill/sms_autofill.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +19,7 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
   final AuthService _authService = AuthService();
 
   // ── Phone auth state ────────────────────────────────────────────────────────
@@ -40,7 +41,29 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isSigningInGoogle = false;
 
   @override
+  void codeUpdated() {
+    // Called by CodeAutoFill when an OTP is detected from SMS
+    final smsCode = code ?? '';
+    if (smsCode.length >= 6 && mounted) {
+      final digits = smsCode.replaceAll(RegExp(r'\D'), '');
+      final otp = digits.length >= 6 ? digits.substring(0, 6) : digits;
+      if (otp.length == 6) {
+        for (int i = 0; i < 6; i++) {
+          _otpControllers[i].text = otp[i];
+        }
+        setState(() {});
+        // Auto-submit after a short delay for visual feedback
+        Future.delayed(const Duration(milliseconds: 300), () {
+          if (mounted) _handleVerifyOtp();
+        });
+      }
+    }
+  }
+
+  @override
   void dispose() {
+    cancel(); // Stop SMS listener from CodeAutoFill
+    unregisterListener();
     _phoneController.dispose();
     for (final c in _otpControllers) {
       c.dispose();
@@ -102,6 +125,10 @@ class _LoginScreenState extends State<LoginScreen> {
           _isSendingOtp = false;
         });
         _startResendTimer();
+        // Start listening for SMS auto-detection (Android only)
+        if (!kIsWeb) {
+          listenForCode();
+        }
         // Focus the first OTP field after frame renders.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) _otpFocusNodes[0].requestFocus();
