@@ -5,7 +5,6 @@ import 'package:billeasy/modals/analytics_models.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
 import 'package:billeasy/screens/customers_screen.dart';
-import 'package:billeasy/screens/feature_placeholder_screen.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
@@ -17,12 +16,12 @@ import 'package:billeasy/screens/create_purchase_order_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/screens/settings_screen.dart';
+import 'package:billeasy/screens/subscriptions_screen.dart';
 import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
-import 'package:billeasy/services/plan_service.dart';
-import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -56,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> {
       const InvoicesScreen(),
       const CustomersScreen(),
       const ProductsScreen(),
+      const SubscriptionsScreen(),
     ];
   }
 
@@ -63,7 +63,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     return Scaffold(
-      body: IndexedStack(index: _selectedTab, children: _tabs),
+      body: Column(
+        children: [
+          const ConnectivityBanner(),
+          Expanded(child: IndexedStack(index: _selectedTab, children: _tabs)),
+        ],
+      ),
       bottomNavigationBar: _buildBottomNav(s),
     );
   }
@@ -105,6 +110,13 @@ class _HomeScreenState extends State<HomeScreen> {
               isActive: _selectedTab == 3,
               activeColor: const Color(0xFFFF9500),
               onTap: () => setState(() => _selectedTab = 3),
+            ),
+            _BottomNavItem(
+              icon: Icons.card_membership_rounded,
+              label: 'Members',
+              isActive: _selectedTab == 4,
+              activeColor: const Color(0xFFE91E63),
+              onTap: () => setState(() => _selectedTab = 4),
             ),
           ],
         ),
@@ -325,23 +337,6 @@ class _DashboardPageState extends State<_DashboardPage> {
                     builder: (_) => const CreatePurchaseOrderScreen(),
                   ),
                 ),
-                onViewReports: () {
-                  if (!PlanService.instance.hasReports) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const UpgradeScreen(featureName: 'Reports'),
-                      ),
-                    );
-                    return;
-                  }
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ReportsScreen(),
-                    ),
-                  );
-                },
                 onReferral: () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -988,15 +983,10 @@ class _DashboardPageState extends State<_DashboardPage> {
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
-                    icon: Icons.query_stats_outlined,
-                    title: _s.drawerAnalytics,
+                    icon: Icons.assessment_outlined,
+                    title: _s.drawerReports,
                     iconBgColor: const Color(0xFF00C7BE),
-                    onTap: () => _openDrawerPlaceholder(
-                      title: _s.drawerAnalytics,
-                      icon: Icons.query_stats_outlined,
-                      description: _s.drawerAnalyticsDesc,
-                      accentColor: kPrimary,
-                    ),
+                    onTap: () => _openDrawerScreen(const ReportsScreen()),
                   ),
                   const SizedBox(height: 10),
                   _DrawerMenuTile(
@@ -1042,22 +1032,6 @@ class _DashboardPageState extends State<_DashboardPage> {
   void _openDrawerScreen(Widget screen) {
     Navigator.pop(context);
     Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
-  }
-
-  void _openDrawerPlaceholder({
-    required String title,
-    required IconData icon,
-    required String description,
-    required Color accentColor,
-  }) {
-    _openDrawerScreen(
-      FeaturePlaceholderScreen(
-        title: title,
-        icon: icon,
-        description: description,
-        accentColor: accentColor,
-      ),
-    );
   }
 
   Future<void> _handleDrawerAuthAction(User? user) async {
@@ -1534,14 +1508,12 @@ class _QuickActionsSection extends StatelessWidget {
     required this.onCreateInvoice,
     required this.onAddClient,
     required this.onNewPurchase,
-    required this.onViewReports,
     required this.onReferral,
   });
 
   final VoidCallback onCreateInvoice;
   final VoidCallback onAddClient;
   final VoidCallback onNewPurchase;
-  final VoidCallback onViewReports;
   final VoidCallback onReferral;
 
   @override
@@ -1576,15 +1548,6 @@ class _QuickActionsSection extends StatelessWidget {
                 label: s.homeAddClient,
                 filled: false,
                 onTap: onAddClient,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _ActionButton(
-                icon: Icons.bar_chart_rounded,
-                label: 'Reports',
-                filled: false,
-                onTap: onViewReports,
               ),
             ),
           ],

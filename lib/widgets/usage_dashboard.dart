@@ -39,7 +39,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
   Widget build(BuildContext context) {
     final plan = PlanService.instance.currentPlan;
     final limits = PlanService.instance.currentLimits;
-    final isFree = plan == AppPlan.free;
+    final isFree = plan == AppPlan.expired;
 
     return GestureDetector(
       onTap: () {
@@ -71,7 +71,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
                       Icon(
                         isFree
                             ? Icons.star_border_rounded
-                            : plan == AppPlan.raja
+                            : plan == AppPlan.trial
                                 ? Icons.star_rounded
                                 : Icons.diamond_rounded,
                         color: Colors.white,

@@ -52,12 +52,17 @@ class ProfileService {
   Future<void> saveCurrentProfile(BusinessProfile profile) async {
     final currentUser = _requireCurrentUser();
 
+    // Check if this is the first time saving (no existing doc) to set createdAt
+    final existing = await _profileDoc(currentUser.uid).get();
+    final isNew = !existing.exists;
+
     await _profileDoc(currentUser.uid).set({
       ...profile.toMap(),
       'ownerId': currentUser.uid,
       'email': currentUser.email,
       'displayName': currentUser.displayName,
       'updatedAt': FieldValue.serverTimestamp(),
+      if (isNew) 'createdAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
 

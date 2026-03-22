@@ -4,7 +4,10 @@ import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 class ProfileSetupScreen extends StatefulWidget {
   const ProfileSetupScreen({
@@ -29,12 +32,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final TextEditingController _bankIfscController = TextEditingController();
   final TextEditingController _bankNameController = TextEditingController();
   final TextEditingController _upiIdController = TextEditingController();
+  final TextEditingController _upiNumberController = TextEditingController();
   final ProfileService _profileService = ProfileService();
 
   bool _isLoading = true;
   bool _isSaving = false;
   bool _didPrefill = false;
   bool _showBankDetails = false;
+  String _upiQrUrl = '';
+  bool _isUploadingQr = false;
 
   @override
   void initState() {
@@ -53,6 +59,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _bankIfscController.dispose();
     _bankNameController.dispose();
     _upiIdController.dispose();
+    _upiNumberController.dispose();
     super.dispose();
   }
 
@@ -139,28 +146,21 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                             ),
                             const SizedBox(height: 26),
 
-                            // ── Business Info ──────────────────────────
+                            // ── Business Name (always shown) ───────────
                             TextField(
                               controller: _storeNameController,
                               textCapitalization: TextCapitalization.words,
                               decoration: _inputDecoration(
                                 label: s.profileStoreLabel,
-                                hint: s.profileOptionalHint,
+                                hint: widget.isRequiredSetup
+                                    ? 'Required'
+                                    : s.profileOptionalHint,
                                 icon: Icons.storefront_outlined,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            TextField(
-                              controller: _addressController,
-                              textCapitalization: TextCapitalization.sentences,
-                              maxLines: 3,
-                              decoration: _inputDecoration(
-                                label: s.profileAddressLabel,
-                                hint: s.profileOptionalHint,
-                                icon: Icons.location_on_outlined,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
+
+                            // ── Phone (always shown) ──────────────────
                             TextField(
                               controller: _phoneController,
                               keyboardType: TextInputType.phone,
@@ -170,104 +170,189 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                                 icon: Icons.call_outlined,
                               ),
                             ),
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _gstinController,
-                              textCapitalization: TextCapitalization.characters,
-                              decoration: _inputDecoration(
-                                label: s.profileGstinLabel,
-                                hint: s.profileGstinHint,
-                                icon: Icons.receipt_long_outlined,
-                              ),
-                            ),
-                            const SizedBox(height: 26),
 
-                            // ── UPI ID ─────────────────────────────────
-                            TextField(
-                              controller: _upiIdController,
-                              decoration: _inputDecoration(
-                                label: 'UPI ID',
-                                hint: 'e.g. yourname@upi',
-                                icon: Icons.payment_outlined,
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-
-                            // ── Bank Details Toggle ────────────────────
-                            InkWell(
-                              onTap: () => setState(() => _showBankDetails = !_showBankDetails),
-                              borderRadius: BorderRadius.circular(14),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                                decoration: BoxDecoration(
-                                  color: kPrimaryContainer,
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.account_balance_outlined, color: kPrimary),
-                                    const SizedBox(width: 12),
-                                    const Expanded(
-                                      child: Text(
-                                        'Bank Account Details',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          color: kPrimary,
-                                        ),
-                                      ),
-                                    ),
-                                    Icon(
-                                      _showBankDetails
-                                          ? Icons.keyboard_arrow_up_rounded
-                                          : Icons.keyboard_arrow_down_rounded,
-                                      color: kPrimary,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                            if (_showBankDetails) ...[
+                            // ── Full form fields (hidden during required setup) ──
+                            if (!widget.isRequiredSetup) ...[
                               const SizedBox(height: 16),
                               TextField(
-                                controller: _bankAccountNameController,
-                                textCapitalization: TextCapitalization.words,
+                                controller: _addressController,
+                                textCapitalization: TextCapitalization.sentences,
+                                maxLines: 3,
                                 decoration: _inputDecoration(
-                                  label: 'Account Holder Name',
+                                  label: s.profileAddressLabel,
                                   hint: s.profileOptionalHint,
-                                  icon: Icons.person_outline,
+                                  icon: Icons.location_on_outlined,
                                 ),
                               ),
                               const SizedBox(height: 16),
                               TextField(
-                                controller: _bankAccountNumberController,
-                                keyboardType: TextInputType.number,
-                                decoration: _inputDecoration(
-                                  label: 'Account Number',
-                                  hint: s.profileOptionalHint,
-                                  icon: Icons.credit_card_outlined,
-                                ),
-                              ),
-                              const SizedBox(height: 16),
-                              TextField(
-                                controller: _bankIfscController,
+                                controller: _gstinController,
                                 textCapitalization: TextCapitalization.characters,
                                 decoration: _inputDecoration(
-                                  label: 'IFSC Code',
-                                  hint: 'e.g. SBIN0001234',
-                                  icon: Icons.code_outlined,
+                                  label: s.profileGstinLabel,
+                                  hint: s.profileGstinHint,
+                                  icon: Icons.receipt_long_outlined,
+                                ),
+                              ),
+                              const SizedBox(height: 26),
+
+                              // ── UPI ID ─────────────────────────────────
+                              TextField(
+                                controller: _upiIdController,
+                                decoration: _inputDecoration(
+                                  label: 'UPI ID',
+                                  hint: 'e.g. yourname@upi',
+                                  icon: Icons.payment_outlined,
                                 ),
                               ),
                               const SizedBox(height: 16),
+
+                              // ── UPI Number ────────────────────────────
                               TextField(
-                                controller: _bankNameController,
-                                textCapitalization: TextCapitalization.words,
+                                controller: _upiNumberController,
+                                keyboardType: TextInputType.phone,
                                 decoration: _inputDecoration(
-                                  label: 'Bank Name',
-                                  hint: s.profileOptionalHint,
-                                  icon: Icons.account_balance_outlined,
+                                  label: 'UPI Linked Phone Number',
+                                  hint: 'e.g. 9876543210',
+                                  icon: Icons.phone_android_outlined,
                                 ),
                               ),
+                              const SizedBox(height: 16),
+
+                              // ── QR Code Upload ────────────────────────
+                              GestureDetector(
+                                onTap: _isUploadingQr ? null : _pickAndUploadQr,
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: kSurfaceContainerLow,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: kOutlineVariant),
+                                  ),
+                                  child: _isUploadingQr
+                                      ? const Center(
+                                          child: Padding(
+                                            padding: EdgeInsets.all(20),
+                                            child: CircularProgressIndicator(strokeWidth: 2),
+                                          ),
+                                        )
+                                      : _upiQrUrl.isNotEmpty
+                                          ? Column(
+                                              children: [
+                                                ClipRRect(
+                                                  borderRadius: BorderRadius.circular(10),
+                                                  child: Image.network(
+                                                    _upiQrUrl,
+                                                    height: 160,
+                                                    width: 160,
+                                                    fit: BoxFit.contain,
+                                                    errorBuilder: (_, __, ___) =>
+                                                        const Icon(Icons.broken_image, size: 60, color: kOnSurfaceVariant),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 10),
+                                                const Text(
+                                                  'Tap to change QR code',
+                                                  style: TextStyle(fontSize: 12, color: kPrimary, fontWeight: FontWeight.w600),
+                                                ),
+                                              ],
+                                            )
+                                          : const Column(
+                                              children: [
+                                                Icon(Icons.qr_code_2_rounded, size: 48, color: kOnSurfaceVariant),
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Upload UPI QR Code',
+                                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kOnSurface),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Your customers can scan this to pay',
+                                                  style: TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                                                ),
+                                              ],
+                                            ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+
+                              // ── Bank Details Toggle ────────────────────
+                              InkWell(
+                                onTap: () => setState(() => _showBankDetails = !_showBankDetails),
+                                borderRadius: BorderRadius.circular(14),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: kPrimaryContainer,
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.account_balance_outlined, color: kPrimary),
+                                      const SizedBox(width: 12),
+                                      const Expanded(
+                                        child: Text(
+                                          'Bank Account Details',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                            color: kPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                      Icon(
+                                        _showBankDetails
+                                            ? Icons.keyboard_arrow_up_rounded
+                                            : Icons.keyboard_arrow_down_rounded,
+                                        color: kPrimary,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+
+                              if (_showBankDetails) ...[
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _bankAccountNameController,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: _inputDecoration(
+                                    label: 'Account Holder Name',
+                                    hint: s.profileOptionalHint,
+                                    icon: Icons.person_outline,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _bankAccountNumberController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: _inputDecoration(
+                                    label: 'Account Number',
+                                    hint: s.profileOptionalHint,
+                                    icon: Icons.credit_card_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _bankIfscController,
+                                  textCapitalization: TextCapitalization.characters,
+                                  decoration: _inputDecoration(
+                                    label: 'IFSC Code',
+                                    hint: 'e.g. SBIN0001234',
+                                    icon: Icons.code_outlined,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                TextField(
+                                  controller: _bankNameController,
+                                  textCapitalization: TextCapitalization.words,
+                                  decoration: _inputDecoration(
+                                    label: 'Bank Name',
+                                    hint: s.profileOptionalHint,
+                                    icon: Icons.account_balance_outlined,
+                                  ),
+                                ),
+                              ],
                             ],
 
                             const SizedBox(height: 26),
@@ -359,6 +444,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         _bankIfscController.text = profile.bankIfsc;
         _bankNameController.text = profile.bankName;
         _upiIdController.text = profile.upiId;
+        _upiNumberController.text = profile.upiNumber;
+        _upiQrUrl = profile.upiQrUrl;
 
         // Auto-expand bank section if any bank field has data
         if (profile.bankAccountName.isNotEmpty ||
@@ -393,6 +480,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       return;
     }
 
+    if (widget.isRequiredSetup && _storeNameController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter your business name to continue')),
+      );
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });
@@ -408,6 +502,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       bankIfsc: _bankIfscController.text.trim(),
       bankName: _bankNameController.text.trim(),
       upiId: _upiIdController.text.trim(),
+      upiNumber: _upiNumberController.text.trim(),
+      upiQrUrl: _upiQrUrl,
     );
 
     try {
@@ -438,6 +534,35 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           _isSaving = false;
         });
       }
+    }
+  }
+
+  Future<void> _pickAndUploadQr() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, maxWidth: 800);
+    if (picked == null || !mounted) return;
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    setState(() => _isUploadingQr = true);
+
+    try {
+      final bytes = await picked.readAsBytes();
+      final ref = FirebaseStorage.instance.ref('users/$uid/upi_qr.png');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/png'));
+      final url = await ref.getDownloadURL();
+      if (!mounted) return;
+      setState(() {
+        _upiQrUrl = url;
+        _isUploadingQr = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isUploadingQr = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QR upload failed: $e')),
+      );
     }
   }
 

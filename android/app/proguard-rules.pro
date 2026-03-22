@@ -19,3 +19,11 @@
 # Prevent stripping of R8 rules for Firebase Crashlytics (if added later)
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
+
+# Razorpay
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+-keepattributes JavascriptInterface
+-keep class razorpay_flutter.** { *; }
+-keep class com.razorpay.** { *; }

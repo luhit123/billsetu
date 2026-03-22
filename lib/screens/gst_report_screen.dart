@@ -451,13 +451,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          Text(
-            text.toUpperCase(),
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: kPrimary,
-              letterSpacing: 1.2,
+          Flexible(
+            child: Text(
+              text.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: kPrimary,
+                letterSpacing: 1.2,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

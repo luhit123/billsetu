@@ -311,6 +311,13 @@ class AppStrings {
     gu: 'વિશ્લેષણ',
     ta: 'பகுப்பாய்வு',
   );
+  String get drawerReports => _t(
+    en: 'Reports',
+    hi: 'रिपोर्ट',
+    as_: 'প্ৰতিবেদন',
+    gu: 'રિપોર્ટ',
+    ta: 'அறிக்கைகள்',
+  );
   String get drawerGst => _t(
     en: 'GST',
     hi: 'जीएसटी',

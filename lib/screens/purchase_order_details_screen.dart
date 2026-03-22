@@ -372,9 +372,12 @@ class _PurchaseOrderDetailsScreenState
                   color: kOnSurfaceVariant,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  'Expected delivery: ${_dateFormat.format(_order.expectedDate!)}',
-                  style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+                Flexible(
+                  child: Text(
+                    'Expected delivery: ${_dateFormat.format(_order.expectedDate!)}',
+                    style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),
@@ -389,9 +392,12 @@ class _PurchaseOrderDetailsScreenState
                   color: _kReceived,
                 ),
                 const SizedBox(width: 6),
-                Text(
-                  'Received on ${_dateFormat.format(_order.receivedAt!)}',
-                  style: const TextStyle(fontSize: 13, color: _kReceived),
+                Flexible(
+                  child: Text(
+                    'Received on ${_dateFormat.format(_order.receivedAt!)}',
+                    style: const TextStyle(fontSize: 13, color: _kReceived),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ],
             ),

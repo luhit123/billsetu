@@ -92,6 +92,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
       floatingActionButton: widget.selectionMode
           ? null
           : FloatingActionButton(
+              heroTag: 'products-fab',
               onPressed: _openAddProduct,
               backgroundColor: kPrimary,
               foregroundColor: Colors.white,

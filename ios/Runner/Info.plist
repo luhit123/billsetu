@@ -51,6 +51,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>BillRaja uses the camera to let you upload your business logo.</string>
+	<key>NSContactsUsageDescription</key>
+	<string>BillRaja accesses your contacts to quickly add customers from your phone book.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>BillRaja accesses your photo library to let you upload your business logo.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

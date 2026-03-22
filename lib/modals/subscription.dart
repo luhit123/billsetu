@@ -5,7 +5,7 @@ enum SubscriptionStatus { created, active, pending, halted, cancelled, expired }
 class Subscription {
   final String id;
   final String userId;
-  final String plan; // 'free' | 'raja' | 'maharaja'
+  final String plan; // 'pro'
   final String billingCycle; // 'monthly' | 'annual'
   final SubscriptionStatus status;
   final String? razorpaySubscriptionId;

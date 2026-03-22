@@ -13,6 +13,7 @@ import 'package:billeasy/services/customer_group_service.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_contacts/flutter_contacts.dart';
 
 
 class CustomersScreen extends StatefulWidget {
@@ -268,14 +269,110 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _openCustomerForm() async {
-    final savedClient = await Navigator.push<Client>(
-      context,
-      MaterialPageRoute(builder: (_) => const CustomerFormScreen()),
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: kSurfaceLowest,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: kSurfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text('Add Customer',
+                style: TextStyle(color: kOnSurface, fontSize: 17, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 16),
+            _AddOptionTile(
+              icon: Icons.contacts_rounded,
+              iconColor: const Color(0xFF25D366),
+              title: 'From Contacts',
+              subtitle: 'Import from your phone book',
+              onTap: () {
+                Navigator.pop(ctx, 'contacts');
+              },
+            ),
+            const Divider(height: 1, color: kSurfaceContainerLow),
+            _AddOptionTile(
+              icon: Icons.edit_rounded,
+              iconColor: kPrimary,
+              title: 'Add Manually',
+              subtitle: 'Enter customer details yourself',
+              onTap: () {
+                Navigator.pop(ctx, 'manual');
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    ).then((result) async {
+      if (!mounted || result == null) return;
+      if (result == 'contacts') {
+        await _importFromContacts();
+      } else if (result == 'manual') {
+        await _navigateToForm();
+      }
+    });
+  }
+
+  Future<void> _importFromContacts() async {
+    // Open native contact picker (no permission needed — uses system UI)
+    final contact = await FlutterContacts.openExternalPick();
+    if (contact == null || !mounted) return;
+
+    // Try to get full details (needs READ_CONTACTS permission)
+    Contact? fullContact;
+    if (await FlutterContacts.requestPermission()) {
+      fullContact = await FlutterContacts.getContact(contact.id,
+          withProperties: true, withAccounts: false, withPhoto: false);
+    }
+
+    if (!mounted) return;
+
+    // Use full contact if available, otherwise fall back to picked contact
+    final source = fullContact ?? contact;
+
+    final phone = source.phones.isNotEmpty
+        ? source.phones.first.number.replaceAll(RegExp(r'[\s\-()]'), '')
+        : '';
+    final email = source.emails.isNotEmpty
+        ? source.emails.first.address
+        : '';
+    final address = source.addresses.isNotEmpty
+        ? source.addresses.first.address
+        : '';
+
+    final prefilled = Client(
+      id: '',
+      name: source.displayName,
+      phone: phone,
+      email: email,
+      address: address,
     );
 
-    if (!mounted || savedClient == null) {
-      return;
-    }
+    await _navigateToForm(initialClient: prefilled);
+  }
+
+  Future<void> _navigateToForm({Client? initialClient}) async {
+    final savedClient = await Navigator.push<Client>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => CustomerFormScreen(initialClient: initialClient),
+      ),
+    );
+
+    if (!mounted || savedClient == null) return;
 
     if (widget.selectionMode) {
       Navigator.of(context).pop(savedClient);
@@ -283,9 +380,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
 
     await _loadClients(reset: true);
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(AppStrings.of(context).customersReadyForBilling(savedClient.name))),
@@ -948,6 +1043,60 @@ class _EmptyCustomersState extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AddOptionTile extends StatelessWidget {
+  const _AddOptionTile({
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(color: kOnSurface, fontSize: 14, fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: const TextStyle(color: kOnSurfaceVariant, fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
+          ],
         ),
       ),
     );

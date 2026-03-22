@@ -73,6 +73,8 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
             const Text(
               'Stock Movements',

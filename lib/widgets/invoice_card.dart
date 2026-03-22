@@ -77,6 +77,8 @@ class InvoiceCard extends StatelessWidget {
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -85,6 +87,8 @@ class InvoiceCard extends StatelessWidget {
                           color: kOnSurfaceVariant,
                           fontSize: 13,
                         ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),

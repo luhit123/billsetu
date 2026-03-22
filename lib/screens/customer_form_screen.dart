@@ -23,7 +23,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
   bool _isSaving = false;
 
-  bool get _isEditing => widget.initialClient != null;
+  bool get _isEditing =>
+      widget.initialClient != null && widget.initialClient!.id.isNotEmpty;
 
   @override
   void initState() {

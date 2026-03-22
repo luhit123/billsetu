@@ -1,7 +1,7 @@
 const admin = require('firebase-admin');
 const logger = require('firebase-functions/logger');
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
-const { onDocumentWritten, onDocumentDeleted } = require('firebase-functions/v2/firestore');
+const { onCall, onRequest, HttpsError } = require('firebase-functions/v2/https');
+const { onDocumentWritten, onDocumentDeleted, onDocumentCreated } = require('firebase-functions/v2/firestore');
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 
 admin.initializeApp();
@@ -13,6 +13,26 @@ const INDIA_TIME_ZONE = 'Asia/Kolkata';
 const DEFAULT_DUE_DAYS = 30;
 const INVOICE_PREFIX = 'BR';
 const COUNTERS_COLLECTION = 'invoiceNumberCounters';
+
+// ── Trial setup: when a new user doc is created, set trialExpiresAt ──────────
+exports.setupUserTrial = onDocumentCreated('users/{uid}', async (event) => {
+  const uid = event.params.uid;
+  const data = event.data && event.data.data();
+  if (!data) return;
+
+  // Only set trialExpiresAt if not already present
+  if (data.trialExpiresAt) return;
+
+  const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
+  const trialExpiresAt = new Date(createdAt);
+  trialExpiresAt.setMonth(trialExpiresAt.getMonth() + 6);
+
+  await db.collection('users').doc(uid).update({
+    trialExpiresAt: Timestamp.fromDate(trialExpiresAt),
+  });
+
+  logger.info('Trial set up for new user', { uid, trialExpiresAt: trialExpiresAt.toISOString() });
+});
 
 // Keep one warm instance to eliminate cold-start latency for this
 // critical user-facing function called on every invoice creation.
@@ -1212,24 +1232,14 @@ const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'webhook_
 
 // Plan pricing in paise (₹1 = 100 paise)
 const PLAN_PRICING = {
-  raja: {
-    monthly: 12000,    // ₹120/mo
+  pro: {
+    monthly: 12900,    // ₹129/mo
     annual: 99900,     // ₹999/yr
-  },
-  maharaja: {
-    monthly: 23900,    // ₹239/mo
-    annual: 199900,    // ₹1,999/yr
-  },
-  king: {
-    monthly: 55500,    // ₹555/mo
-    annual: 499900,    // ₹4,999/yr
   },
 };
 
-// Razorpay Plan IDs — create these once in Razorpay Dashboard or via API,
-// then store the IDs here. You can also store them in Firestore config/razorpay_plans.
-// Format: { planId_billingCycle: 'plan_XXXXXXX' }
-// These MUST be set before going live.
+// Razorpay Plan IDs — cached from Firestore config/razorpay_plans.
+// Only 'pro_monthly' and 'pro_annual' are valid now.
 let RAZORPAY_PLAN_IDS = null;
 
 async function getRazorpayPlanIds() {
@@ -1298,8 +1308,8 @@ exports.createSubscription = onCall(
     }
 
     const { planId, billingCycle } = request.data || {};
-    if (!planId || !['raja', 'maharaja', 'king'].includes(planId)) {
-      throw new HttpsError('invalid-argument', 'Invalid plan. Choose raja, maharaja, or king.');
+    if (!planId || planId !== 'pro') {
+      throw new HttpsError('invalid-argument', 'Invalid plan. Only "pro" is available.');
     }
     if (!billingCycle || !['monthly', 'annual'].includes(billingCycle)) {
       throw new HttpsError('invalid-argument', 'Invalid billing cycle.');
@@ -1512,8 +1522,6 @@ exports.verifyPayment = onCall(
  * Razorpay webhook handler (HTTP endpoint).
  * Verifies signature and processes subscription/payment events.
  */
-const { onRequest } = require('firebase-functions/v2/https');
-
 exports.razorpayWebhook = onRequest(
   { secrets: ['RAZORPAY_WEBHOOK_SECRET'] },
   async (req, res) => {
@@ -1820,3 +1828,1019 @@ exports.getSubscriptionStatus = onCall(async (request) => {
     priceInPaise: data.priceInPaise,
   };
 });
+
+// ── Send Invoice via SMS (future-ready) ──────────────────────────────────
+// This function is scaffolded for backend SMS delivery via Twilio or MSG91.
+// To activate:
+// 1. Complete DLT registration (required for India)
+// 2. Set secrets: firebase functions:secrets:set TWILIO_SID TWILIO_AUTH_TOKEN TWILIO_PHONE
+// 3. Uncomment the Twilio send block below
+//
+// Usage from Flutter:
+//   final result = await FirebaseFunctions.instance
+//       .httpsCallable('sendInvoiceSms')
+//       .call({ invoiceId: '...', phoneNumber: '+91...', downloadUrl: 'https://...' });
+exports.sendInvoiceSms = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const { invoiceId, phoneNumber, downloadUrl } = request.data || {};
+  if (!invoiceId || !phoneNumber || !downloadUrl) {
+    throw new HttpsError(
+      'invalid-argument',
+      'invoiceId, phoneNumber, and downloadUrl are required.'
+    );
+  }
+
+  // Verify the invoice belongs to this user
+  const invoiceDoc = await db.collection('invoices').doc(invoiceId).get();
+  if (!invoiceDoc.exists || invoiceDoc.data().ownerId !== uid) {
+    throw new HttpsError('permission-denied', 'Invoice not found or not owned by you.');
+  }
+
+  const invoice = invoiceDoc.data();
+  const clientName = invoice.clientName || 'Customer';
+  const invoiceNumber = invoice.invoiceNumber || invoiceId;
+  const grandTotal = invoice.storedGrandTotal || 0;
+
+  const message = `Hi ${clientName}, here is your invoice #${invoiceNumber} for ₹${grandTotal}. Download: ${downloadUrl}`;
+
+  // TODO: Uncomment and configure when DLT registration is complete.
+  // ──────────────────────────────────────────────────────────────────────
+  // const twilio = require('twilio');
+  // const client = twilio(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
+  // const result = await client.messages.create({
+  //   body: message,
+  //   from: process.env.TWILIO_PHONE,  // Your DLT-registered sender ID
+  //   to: phoneNumber,
+  // });
+  // logger.info(`SMS sent to ${phoneNumber}: ${result.sid}`);
+  // return { success: true, messageId: result.sid };
+  // ──────────────────────────────────────────────────────────────────────
+
+  logger.info(`[sendInvoiceSms] Ready to send to ${phoneNumber}: ${message}`);
+  return {
+    success: false,
+    reason: 'Backend SMS not yet configured. Complete DLT registration and set Twilio secrets.',
+    message,
+  };
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// INVOICE LANDING PAGE — serves a branded HTML page for shared invoices
+// ════════════════════════════════════════════════════════════════════════════
+
+exports.invoicePage = onRequest(async (req, res) => {
+  const pathParts = req.path.split('/').filter(Boolean);
+  const shortCode = pathParts.length >= 2 ? pathParts[1] : null;
+
+  if (!shortCode) {
+    res.status(404).send(notFoundPage());
+    return;
+  }
+
+  try {
+    const doc = await db.collection('shared_invoices').doc(shortCode).get();
+
+    if (!doc.exists) {
+      res.status(404).send(notFoundPage());
+      return;
+    }
+
+    const data = doc.data();
+    const amount = fmtCur(data.amount || 0);
+    const date = data.date || '';
+    const invoiceNumber = data.invoiceNumber || shortCode;
+    const clientName = data.clientName || 'Customer';
+    const downloadUrl = data.downloadUrl || '';
+    const items = data.items || [];
+    const subtotal = data.subtotal || 0;
+    const discountAmount = data.discountAmount || 0;
+    const gstEnabled = data.gstEnabled || false;
+    const gstType = data.gstType || 'cgst_sgst';
+    const cgstAmount = data.cgstAmount || 0;
+    const sgstAmount = data.sgstAmount || 0;
+    const igstAmount = data.igstAmount || 0;
+    const status = data.status || 'pending';
+
+    // UPI payment details
+    const upiId = data.upiId || '';
+    const upiNumber = data.upiNumber || '';
+    const upiQrUrl = data.upiQrUrl || '';
+    const storeName = data.storeName || '';
+    const hasPayment = upiId || upiNumber || upiQrUrl;
+
+    // Client phone for bill history OTP verification
+    // Only show history portal for repeat customers (more than 1 invoice)
+    const clientPhone = data.clientPhone || '';
+    let isRepeatCustomer = false;
+    if (clientPhone.length > 0 && data.clientName && data.ownerId) {
+      try {
+        const repeatCheck = await db.collection('shared_invoices')
+          .where('ownerId', '==', data.ownerId)
+          .where('clientName', '==', data.clientName)
+          .limit(2)
+          .get();
+        isRepeatCustomer = repeatCheck.size > 1;
+      } catch (e) {
+        logger.warn('[invoicePage] Repeat customer check failed:', e);
+      }
+    }
+    const hasClientPhone = clientPhone.length > 0 && isRepeatCustomer;
+
+    // Build UPI deep link (both upi:// and intent:// for Android Chrome)
+    const upiParams = upiId
+      ? `pa=${encodeURIComponent(upiId)}&pn=${encodeURIComponent(storeName)}&am=${data.amount || 0}&cu=INR`
+      : '';
+    const upiDeepLink = upiParams ? `upi://pay?${upiParams}` : '';
+    const intentLink = upiParams
+      ? `intent://pay?${upiParams}#Intent;scheme=upi;package=com.google.android.apps.nbu.paisa.user;end`
+      : '';
+
+    // Build item rows HTML
+    const itemRowsHtml = items.map((item, idx) => {
+      const qty = fmtQty(item.quantity || 0);
+      const unit = item.unit || '';
+      const qtyLabel = unit ? `${qty} ${esc(unit)}` : qty;
+      return `<tr>
+        <td class="item-idx">${idx + 1}</td>
+        <td class="item-desc">
+          <div class="item-name">${esc(item.description)}</div>
+          ${item.hsnCode ? `<div class="item-hsn">HSN: ${esc(item.hsnCode)}</div>` : ''}
+        </td>
+        <td class="item-qty">${qtyLabel}</td>
+        <td class="item-price">${fmtCur(item.unitPrice || 0)}</td>
+        <td class="item-total">${fmtCur(item.total || 0)}</td>
+      </tr>`;
+    }).join('');
+
+    // Status badge
+    const statusColors = {
+      paid: { bg: '#dcfce7', text: '#15803d', label: 'Paid' },
+      pending: { bg: '#fef3c7', text: '#b45309', label: 'Pending' },
+      overdue: { bg: '#fee2e2', text: '#b91c1c', label: 'Overdue' },
+    };
+    const sc = statusColors[status] || statusColors.pending;
+
+    // Build summary rows
+    let summaryHtml = `<div class="sum-row">
+      <span>Subtotal</span><span>${fmtCur(subtotal)}</span>
+    </div>`;
+    if (discountAmount > 0) {
+      summaryHtml += `<div class="sum-row discount">
+        <span>Discount</span><span>-${fmtCur(discountAmount)}</span>
+      </div>`;
+    }
+    if (gstEnabled) {
+      if (gstType === 'cgst_sgst') {
+        summaryHtml += `<div class="sum-row tax">
+          <span>CGST</span><span>+${fmtCur(cgstAmount)}</span>
+        </div>`;
+        summaryHtml += `<div class="sum-row tax">
+          <span>SGST</span><span>+${fmtCur(sgstAmount)}</span>
+        </div>`;
+      } else {
+        summaryHtml += `<div class="sum-row tax">
+          <span>IGST</span><span>+${fmtCur(igstAmount)}</span>
+        </div>`;
+      }
+    }
+
+    res.status(200).send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice ${esc(invoiceNumber)} — BillRaja</title>
+  <meta property="og:title" content="Invoice ${esc(invoiceNumber)} — ${amount}">
+  <meta property="og:description" content="Invoice for ${esc(clientName)} dated ${esc(date)}. ${items.length} item${items.length !== 1 ? 's' : ''} — Tap to view and download.">
+  <meta property="og:type" content="website">
+  <meta name="description" content="Invoice ${esc(invoiceNumber)} for ${esc(clientName)} — ${amount}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#eef2f7;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
+    .card{background:#fff;border-radius:24px;box-shadow:0 8px 40px rgba(0,0,0,0.07);max-width:480px;width:100%;overflow:hidden}
+    /* Header */
+    .header{background:linear-gradient(135deg,#1e3a8a,#3b82f6);padding:32px 28px 28px;position:relative;overflow:hidden}
+    .header::after{content:'';position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.06)}
+    .header-top{display:flex;justify-content:space-between;align-items:flex-start}
+    .logo{font-size:24px;font-weight:800;color:#fff;letter-spacing:-0.5px}
+    .logo span{color:#fbbf24}
+    .status-badge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;background:${sc.bg};color:${sc.text}}
+    .inv-number{color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;margin-top:16px;letter-spacing:0.5px}
+    .inv-amount{color:#fff;font-size:34px;font-weight:800;margin-top:4px}
+    .inv-meta{display:flex;gap:24px;margin-top:14px}
+    .inv-meta-item{color:rgba(255,255,255,0.7);font-size:12px}
+    .inv-meta-item strong{color:#fff;display:block;font-size:14px;margin-top:2px}
+    /* Body */
+    .body{padding:24px}
+    .section-title{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px}
+    /* Items table */
+    .items-table{width:100%;border-collapse:collapse;font-size:13px}
+    .items-table thead th{text-align:left;padding:8px 6px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #f3f4f6}
+    .items-table thead th:last-child,.items-table thead th:nth-child(4){text-align:right}
+    .items-table tbody td{padding:10px 6px;border-bottom:1px solid #f3f4f6;vertical-align:top}
+    .item-idx{color:#d1d5db;font-weight:600;width:24px}
+    .item-desc{color:#374151}
+    .item-name{font-weight:600}
+    .item-hsn{font-size:11px;color:#9ca3af;margin-top:2px}
+    .item-qty{color:#6b7280;white-space:nowrap;text-align:center}
+    .item-price{color:#6b7280;text-align:right;white-space:nowrap}
+    .item-total{color:#111827;font-weight:700;text-align:right;white-space:nowrap}
+    /* Summary */
+    .summary{background:#f9fafb;border-radius:14px;padding:16px;margin-top:20px}
+    .sum-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#6b7280}
+    .sum-row span:last-child{font-weight:600;color:#374151}
+    .sum-row.discount span:last-child{color:#ef4444}
+    .sum-row.tax span:last-child{color:#16a34a}
+    .sum-divider{height:1px;background:#e5e7eb;margin:8px 0}
+    .sum-total{display:flex;justify-content:space-between;padding:8px 0 0;font-size:18px;font-weight:800;color:#111827}
+    /* Payment */
+    .payment-section{margin-top:24px;border:1.5px solid #e5e7eb;border-radius:16px;overflow:hidden}
+    .payment-header{display:flex;align-items:center;gap:8px;padding:14px 16px;background:#f0fdf4;font-size:15px;font-weight:700;color:#15803d;border-bottom:1px solid #dcfce7}
+    .payment-icon{font-size:20px}
+    .payment-body{padding:16px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+    .qr-container{text-align:center}
+    .qr-img{width:140px;height:140px;border-radius:12px;border:1px solid #e5e7eb;object-fit:contain}
+    .qr-label{font-size:11px;color:#9ca3af;margin-top:6px;font-weight:500}
+    .upi-details{flex:1;min-width:140px}
+    .upi-row{margin-bottom:12px}
+    .upi-label{font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+    .upi-value-row{display:flex;align-items:center;gap:8px;margin-top:4px}
+    .upi-value{font-size:15px;font-weight:700;color:#111827;word-break:break-all}
+    .copy-btn{padding:4px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .15s}
+    .copy-btn:hover{background:#f3f4f6;color:#111827}
+    .pay-now-btn{display:block;text-align:center;padding:14px;margin:0 16px 16px;background:linear-gradient(135deg,#15803d,#22c55e);color:#fff;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;transition:transform .15s;box-shadow:0 4px 14px rgba(34,197,94,0.3)}
+    .pay-now-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(34,197,94,0.4)}
+    .pay-now-btn:active{transform:translateY(0)}
+    /* Button */
+    .download-btn{display:block;width:100%;padding:16px;margin-top:24px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(59,130,246,0.3)}
+    .download-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}
+    .download-btn:active{transform:translateY(0)}
+    .footer{text-align:center;padding:16px 24px 24px;color:#d1d5db;font-size:11px}
+    .footer a{color:#93c5fd;text-decoration:none}
+    /* Bill History / Customer Portal Section */
+    .history-section{margin-top:28px;border-top:2px solid #f3f4f6;padding-top:24px}
+    .history-title{font-size:17px;font-weight:800;color:#111827;margin-bottom:4px}
+    .history-subtitle{font-size:12px;color:#9ca3af;margin-bottom:16px}
+    .phone-input-group{display:flex;gap:8px;margin-bottom:12px}
+    .phone-prefix{padding:12px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-weight:600;color:#374151;flex-shrink:0}
+    .phone-input{flex:1;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-weight:500;color:#111827;outline:none;transition:border-color .2s}
+    .phone-input:focus{border-color:#3b82f6}
+    .otp-input{width:100%;padding:14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:18px;font-weight:700;color:#111827;text-align:center;letter-spacing:8px;outline:none;transition:border-color .2s;margin-bottom:12px}
+    .otp-input:focus{border-color:#3b82f6}
+    .otp-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .15s,opacity .15s}
+    .otp-btn:hover{transform:translateY(-1px)}
+    .otp-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
+    .otp-error{color:#ef4444;font-size:13px;font-weight:500;margin-top:8px;display:none}
+    .otp-step{display:none}
+    .otp-step.active{display:block}
+    /* Portal Header */
+    .portal-header{background:linear-gradient(135deg,#1e3a8a,#3b82f6);border-radius:16px;padding:20px;margin-bottom:16px;color:#fff}
+    .portal-welcome{font-size:11px;font-weight:500;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px}
+    .portal-name{font-size:20px;font-weight:800;margin-top:4px}
+    .portal-store{font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px}
+    /* Summary Stats Grid */
+    .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+    .stat-card{padding:14px;border-radius:12px;border:1.5px solid #f3f4f6}
+    .stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#9ca3af}
+    .stat-value{font-size:18px;font-weight:800;margin-top:4px}
+    .stat-count{font-size:11px;color:#9ca3af;margin-top:2px}
+    .stat-total{border-color:#e0e7ff;background:#f5f7ff}
+    .stat-total .stat-value{color:#1e3a8a}
+    .stat-paid{border-color:#dcfce7;background:#f0fdf4}
+    .stat-paid .stat-value{color:#15803d}
+    .stat-pending{border-color:#fef3c7;background:#fffbeb}
+    .stat-pending .stat-value{color:#b45309}
+    .stat-overdue{border-color:#fee2e2;background:#fef2f2}
+    .stat-overdue .stat-value{color:#b91c1c}
+    /* Filter Tabs */
+    .filter-tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+    .filter-tab{padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap;transition:all .2s}
+    .filter-tab.active{background:#1e3a8a;color:#fff;border-color:#1e3a8a}
+    .filter-tab .tab-count{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.08)}
+    .filter-tab.active .tab-count{background:rgba(255,255,255,0.2)}
+    /* Bills List */
+    .bills-list{margin-top:8px}
+    .bills-empty{text-align:center;color:#9ca3af;font-size:13px;padding:32px 0}
+    .bill-card{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border:1.5px solid #f3f4f6;border-radius:12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+    .bill-card:hover{border-color:#3b82f6;box-shadow:0 2px 8px rgba(59,130,246,0.1)}
+    .bill-left{flex:1}
+    .bill-inv-no{font-size:14px;font-weight:700;color:#111827}
+    .bill-date{font-size:12px;color:#9ca3af;margin-top:2px}
+    .bill-items-count{font-size:11px;color:#6b7280;margin-top:2px}
+    .bill-right{text-align:right}
+    .bill-amount{font-size:15px;font-weight:800;color:#111827}
+    .bill-status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-top:4px}
+    .bill-status.paid{background:#dcfce7;color:#15803d}
+    .bill-status.pending{background:#fef3c7;color:#b45309}
+    .bill-status.overdue{background:#fee2e2;color:#b91c1c}
+    .bill-chevron{color:#d1d5db;margin-left:8px;font-size:16px}
+    /* Modal Overlay */
+    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:flex-end;justify-content:center;padding:0}
+    .modal-overlay.open{display:flex}
+    .modal-sheet{background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease}
+    @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+    .modal-handle{width:40px;height:4px;background:#d1d5db;border-radius:2px;margin:12px auto}
+    .modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:0 20px 16px;border-bottom:1px solid #f3f4f6}
+    .modal-title{font-size:16px;font-weight:800;color:#111827}
+    .modal-meta{font-size:12px;color:#9ca3af;margin-top:4px}
+    .modal-close{width:32px;height:32px;border-radius:50%;border:none;background:#f3f4f6;font-size:18px;color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .modal-body{padding:16px 20px 20px}
+    .modal-status-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:12px;margin-bottom:16px}
+    .modal-status-bar.paid{background:#f0fdf4;border:1px solid #dcfce7}
+    .modal-status-bar.pending{background:#fffbeb;border:1px solid #fef3c7}
+    .modal-status-bar.overdue{background:#fef2f2;border:1px solid #fee2e2}
+    .modal-total{font-size:22px;font-weight:800;color:#111827}
+    /* Modal Items Table */
+    .modal-section-title{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px}
+    .modal-items{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px}
+    .modal-items thead th{text-align:left;padding:8px 6px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;border-bottom:2px solid #f3f4f6}
+    .modal-items thead th:last-child{text-align:right}
+    .modal-items tbody td{padding:10px 6px;border-bottom:1px solid #f9fafb;vertical-align:top}
+    .modal-items .mi-desc{font-weight:600;color:#374151}
+    .modal-items .mi-hsn{font-size:10px;color:#9ca3af;margin-top:2px}
+    .modal-items .mi-qty{color:#6b7280;text-align:center}
+    .modal-items .mi-total{text-align:right;font-weight:700;color:#111827}
+    .modal-summary{background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:16px}
+    .modal-sum-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#6b7280}
+    .modal-sum-row span:last-child{font-weight:600;color:#374151}
+    .modal-sum-row.discount span:last-child{color:#ef4444}
+    .modal-sum-row.tax span:last-child{color:#16a34a}
+    .modal-sum-divider{height:1px;background:#e5e7eb;margin:6px 0}
+    .modal-sum-total{display:flex;justify-content:space-between;padding:6px 0 0;font-size:17px;font-weight:800;color:#111827}
+    .modal-download{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:transform .15s;box-shadow:0 4px 14px rgba(59,130,246,0.3)}
+    .modal-download:hover{transform:translateY(-1px)}
+    @media(max-width:400px){
+      .inv-amount{font-size:28px}
+      .inv-meta{gap:16px}
+      .items-table{font-size:12px}
+      .item-price{display:none}
+      .items-table thead th:nth-child(4){display:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="header-top">
+        <div class="logo">Bill<span>Raja</span></div>
+        <span class="status-badge">${esc(sc.label)}</span>
+      </div>
+      <div class="inv-number">${esc(invoiceNumber)}</div>
+      <div class="inv-amount">${amount}</div>
+      <div class="inv-meta">
+        <div class="inv-meta-item">Billed to<strong>${esc(clientName)}</strong></div>
+        <div class="inv-meta-item">Date<strong>${esc(date)}</strong></div>
+      </div>
+    </div>
+    <div class="body">
+      <div class="section-title">Items (${items.length})</div>
+      <table class="items-table">
+        <thead>
+          <tr><th>#</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+          ${itemRowsHtml}
+        </tbody>
+      </table>
+      <div class="summary">
+        ${summaryHtml}
+        <div class="sum-divider"></div>
+        <div class="sum-total">
+          <span>Total</span><span>${amount}</span>
+        </div>
+      </div>
+      ${hasPayment ? `
+      <div class="payment-section">
+        <div class="payment-header">
+          <span class="payment-icon">&#128179;</span>
+          <span>Pay via UPI</span>
+        </div>
+        <div class="payment-body">
+          ${upiQrUrl ? `
+          <div class="qr-container">
+            <img src="${esc(upiQrUrl)}" alt="UPI QR Code" class="qr-img">
+            <div class="qr-label">Scan to Pay</div>
+          </div>` : ''}
+          <div class="upi-details">
+            ${upiId ? `
+            <div class="upi-row">
+              <span class="upi-label">UPI ID</span>
+              <div class="upi-value-row">
+                <span class="upi-value">${esc(upiId)}</span>
+                <button class="copy-btn" onclick="navigator.clipboard.writeText('${esc(upiId)}').then(()=>{this.textContent='Copied!';;setTimeout(()=>this.textContent='Copy',1500)})">Copy</button>
+              </div>
+            </div>` : ''}
+            ${upiNumber ? `
+            <div class="upi-row">
+              <span class="upi-label">UPI Number</span>
+              <span class="upi-value">${esc(upiNumber)}</span>
+            </div>` : ''}
+          </div>
+        </div>
+        ${upiDeepLink ? `
+        <a class="pay-now-btn" id="payNowBtn" href="${upiDeepLink}" onclick="return handleUpiPay(event)">
+          Pay Now &#8594;
+        </a>
+        <script>
+        function handleUpiPay(e) {
+          e.preventDefault();
+          var ua = navigator.userAgent || '';
+          var isAndroid = /android/i.test(ua);
+          var isIOS = /iphone|ipad|ipod/i.test(ua);
+          var upiUrl = '${upiDeepLink}';
+          var intentUrl = '${intentLink}';
+
+          if (isAndroid) {
+            // Try intent:// first (works in Chrome on Android)
+            window.location.href = intentUrl;
+            // Fallback to upi:// after short delay
+            setTimeout(function() { window.location.href = upiUrl; }, 500);
+          } else if (isIOS) {
+            // iOS uses upi:// directly
+            window.location.href = upiUrl;
+          } else {
+            // Desktop — just try upi://, show message if it fails
+            window.location.href = upiUrl;
+            setTimeout(function() {
+              var btn = document.getElementById('payNowBtn');
+              btn.textContent = 'Open your UPI app to pay';
+              btn.style.background = '#6b7280';
+            }, 2000);
+          }
+          return false;
+        }
+        </script>` : ''}
+      </div>` : ''}
+      <a class="download-btn" href="${esc(downloadUrl)}" target="_blank" rel="noopener">
+        Download PDF
+      </a>
+      ${hasClientPhone ? `
+      <div class="history-section">
+        <div class="history-title">&#128203; Your Purchase History</div>
+        <div class="history-subtitle">Verify your phone number to view all your bills, filter by status, and re-download anytime</div>
+
+        <!-- Step 1: Phone number input -->
+        <div id="phoneStep" class="otp-step active">
+          <div class="phone-input-group">
+            <span class="phone-prefix">+91</span>
+            <input type="tel" id="phoneInput" class="phone-input" placeholder="Enter your phone number" maxlength="10" inputmode="numeric" pattern="[0-9]*">
+          </div>
+          <button type="button" id="sendOtpBtn" class="otp-btn" onclick="sendOtp()">Send OTP</button>
+          <div id="phoneError" class="otp-error"></div>
+        </div>
+
+        <!-- Step 2: OTP input -->
+        <div id="otpStep" class="otp-step">
+          <p style="font-size:13px;color:#6b7280;margin-bottom:12px">Enter the 6-digit code sent to your phone</p>
+          <input type="tel" id="otpInput" class="otp-input" placeholder="------" maxlength="6" inputmode="numeric" pattern="[0-9]*">
+          <button type="button" id="verifyOtpBtn" class="otp-btn" onclick="verifyOtp()">Verify &amp; View Bills</button>
+          <div id="otpError" class="otp-error"></div>
+          <p style="font-size:12px;color:#9ca3af;margin-top:12px;text-align:center;cursor:pointer" onclick="showPhoneStep()">&#8592; Change number</p>
+        </div>
+
+        <!-- Step 3: Full Customer Portal -->
+        <div id="billsStep" class="otp-step">
+          <div id="portalHeader"></div>
+          <div id="statsGrid"></div>
+          <div id="filterTabs"></div>
+          <div id="billsList" class="bills-list"></div>
+        </div>
+      </div>
+
+      <!-- Bill Detail Modal -->
+      <div id="billModal" class="modal-overlay" onclick="if(event.target===this)closeModal()">
+        <div class="modal-sheet">
+          <div class="modal-handle"></div>
+          <div class="modal-header">
+            <div>
+              <div id="modalTitle" class="modal-title"></div>
+              <div id="modalMeta" class="modal-meta"></div>
+            </div>
+            <button class="modal-close" onclick="closeModal()">&#10005;</button>
+          </div>
+          <div class="modal-body" id="modalBody"></div>
+        </div>
+      </div>
+
+      <!-- Firebase Auth SDK -->
+      <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+      <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+      <div id="recaptcha-container"></div>
+      <script>
+      firebase.initializeApp({
+        apiKey: 'AIzaSyAQwciiy95IZmhNumtPLgqDHXF1ypiEMbc',
+        authDomain: 'billeasy-3a6ad.firebaseapp.com',
+        projectId: 'billeasy-3a6ad',
+      });
+
+      var confirmationResult = null;
+      var currentShortCode = '${esc(shortCode)}';
+      var allBills = [];
+      var portalData = {};
+      var activeFilter = 'all';
+
+      function showError(elId, msg) {
+        var el = document.getElementById(elId);
+        el.textContent = msg;
+        el.style.display = msg ? 'block' : 'none';
+      }
+
+      function showPhoneStep() {
+        document.getElementById('phoneStep').className = 'otp-step active';
+        document.getElementById('otpStep').className = 'otp-step';
+        document.getElementById('billsStep').className = 'otp-step';
+        showError('phoneError', '');
+      }
+
+      function sendOtp() {
+        try {
+          var phone = document.getElementById('phoneInput').value.replace(/\\D/g, '');
+          if (phone.length !== 10) {
+            showError('phoneError', 'Please enter a valid 10-digit phone number');
+            return;
+          }
+
+          var btn = document.getElementById('sendOtpBtn');
+          btn.disabled = true;
+          btn.textContent = 'Sending...';
+          showError('phoneError', '');
+
+          // Always recreate reCAPTCHA to avoid stale state
+          if (window.recaptchaVerifier) {
+            try { window.recaptchaVerifier.clear(); } catch(e) {}
+            window.recaptchaVerifier = null;
+          }
+
+          window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+            size: 'invisible',
+            callback: function() { /* reCAPTCHA solved */ },
+            'expired-callback': function() {
+              showError('phoneError', 'Verification expired. Please try again.');
+              btn.disabled = false;
+              btn.textContent = 'Send OTP';
+            }
+          });
+
+          window.recaptchaVerifier.render().then(function() {
+            return firebase.auth().signInWithPhoneNumber('+91' + phone, window.recaptchaVerifier);
+          })
+            .then(function(result) {
+              confirmationResult = result;
+              document.getElementById('phoneStep').className = 'otp-step';
+              document.getElementById('otpStep').className = 'otp-step active';
+              btn.disabled = false;
+              btn.textContent = 'Send OTP';
+            })
+            .catch(function(err) {
+              console.error('OTP error:', err);
+              var msg = 'Failed to send OTP. Please try again.';
+              if (err.code === 'auth/too-many-requests') msg = 'Too many attempts. Please try again later.';
+              else if (err.code === 'auth/invalid-phone-number') msg = 'Invalid phone number.';
+              else if (err.code === 'auth/quota-exceeded') msg = 'SMS quota exceeded. Try later.';
+              showError('phoneError', msg);
+              btn.disabled = false;
+              btn.textContent = 'Send OTP';
+              try { window.recaptchaVerifier.clear(); } catch(e) {}
+              window.recaptchaVerifier = null;
+            });
+        } catch(e) {
+          console.error('sendOtp exception:', e);
+          showError('phoneError', 'Something went wrong. Please refresh and try again.');
+          var btn = document.getElementById('sendOtpBtn');
+          if (btn) { btn.disabled = false; btn.textContent = 'Send OTP'; }
+        }
+      }
+
+      function verifyOtp() {
+        var otp = document.getElementById('otpInput').value.replace(/\\D/g, '');
+        if (otp.length !== 6) {
+          showError('otpError', 'Please enter a valid 6-digit OTP');
+          return;
+        }
+
+        var btn = document.getElementById('verifyOtpBtn');
+        btn.disabled = true;
+        btn.textContent = 'Verifying...';
+        showError('otpError', '');
+
+        confirmationResult.confirm(otp)
+          .then(function(result) {
+            return result.user.getIdToken();
+          })
+          .then(function(idToken) {
+            return fetch('/api/client-bills', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + idToken,
+              },
+              body: JSON.stringify({ shortCode: currentShortCode }),
+            });
+          })
+          .then(function(resp) {
+            if (!resp.ok) throw new Error('Phone number does not match our records');
+            return resp.json();
+          })
+          .then(function(data) {
+            allBills = data.bills || [];
+            portalData = data;
+            renderPortal();
+            document.getElementById('otpStep').className = 'otp-step';
+            document.getElementById('billsStep').className = 'otp-step active';
+          })
+          .catch(function(err) {
+            console.error('Verify error:', err);
+            var msg = err.code === 'auth/invalid-verification-code'
+              ? 'Invalid OTP. Please try again.'
+              : (err.message || 'Verification failed. Please try again.');
+            showError('otpError', msg);
+            btn.disabled = false;
+            btn.textContent = 'Verify & View Bills';
+          });
+      }
+
+      function renderPortal() {
+        var s = portalData.summary || {};
+        var clientName = portalData.clientName || 'Customer';
+        var store = portalData.storeName || '';
+
+        // Portal header
+        document.getElementById('portalHeader').innerHTML =
+          '<div class="portal-header">'
+          + '<div class="portal-welcome">Customer Portal</div>'
+          + '<div class="portal-name">' + escJs(clientName) + '</div>'
+          + (store ? '<div class="portal-store">' + escJs(store) + '</div>' : '')
+          + '</div>';
+
+        // Stats grid
+        document.getElementById('statsGrid').innerHTML =
+          '<div class="stats-grid">'
+          + statCard('stat-total', 'Total Spent', s.totalSpent, s.totalBills + ' bill' + (s.totalBills !== 1 ? 's' : ''))
+          + statCard('stat-paid', 'Paid', s.paidAmount, s.paidCount + ' bill' + (s.paidCount !== 1 ? 's' : ''))
+          + statCard('stat-pending', 'Pending', s.pendingAmount, s.pendingCount + ' bill' + (s.pendingCount !== 1 ? 's' : ''))
+          + statCard('stat-overdue', 'Overdue', s.overdueAmount, s.overdueCount + ' bill' + (s.overdueCount !== 1 ? 's' : ''))
+          + '</div>';
+
+        // Filter tabs
+        renderFilters(s);
+
+        // Render bills with active filter
+        renderBills();
+      }
+
+      function statCard(cls, label, amount, count) {
+        return '<div class="stat-card ' + cls + '">'
+          + '<div class="stat-label">' + label + '</div>'
+          + '<div class="stat-value">' + fmtCurJs(amount || 0) + '</div>'
+          + '<div class="stat-count">' + count + '</div>'
+          + '</div>';
+      }
+
+      function renderFilters(s) {
+        var filters = [
+          { key: 'all', label: 'All', count: s.totalBills || 0 },
+          { key: 'paid', label: 'Paid', count: s.paidCount || 0 },
+          { key: 'pending', label: 'Pending', count: s.pendingCount || 0 },
+          { key: 'overdue', label: 'Overdue', count: s.overdueCount || 0 },
+        ];
+        var html = '<div class="filter-tabs">';
+        filters.forEach(function(f) {
+          html += '<div class="filter-tab' + (activeFilter === f.key ? ' active' : '') + '" onclick="setFilter(\\'' + f.key + '\\')">'
+            + f.label + '<span class="tab-count">' + f.count + '</span></div>';
+        });
+        html += '</div>';
+        document.getElementById('filterTabs').innerHTML = html;
+      }
+
+      function setFilter(key) {
+        activeFilter = key;
+        renderFilters(portalData.summary || {});
+        renderBills();
+      }
+
+      function renderBills() {
+        var container = document.getElementById('billsList');
+        var filtered = activeFilter === 'all'
+          ? allBills
+          : allBills.filter(function(b) { return b.status === activeFilter; });
+
+        if (!filtered.length) {
+          container.innerHTML = '<div class="bills-empty">No ' + (activeFilter === 'all' ? '' : activeFilter + ' ') + 'bills found</div>';
+          return;
+        }
+
+        var html = '';
+        filtered.forEach(function(b, idx) {
+          var statusCls = b.status || 'pending';
+          var statusLabel = statusCls.charAt(0).toUpperCase() + statusCls.slice(1);
+          var itemCount = (b.items || []).length;
+          html += '<div class="bill-card" onclick="openBillDetail(' + idx + ',' + JSON.stringify(activeFilter === 'all').replace(/"/g, '') + ')">'
+            + '<div class="bill-left">'
+            + '<div class="bill-inv-no">' + escJs(b.invoiceNumber) + '</div>'
+            + '<div class="bill-date">' + escJs(b.date) + '</div>'
+            + '<div class="bill-items-count">' + itemCount + ' item' + (itemCount !== 1 ? 's' : '') + '</div>'
+            + '</div>'
+            + '<div class="bill-right">'
+            + '<div class="bill-amount">' + fmtCurJs(b.amount) + '</div>'
+            + '<span class="bill-status ' + statusCls + '">' + statusLabel + '</span>'
+            + '</div>'
+            + '<span class="bill-chevron">&#8250;</span>'
+            + '</div>';
+        });
+
+        container.innerHTML = html;
+      }
+
+      function openBillDetail(filteredIdx, isAll) {
+        var filtered = isAll
+          ? allBills
+          : allBills.filter(function(b) { return b.status === activeFilter; });
+        var bill = filtered[filteredIdx];
+        if (!bill) return;
+
+        var statusCls = bill.status || 'pending';
+        var statusLabel = statusCls.charAt(0).toUpperCase() + statusCls.slice(1);
+
+        document.getElementById('modalTitle').textContent = bill.invoiceNumber;
+        document.getElementById('modalMeta').textContent = bill.date;
+
+        // Build modal body
+        var html = '';
+
+        // Status bar
+        html += '<div class="modal-status-bar ' + statusCls + '">'
+          + '<span class="bill-status ' + statusCls + '">' + statusLabel + '</span>'
+          + '<span class="modal-total">' + fmtCurJs(bill.amount) + '</span>'
+          + '</div>';
+
+        // Items table
+        var items = bill.items || [];
+        if (items.length) {
+          html += '<div class="modal-section-title">Items (' + items.length + ')</div>'
+            + '<table class="modal-items"><thead><tr>'
+            + '<th>#</th><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th>'
+            + '</tr></thead><tbody>';
+
+          items.forEach(function(item, i) {
+            var qty = item.quantity;
+            if (qty === Math.floor(qty)) qty = Math.floor(qty);
+            else qty = Number(qty).toFixed(2);
+            var qtyLabel = item.unit ? qty + ' ' + escJs(item.unit) : qty;
+            html += '<tr>'
+              + '<td style="color:#d1d5db;font-weight:600">' + (i + 1) + '</td>'
+              + '<td><div class="mi-desc">' + escJs(item.description) + '</div>'
+              + (item.hsnCode ? '<div class="mi-hsn">HSN: ' + escJs(item.hsnCode) + '</div>' : '')
+              + (item.gstRate ? '<div class="mi-hsn">GST: ' + item.gstRate + '%</div>' : '')
+              + '</td>'
+              + '<td class="mi-qty">' + qtyLabel + '</td>'
+              + '<td class="mi-total">' + fmtCurJs(item.total) + '</td>'
+              + '</tr>';
+          });
+          html += '</tbody></table>';
+        }
+
+        // Summary section
+        html += '<div class="modal-summary">';
+        html += '<div class="modal-sum-row"><span>Subtotal</span><span>' + fmtCurJs(bill.subtotal) + '</span></div>';
+        if (bill.discountAmount > 0) {
+          html += '<div class="modal-sum-row discount"><span>Discount</span><span>-' + fmtCurJs(bill.discountAmount) + '</span></div>';
+        }
+        if (bill.gstEnabled) {
+          if (bill.gstType === 'cgst_sgst') {
+            html += '<div class="modal-sum-row tax"><span>CGST</span><span>+' + fmtCurJs(bill.cgstAmount) + '</span></div>';
+            html += '<div class="modal-sum-row tax"><span>SGST</span><span>+' + fmtCurJs(bill.sgstAmount) + '</span></div>';
+          } else {
+            html += '<div class="modal-sum-row tax"><span>IGST</span><span>+' + fmtCurJs(bill.igstAmount) + '</span></div>';
+          }
+        }
+        html += '<div class="modal-sum-divider"></div>';
+        html += '<div class="modal-sum-total"><span>Total</span><span>' + fmtCurJs(bill.amount) + '</span></div>';
+        html += '</div>';
+
+        // Download button
+        if (bill.downloadUrl) {
+          html += '<a class="modal-download" href="' + escJs(bill.downloadUrl) + '" onclick="return forceDownload(this.href, \'Invoice_' + escJs(bill.invoiceNumber || '') + '.pdf\')">&#128196; Download PDF</a>';
+        }
+
+        document.getElementById('modalBody').innerHTML = html;
+        document.getElementById('billModal').className = 'modal-overlay open';
+        document.body.style.overflow = 'hidden';
+      }
+
+      function closeModal() {
+        document.getElementById('billModal').className = 'modal-overlay';
+        document.body.style.overflow = '';
+      }
+
+      function fmtCurJs(num) {
+        if (!num && num !== 0) return '\\u20B90';
+        return '\\u20B9' + Number(num).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+      }
+
+      function escJs(str) {
+        var d = document.createElement('div');
+        d.appendChild(document.createTextNode(str || ''));
+        return d.innerHTML;
+      }
+
+      // Close modal on back button
+      window.addEventListener('popstate', function() { closeModal(); });
+      </script>` : ''}
+    </div>
+    <div class="footer">
+      Powered by <a href="https://billraja.com">BillRaja</a>
+    </div>
+  </div>
+</body>
+</html>`);
+  } catch (err) {
+    logger.error('[invoicePage] Error:', err);
+    res.status(500).send(notFoundPage('Something went wrong. Please try again later.'));
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// CLIENT BILLS API — returns previous invoices for a verified client
+// ════════════════════════════════════════════════════════════════════════════
+
+exports.clientBills = onRequest(async (req, res) => {
+  // CORS headers
+  res.set('Access-Control-Allow-Origin', 'https://invoice.billraja.online');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
+    return;
+  }
+
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  try {
+    const { shortCode } = req.body || {};
+    if (!shortCode) {
+      res.status(400).json({ error: 'shortCode is required' });
+      return;
+    }
+
+    // Verify Firebase Auth ID token from Authorization header
+    const authHeader = req.headers.authorization || '';
+    const idToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+    if (!idToken) {
+      res.status(401).json({ error: 'Missing auth token' });
+      return;
+    }
+
+    let decodedToken;
+    try {
+      decodedToken = await admin.auth().verifyIdToken(idToken);
+    } catch (authErr) {
+      res.status(401).json({ error: 'Invalid auth token' });
+      return;
+    }
+
+    // Get the phone number from the verified token
+    const verifiedPhone = decodedToken.phone_number || '';
+    if (!verifiedPhone) {
+      res.status(403).json({ error: 'Phone number not verified' });
+      return;
+    }
+
+    // Load current invoice metadata
+    const invoiceDoc = await db.collection('shared_invoices').doc(shortCode).get();
+    if (!invoiceDoc.exists) {
+      res.status(404).json({ error: 'Invoice not found' });
+      return;
+    }
+
+    const invoiceData = invoiceDoc.data();
+    const storedPhone = invoiceData.clientPhone || '';
+
+    // Normalize phone numbers for comparison (strip leading +91, spaces, dashes)
+    const normalizePhone = (p) => p.replace(/[\s\-+]/g, '').replace(/^91/, '');
+    const normalizedVerified = normalizePhone(verifiedPhone);
+    const normalizedStored = normalizePhone(storedPhone);
+
+    if (!normalizedStored || normalizedVerified !== normalizedStored) {
+      res.status(403).json({ error: 'Phone number does not match' });
+      return;
+    }
+
+    // Query all shared invoices for the same client from the same owner
+    const ownerId = invoiceData.ownerId;
+    const clientName = invoiceData.clientName;
+
+    const billsSnapshot = await db.collection('shared_invoices')
+      .where('ownerId', '==', ownerId)
+      .where('clientName', '==', clientName)
+      .orderBy('createdAt', 'desc')
+      .limit(50)
+      .get();
+
+    const bills = [];
+    billsSnapshot.forEach((doc) => {
+      const d = doc.data();
+      bills.push({
+        shortCode: doc.id,
+        invoiceNumber: d.invoiceNumber || doc.id,
+        date: d.date || '',
+        amount: d.amount || 0,
+        subtotal: d.subtotal || 0,
+        status: d.status || 'pending',
+        downloadUrl: d.downloadUrl || '',
+        items: (d.items || []).map((item) => ({
+          description: item.description || '',
+          quantity: item.quantity || 0,
+          unitPrice: item.unitPrice || 0,
+          unit: item.unit || '',
+          hsnCode: item.hsnCode || '',
+          gstRate: item.gstRate || 0,
+          total: item.total || 0,
+        })),
+        discountAmount: d.discountAmount || 0,
+        gstEnabled: d.gstEnabled || false,
+        gstType: d.gstType || 'cgst_sgst',
+        cgstAmount: d.cgstAmount || 0,
+        sgstAmount: d.sgstAmount || 0,
+        igstAmount: d.igstAmount || 0,
+        totalTax: d.totalTax || 0,
+      });
+    });
+
+    // Compute summary stats
+    let totalSpent = 0, paidAmount = 0, pendingAmount = 0, overdueAmount = 0;
+    let paidCount = 0, pendingCount = 0, overdueCount = 0;
+    bills.forEach((b) => {
+      totalSpent += b.amount;
+      if (b.status === 'paid') { paidAmount += b.amount; paidCount++; }
+      else if (b.status === 'overdue') { overdueAmount += b.amount; overdueCount++; }
+      else { pendingAmount += b.amount; pendingCount++; }
+    });
+
+    res.status(200).json({
+      bills,
+      summary: {
+        totalBills: bills.length,
+        totalSpent,
+        paidAmount, paidCount,
+        pendingAmount, pendingCount,
+        overdueAmount, overdueCount,
+      },
+      clientName: clientName,
+      storeName: invoiceData.storeName || '',
+    });
+  } catch (err) {
+    logger.error('[clientBills] Error:', err);
+    res.status(500).json({ error: 'Internal error' });
+  }
+});
+
+function notFoundPage(msg) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Not Found — BillRaja</title>
+  <style>
+    body{font-family:system-ui,sans-serif;background:#eef2f7;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:20px}
+    .card{background:#fff;border-radius:20px;padding:40px 32px;box-shadow:0 4px 24px rgba(0,0,0,0.08);text-align:center;max-width:380px;width:100%}
+    h1{font-size:20px;color:#111827;margin-bottom:8px}
+    p{color:#6b7280;font-size:14px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Invoice Not Found</h1>
+    <p>${msg || 'This invoice link is invalid or has expired.'}</p>
+  </div>
+</body>
+</html>`;
+}
+
+function esc(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtCur(num) {
+  if (!num && num !== 0) return '\u20B90';
+  return '\u20B9' + Number(num).toLocaleString('en-IN', { maximumFractionDigits: 0 });
+}
+
+function fmtQty(val) {
+  if (val === Math.floor(val)) return String(Math.floor(val));
+  return Number(val).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+}

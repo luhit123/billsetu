@@ -5,6 +5,12 @@ class AppCheckService {
   AppCheckService._();
 
   static Future<void> activate() async {
+    if (kIsWeb) {
+      // Skip App Check on web until reCAPTCHA Enterprise is configured.
+      // To enable, replace with:
+      // webProvider: ReCaptchaEnterpriseProvider('YOUR_SITE_KEY')
+      return;
+    }
     await FirebaseAppCheck.instance.activate(
       androidProvider:
           kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,

@@ -1,68 +1,91 @@
 import 'dart:io';
 
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/services/invoice_link_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
-import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
-/// Bottom sheet for sharing an invoice via WhatsApp, SMS, or plain sharing.
+/// Bottom sheet for sharing an invoice via WhatsApp or SMS.
 ///
-/// [clientPhone] must be provided separately (fetched from the Client model)
-/// because [Invoice] does not store a phone number directly.
-class WhatsAppShareSheet extends StatelessWidget {
+/// Both options upload the PDF and include a branded download link.
+class WhatsAppShareSheet extends StatefulWidget {
   const WhatsAppShareSheet({
     super.key,
     required this.invoice,
     this.pdfFile,
+    this.pdfBytes,
     required this.currencyFormat,
     this.clientPhone,
   });
 
   final Invoice invoice;
   final File? pdfFile;
+  final Uint8List? pdfBytes;
   final NumberFormat currencyFormat;
-
-  /// Phone number of the client (digits only, without country code prefix).
-  /// Sourced from [Client.phone] before opening this sheet.
   final String? clientPhone;
 
-  // ── Helpers ────────────────────────────────────────────────────────────────
+  @override
+  State<WhatsAppShareSheet> createState() => _WhatsAppShareSheetState();
+}
 
-  String get _formattedAmount => currencyFormat.format(invoice.grandTotal);
+class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
+  bool _isLoadingWhatsApp = false;
+  bool _isLoadingSms = false;
 
-  String _shareMessage() {
-    final name = invoice.clientName.trim().isNotEmpty
-        ? invoice.clientName.trim()
+  String get _formattedAmount =>
+      widget.currencyFormat.format(widget.invoice.grandTotal);
+
+  String _shareMessage(String downloadUrl) {
+    final name = widget.invoice.clientName.trim().isNotEmpty
+        ? widget.invoice.clientName.trim()
         : 'Customer';
-    return 'Hi $name, please find your invoice #${invoice.invoiceNumber} '
-        'for $_formattedAmount. Thank you!';
+    return 'Hi $name! 🧾\n\n'
+        'Your invoice *#${widget.invoice.invoiceNumber}* for '
+        '*$_formattedAmount* is ready.\n\n'
+        '📥 View & Download:\n$downloadUrl\n\n'
+        'Thank you for your business! 🙏';
   }
 
-  String _textSummary() {
-    return 'Invoice: ${invoice.invoiceNumber}\n'
-        'Customer: ${invoice.clientName}\n'
-        'Amount: $_formattedAmount\n'
-        'Status: ${invoice.status.name}';
+  String _smsMessage(String downloadUrl) {
+    final name = widget.invoice.clientName.trim().isNotEmpty
+        ? widget.invoice.clientName.trim()
+        : 'Customer';
+    return 'Hi $name, your invoice #${widget.invoice.invoiceNumber} '
+        'for $_formattedAmount is ready.\n'
+        'Download: $downloadUrl';
   }
 
   String? _normalizedPhone() {
-    final raw = clientPhone?.trim() ?? '';
+    final raw = widget.clientPhone?.trim() ?? '';
     if (raw.isEmpty) return null;
-    // Strip non-digit characters
     final digits = raw.replaceAll(RegExp(r'\D'), '');
     if (digits.isEmpty) return null;
-    // Remove leading country code if already present (91xxxxxxxxxx)
     if (digits.length == 12 && digits.startsWith('91')) return digits;
     return '91$digits';
   }
 
-  // ── Build ──────────────────────────────────────────────────────────────────
+  Future<String?> _uploadAndGetLink() async {
+    final bytes = widget.pdfBytes;
+    if (bytes == null) return null;
+    try {
+      return await InvoiceLinkService.uploadAndGetLink(
+        invoice: widget.invoice,
+        pdfBytes: bytes,
+      );
+    } catch (e) {
+      if (!mounted) return null;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Upload failed: $e')),
+      );
+      return null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,46 +121,35 @@ class WhatsAppShareSheet extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             Text(
-              invoice.invoiceNumber,
+              '${widget.invoice.invoiceNumber}  •  $_formattedAmount',
               style: const TextStyle(
                 color: kOnSurfaceVariant,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 16),
-            // Option tiles
+            // WhatsApp
             _OptionTile(
               icon: Icons.chat_rounded,
               iconColor: const Color(0xFF25D366),
               title: 'WhatsApp',
-              subtitle: 'Send invoice message directly',
-              onTap: () => _shareWhatsApp(context),
+              subtitle: _isLoadingWhatsApp
+                  ? 'Preparing link…'
+                  : 'Send invoice with download link',
+              isLoading: _isLoadingWhatsApp,
+              onTap: _isLoadingWhatsApp ? null : () => _shareWhatsApp(context),
             ),
-            if (pdfFile != null) ...[
-              const Divider(height: 1, color: kSurfaceContainerLow),
-              _OptionTile(
-                icon: Icons.picture_as_pdf_rounded,
-                iconColor: kPrimary,
-                title: 'Share PDF',
-                subtitle: 'Share invoice PDF via any app',
-                onTap: () => _sharePdf(context),
-              ),
-            ],
             const Divider(height: 1, color: kSurfaceContainerLow),
+            // SMS
             _OptionTile(
               icon: Icons.sms_rounded,
               iconColor: const Color(0xFFF97316),
               title: 'SMS',
-              subtitle: 'Send invoice details via text message',
-              onTap: () => _shareSms(context),
-            ),
-            const Divider(height: 1, color: kSurfaceContainerLow),
-            _OptionTile(
-              icon: Icons.copy_rounded,
-              iconColor: kPrimary,
-              title: 'Copy Invoice Link',
-              subtitle: 'Copy a text summary to clipboard',
-              onTap: () => _copyToClipboard(context),
+              subtitle: _isLoadingSms
+                  ? 'Preparing link…'
+                  : 'Send invoice link via text message',
+              isLoading: _isLoadingSms,
+              onTap: _isLoadingSms ? null : () => _shareSms(context),
             ),
             const SizedBox(height: 8),
           ],
@@ -146,20 +158,22 @@ class WhatsAppShareSheet extends StatelessWidget {
     );
   }
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // ── Actions ──────────────────────────────────────────────────────────────
 
   Future<void> _shareWhatsApp(BuildContext context) async {
-    // ── Plan gate: check WhatsApp share limit ──
-    final shareCount = await UsageTrackingService.instance.getWhatsAppShareCount();
+    // Plan gate
+    final shareCount =
+        await UsageTrackingService.instance.getWhatsAppShareCount();
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!context.mounted) return;
-      final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
+      final max =
+          PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
       await LimitReachedDialog.show(
         context,
         title: 'WhatsApp Share Limit',
         message: max == 0
-          ? 'WhatsApp sharing is available on Raja plan and above.'
-          : 'You\'ve used $shareCount/$max WhatsApp shares this month.',
+            ? 'WhatsApp sharing is available on Raja plan and above.'
+            : 'You\'ve used $shareCount/$max WhatsApp shares this month.',
         featureName: 'WhatsApp sharing',
       );
       return;
@@ -173,26 +187,24 @@ class WhatsAppShareSheet extends StatelessWidget {
       );
       return;
     }
-    final message = Uri.encodeComponent(_shareMessage());
+
+    setState(() => _isLoadingWhatsApp = true);
+    final url = await _uploadAndGetLink();
+    if (!mounted) return;
+    setState(() => _isLoadingWhatsApp = false);
+
+    if (url == null) return;
+
+    final message = Uri.encodeComponent(_shareMessage(url));
     final uri = Uri.parse('https://wa.me/$phone?text=$message');
     if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
       await UsageTrackingService.instance.incrementWhatsAppShareCount();
     } else {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not open ${uri.scheme}')),
+        const SnackBar(content: Text('Could not open WhatsApp')),
       );
     }
-  }
-
-  Future<void> _sharePdf(BuildContext context) async {
-    if (pdfFile == null) return;
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(pdfFile!.path)],
-        subject: 'Invoice ${invoice.invoiceNumber}',
-      ),
-    );
   }
 
   Future<void> _shareSms(BuildContext context) async {
@@ -204,25 +216,21 @@ class WhatsAppShareSheet extends StatelessWidget {
       );
       return;
     }
-    final body = Uri.encodeComponent(_shareMessage());
+
+    setState(() => _isLoadingSms = true);
+    final url = await _uploadAndGetLink();
+    if (!mounted) return;
+    setState(() => _isLoadingSms = false);
+
+    if (url == null) return;
+
+    final body = Uri.encodeComponent(_smsMessage(url));
     final uri = Uri.parse('sms:$phone?body=$body');
-    await _openUri(context, uri);
-  }
-
-  Future<void> _copyToClipboard(BuildContext context) async {
-    await Clipboard.setData(ClipboardData(text: _textSummary()));
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Copied!')),
-    );
-  }
-
-  Future<void> _openUri(BuildContext context, Uri uri) async {
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         if (!context.mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open ${uri.scheme}')),
+          const SnackBar(content: Text('Could not open SMS app')),
         );
       }
     } catch (e) {
@@ -243,13 +251,15 @@ class _OptionTile extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.onTap,
+    this.isLoading = false,
   });
 
   final IconData icon;
   final Color iconColor;
   final String title;
   final String subtitle;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -267,7 +277,12 @@ class _OptionTile extends StatelessWidget {
                 color: iconColor.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: iconColor, size: 22),
+              child: isLoading
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(icon, color: iconColor, size: 22),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -293,7 +308,8 @@ class _OptionTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
+            const Icon(Icons.chevron_right_rounded,
+                color: kTextTertiary, size: 20),
           ],
         ),
       ),

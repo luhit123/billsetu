@@ -239,6 +239,18 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
 
+      match /subscription_plans/{planId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /members/{memberId} {
+        allow read, write: if isOwner(userId);
+
+        match /attendance/{logId} {
+          allow read, write: if isOwner(userId);
+        }
+      }
+
       // Usage counters — client can read and increment (never decrement)
       match /usage/{periodKey} {
         allow read: if isOwner(userId);
@@ -263,6 +275,12 @@ service cloud.firestore {
     // Plan config — any signed-in user can read
     match /config/{docId} {
       allow read: if isSignedIn();
+    }
+
+    // Shared invoice landing pages — public read, authenticated write
+    match /shared_invoices/{shortCode} {
+      allow read;
+      allow create, update: if isSignedIn();
     }
   }
 }

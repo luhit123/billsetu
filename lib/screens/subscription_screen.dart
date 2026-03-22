@@ -283,8 +283,8 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           // Upgrade / Change plan
           _ActionTile(
             icon: Icons.rocket_launch_rounded,
-            title: plan == AppPlan.free ? 'Upgrade Plan' : 'Change Plan',
-            subtitle: plan == AppPlan.free
+            title: plan == AppPlan.expired ? 'Upgrade Plan' : 'Change Plan',
+            subtitle: plan == AppPlan.expired
                 ? 'Unlock more features with Raja or Maharaja'
                 : 'Switch to a different plan',
             onTap: () {
@@ -295,7 +295,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ),
 
           // Cancel / Reactivate (paid plans only)
-          if (plan != AppPlan.free) ...[
+          if (plan != AppPlan.expired) ...[
             const Divider(height: 1, thickness: 1, indent: 18, endIndent: 18),
             if (_cancelAtPeriodEnd)
               _ActionTile(
@@ -496,10 +496,9 @@ class _PlanHeaderCard extends StatelessWidget {
   final bool isGrace;
 
   IconData get _planIcon => switch (plan) {
-    AppPlan.free => Icons.star_border_rounded,
-    AppPlan.raja => Icons.star_rounded,
-    AppPlan.maharaja => Icons.diamond_rounded,
-    AppPlan.king => Icons.workspace_premium_rounded,
+    AppPlan.expired => Icons.star_border_rounded,
+    AppPlan.trial => Icons.star_rounded,
+    AppPlan.pro => Icons.workspace_premium_rounded,
   };
 
   String get _statusLabel {
@@ -560,7 +559,7 @@ class _PlanHeaderCard extends StatelessWidget {
                     Row(
                       children: [
                         _StatusChip(label: _statusLabel, color: _statusColor),
-                        if (plan != AppPlan.free) ...[
+                        if (plan != AppPlan.expired) ...[
                           const SizedBox(width: 8),
                           _StatusChip(
                             label: cycleName,
@@ -575,7 +574,7 @@ class _PlanHeaderCard extends StatelessWidget {
               ),
             ],
           ),
-          if (plan != AppPlan.free) ...[
+          if (plan != AppPlan.expired) ...[
             const SizedBox(height: 18),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

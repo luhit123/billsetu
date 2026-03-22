@@ -12,6 +12,8 @@ class BusinessProfile {
     this.bankIfsc = '',
     this.bankName = '',
     this.upiId = '',
+    this.upiNumber = '',
+    this.upiQrUrl = '',
     this.defaultPaymentTerms = '',
     this.defaultGstRate = '',
     this.invoicePrefix = 'INV-',
@@ -36,6 +38,8 @@ class BusinessProfile {
 
   // UPI
   final String upiId;
+  final String upiNumber;
+  final String upiQrUrl;
 
   // Invoice settings
   final String defaultPaymentTerms;
@@ -57,6 +61,8 @@ class BusinessProfile {
       bankIfsc: map['bankIfsc'] as String? ?? '',
       bankName: map['bankName'] as String? ?? '',
       upiId: map['upiId'] as String? ?? '',
+      upiNumber: map['upiNumber'] as String? ?? '',
+      upiQrUrl: map['upiQrUrl'] as String? ?? '',
       defaultPaymentTerms: map['defaultPaymentTerms'] as String? ?? '',
       defaultGstRate: map['defaultGstRate'] as String? ?? '',
       invoicePrefix: map['invoicePrefix'] as String? ?? 'INV-',
@@ -78,6 +84,8 @@ class BusinessProfile {
       'bankIfsc': bankIfsc,
       'bankName': bankName,
       'upiId': upiId,
+      'upiNumber': upiNumber,
+      'upiQrUrl': upiQrUrl,
       'defaultPaymentTerms': defaultPaymentTerms,
       'defaultGstRate': defaultGstRate,
       'invoicePrefix': invoicePrefix,
@@ -98,6 +106,8 @@ class BusinessProfile {
     String? bankIfsc,
     String? bankName,
     String? upiId,
+    String? upiNumber,
+    String? upiQrUrl,
     String? defaultPaymentTerms,
     String? defaultGstRate,
     String? invoicePrefix,
@@ -116,6 +126,8 @@ class BusinessProfile {
       bankIfsc: bankIfsc ?? this.bankIfsc,
       bankName: bankName ?? this.bankName,
       upiId: upiId ?? this.upiId,
+      upiNumber: upiNumber ?? this.upiNumber,
+      upiQrUrl: upiQrUrl ?? this.upiQrUrl,
       defaultPaymentTerms: defaultPaymentTerms ?? this.defaultPaymentTerms,
       defaultGstRate: defaultGstRate ?? this.defaultGstRate,
       invoicePrefix: invoicePrefix ?? this.invoicePrefix,

@@ -47,6 +47,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     'meter',
   ];
   static const String _defaultItemUnit = 'pcs';
+  static const String _customUnitValue = '__custom__';
   static const Duration _defaultPaymentTerm = Duration(days: 14);
 
   final GlobalKey<FormState> _formKey = GlobalKey<FormState>();
@@ -70,11 +71,17 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   double _gstRate = 18.0;
   String _gstType = 'cgst_sgst'; // 'cgst_sgst' or 'igst'
 
+  // UX: collapsible sections
+  late List<bool> _showAdvanced;
+  bool _showDiscountSection = false;
+  bool _showGstSection = false;
+
   @override
   void initState() {
     super.initState();
     _selectedClient = widget.initialClient;
     itemRows = [_createItemRowControllers()];
+    _showAdvanced = [false];
     _loadLastUsedGstSettings();
   }
 
@@ -84,6 +91,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     setState(() {
       _gstRate = prefs.getDouble('last_gst_rate') ?? 18.0;
       _gstType = prefs.getString('last_gst_type') ?? 'cgst_sgst';
+      _showGstSection = _gstEnabled;
     });
   }
 
@@ -240,143 +248,32 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           key: _formKey,
           child: ListView(
             padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             children: [
               // ── Customer ──────────────────────────────────────────────
               _buildCustomerSection(context),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
-              // ── Invoice Date ──────────────────────────────────────────
-              _sectionLabel(s.createInvoiceDate, step: 2),
+              // ── Date ──────────────────────────────────────────────────
               _buildDateCard(context, s),
               const SizedBox(height: 16),
 
-              // ── Section label – Items ─────────────────────────────────
-              _sectionLabel('Items', step: 3),
+              // ── Items ─────────────────────────────────────────────────
+              _sectionLabel('Items'),
+              ...List.generate(itemRows.length, (index) => _buildItemCard(context, index, s)),
 
-              // ── Item rows ─────────────────────────────────────────────
-              ...List.generate(itemRows.length, (index) {
-                return _buildItemCard(context, index, s);
-              }),
-
-              // ── Add item button ───────────────────────────────────────
-              GestureDetector(
-                onTap: _addItemRow,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  decoration: BoxDecoration(
-                    color: kSurfaceLowest,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: kPrimary, width: 1.5),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_circle_rounded, color: kPrimary, size: 20),
-                      SizedBox(width: 8),
-                      Text('Add Item', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
-                    ],
-                  ),
-                ),
-              ),
+              // ── Add Item + From Products ──────────────────────────────
+              _buildAddItemButtons(),
               const SizedBox(height: 16),
 
-              // ── Status ────────────────────────────────────────────────
-              _sectionLabel(s.createInvoiceStatus, step: 4),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: _cardDecoration(),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: InvoiceStatus.values.map((status) {
-                    final isSelected = _selectedStatus == status;
-                    return _StatusPill(
-                      label: _statusLabel(status, s),
-                      isSelected: isSelected,
-                      selectedBg: _statusBackgroundColor(status),
-                      selectedBorder: _statusBorderColor(status),
-                      selectedText: _statusTextColor(status),
-                      onTap: () =>
-                          setState(() => _selectedStatus = status),
-                    );
-                  }).toList(),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── Discount ──────────────────────────────────────────────
-              _sectionLabel(s.createDiscountTitle, step: 5),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: _cardDecoration(),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children:
-                          InvoiceDiscountType.values.map((discountType) {
-                        final isSelected =
-                            _selectedDiscountType == discountType;
-                        return _StatusPill(
-                          label:
-                              _discountTypeLabel(discountType, s),
-                          isSelected: isSelected,
-                          selectedBg: kSurfaceContainerLow,
-                          selectedBorder: kPrimaryContainer,
-                          selectedText: kPrimary,
-                          onTap: () => setState(
-                              () => _selectedDiscountType = discountType),
-                        );
-                      }).toList(),
-                    ),
-                    const SizedBox(height: 14),
-                    TextFormField(
-                      controller: _discountController,
-                      decoration: _inputDecoration(
-                        _selectedDiscountType ==
-                                InvoiceDiscountType.percentage
-                            ? s.createDiscountPctField
-                            : s.createDiscountOverallField,
-                        suffix: _selectedDiscountType ==
-                                InvoiceDiscountType.percentage
-                            ? '%'
-                            : 'INR',
-                      ).copyWith(
-                        hintText: _selectedDiscountType ==
-                                InvoiceDiscountType.percentage
-                            ? s.createDiscountPctHint
-                            : s.createDiscountOverallHint,
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      _discountPreviewText(subtotal, discountAmount, s),
-                      style: const TextStyle(
-                        color: kOnSurfaceVariant,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // ── GST ───────────────────────────────────────────────────
-              _buildGstSection(taxableAmount, cgstAmount, sgstAmount, igstAmount),
+              // ── Invoice Settings (Status + Discount + GST) ────────────
+              _sectionLabel('Invoice Settings'),
+              _buildInvoiceSettings(s, subtotal, discountAmount, taxableAmount, cgstAmount, sgstAmount, igstAmount),
               const SizedBox(height: 16),
 
               // ── Summary ───────────────────────────────────────────────
               _buildSummaryCard(subtotal, discountAmount, totalTax, cgstAmount, sgstAmount, igstAmount, grandTotal, s),
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
             ],
           ),
         ),
@@ -415,65 +312,22 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   // ── Date card ─────────────────────────────────────────────────────────────
 
   Widget _buildDateCard(BuildContext context, AppStrings s) {
-    final dayName = DateFormat('EEEE').format(selectedDate);
     return InkWell(
       onTap: _pickDate,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(12),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: _cardDecoration(),
         child: Row(
           children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: kPrimary,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    DateFormat('dd').format(selectedDate),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, height: 1),
-                  ),
-                  Text(
-                    DateFormat('MMM').format(selectedDate).toUpperCase(),
-                    style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600, letterSpacing: 0.5),
-                  ),
-                ],
-              ),
+            const Icon(Icons.calendar_today_rounded, size: 18, color: kPrimary),
+            const SizedBox(width: 10),
+            Text(
+              DateFormat('dd MMM yyyy, EEEE').format(selectedDate),
+              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kOnSurface),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    s.createInvoiceDate,
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    DateFormat('dd MMM yyyy').format(selectedDate),
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kOnSurface),
-                  ),
-                  Text(
-                    dayName,
-                    style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text('Change', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimary)),
-            ),
+            const Spacer(),
+            const Icon(Icons.chevron_right_rounded, size: 20, color: kOnSurfaceVariant),
           ],
         ),
       ),
@@ -488,266 +342,286 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final qty = nu.parseDouble(row['qty']!.text) ?? 0;
     final price = nu.parseDouble(row['price']!.text) ?? 0;
     final rowTotal = qty * price;
+    final advanced = index < _showAdvanced.length && _showAdvanced[index];
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Stack(
-        children: [
-          // Main card
-          Container(
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-            decoration: const BoxDecoration(
-              color: kSurfaceLowest,
-              borderRadius: BorderRadius.all(Radius.circular(20)),
-              boxShadow: [kWhisperShadow],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
+        decoration: const BoxDecoration(
+          color: kSurfaceLowest,
+          borderRadius: BorderRadius.all(Radius.circular(16)),
+          boxShadow: [kWhisperShadow],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header row: simple "#1" text + delete icon
+            Row(
               children: [
-                // Header row
-                Row(
-                  children: [
-                    Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: kPrimary,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        s.createItemNumber(index + 1),
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                          color: kOnSurface,
-                        ),
-                      ),
-                    ),
-                    // ── From Products quick-fill ──────────────────────
-                    GestureDetector(
-                      onTap: () => _pickProduct(index),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: kSurfaceContainerLow,
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.inventory_2_outlined,
-                                size: 13, color: kPrimary),
-                            SizedBox(width: 4),
-                            Text(
-                              'Products',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: kPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      onPressed: () => _removeItemRow(index),
-                      icon: const Icon(Icons.delete_outline,
-                          color: Color(0xFFEF4444), size: 20),
-                      tooltip: s.createDeleteItem,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                          minWidth: 36, minHeight: 36),
-                    ),
-                  ],
-                ),
-                // Live total row
-                if (rowTotal > 0) ...[
-                  const SizedBox(height: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: kPrimaryContainer,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      'Line total: ${_currencyFormat.format(rowTotal)}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: kPrimary,
-                      ),
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                // Description
-                TextFormField(
-                  controller: row['desc'],
-                  decoration: _inputDecoration(s.createProductLabel),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return s.createEnterProduct;
-                    }
-                    return null;
-                  },
-                  onChanged: (_) => setState(() {}),
-                ),
-                const SizedBox(height: 8),
-                // HSN / SAC code (optional)
-                TextField(
-                  controller: row['hsn'],
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: _inputDecoration(s.hsnCodeLabel).copyWith(
-                    hintText: s.hsnCodeHint,
+                Text(
+                  '#${index + 1}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: kOnSurfaceVariant,
                   ),
                 ),
-                if (_gstEnabled) ...[
-                  const SizedBox(height: 10),
-                  const Text('GST Rate',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                          color: kOnSurfaceVariant)),
-                  const SizedBox(height: 6),
-                  Wrap(
-                    spacing: 6, runSpacing: 6,
-                    children: [0.0, 5.0, 12.0, 18.0, 28.0].map((rate) {
-                      final currentRate = nu.parseDouble(row['gstRate']!.text) ?? _gstRate;
-                      final selected = currentRate == rate;
-                      return GestureDetector(
-                        onTap: () => setState(() => row['gstRate']!.text = rate.toStringAsFixed(0)),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: selected ? kPrimary : kSurfaceContainerLow,
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Text(
-                            '${rate.toStringAsFixed(0)}%',
-                            style: TextStyle(
-                              color: selected ? Colors.white : kOnSurface,
-                              fontWeight: FontWeight.w600, fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
-                const SizedBox(height: 12),
-                // Qty / Unit / Price
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isCompact = constraints.maxWidth < 360;
-
-                    final qtyField = TextFormField(
-                      controller: row['qty'],
-                      decoration: _inputDecoration(s.createQtyLabel),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (value) {
-                        final qty = nu.parseDouble(value);
-                        if (qty == null || qty <= 0) {
-                          return s.createQtyLabel;
-                        }
-                        return null;
-                      },
-                      onChanged: (_) => setState(() {}),
-                    );
-
-                    final unitField = DropdownButtonFormField<String>(
-                      initialValue:
-                          _normalizeItemUnit(row['unit']!.text),
-                      isExpanded: true,
-                      decoration: _inputDecoration(s.createUnitLabel),
-                      items: _itemUnitOptions.map((unit) {
-                        return DropdownMenuItem(
-                          value: unit,
-                          child: Text(unit,
-                              overflow: TextOverflow.ellipsis),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        row['unit']!.text =
-                            _normalizeItemUnit(value);
-                        setState(() {});
-                      },
-                    );
-
-                    final priceField = TextFormField(
-                      controller: row['price'],
-                      decoration:
-                          _inputDecoration(s.createUnitPriceLabel),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      validator: (value) {
-                        final price = nu.parseDouble(value);
-                        if (price == null || price <= 0) {
-                          return s.createUnitPriceLabel;
-                        }
-                        return null;
-                      },
-                      onChanged: (_) => setState(() {}),
-                    );
-
-                    if (isCompact) {
-                      return Column(
-                        children: [
-                          Row(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Expanded(child: qtyField),
-                              const SizedBox(width: 8),
-                              Expanded(child: unitField),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          priceField,
-                        ],
-                      );
-                    }
-
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 2, child: qtyField),
-                        const SizedBox(width: 8),
-                        Expanded(flex: 2, child: unitField),
-                        const SizedBox(width: 8),
-                        Expanded(flex: 3, child: priceField),
-                      ],
-                    );
-                  },
+                const Spacer(),
+                IconButton(
+                  onPressed: () => _removeItemRow(index),
+                  icon: const Icon(Icons.delete_outline,
+                      color: Color(0xFFEF4444), size: 20),
+                  tooltip: s.createDeleteItem,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                      minWidth: 36, minHeight: 36),
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            // Description
+            TextFormField(
+              controller: row['desc'],
+              decoration: _inputDecoration(s.createProductLabel),
+              validator: (value) {
+                if (value == null || value.trim().isEmpty) {
+                  return s.createEnterProduct;
+                }
+                return null;
+              },
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            // Qty / Unit / Price — always in one row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 2,
+                  child: TextFormField(
+                    controller: row['qty'],
+                    decoration: _inputDecoration(s.createQtyLabel),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: (value) {
+                      final qty = nu.parseDouble(value);
+                      if (qty == null || qty <= 0) {
+                        return s.createQtyLabel;
+                      }
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 2,
+                  child: Builder(builder: (context) {
+                    final currentUnit = row['unit']!.text.isEmpty
+                        ? _defaultItemUnit
+                        : row['unit']!.text;
+                    final isCustomUnit =
+                        !_itemUnitOptions.contains(currentUnit.toLowerCase());
+                    return DropdownButtonFormField<String>(
+                      initialValue: isCustomUnit ? _customUnitValue : currentUnit.toLowerCase(),
+                      isExpanded: true,
+                      decoration: _inputDecoration(s.createUnitLabel),
+                      items: [
+                        ..._itemUnitOptions.map((unit) {
+                          return DropdownMenuItem(
+                            value: unit,
+                            child: Text(unit,
+                                overflow: TextOverflow.ellipsis),
+                          );
+                        }),
+                        DropdownMenuItem(
+                          value: _customUnitValue,
+                          child: Text(isCustomUnit ? 'Custom: $currentUnit' : 'Custom...',
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: kPrimary,
+                                fontWeight: isCustomUnit ? FontWeight.w600 : FontWeight.w400,
+                              )),
+                        ),
+                      ],
+                      onChanged: (value) {
+                        if (value == _customUnitValue) {
+                          _showCustomUnitDialog(row);
+                        } else {
+                          row['unit']!.text = value ?? _defaultItemUnit;
+                          setState(() {});
+                        }
+                      },
+                    );
+                  }),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  flex: 3,
+                  child: TextFormField(
+                    controller: row['price'],
+                    decoration:
+                        _inputDecoration(s.createUnitPriceLabel),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    validator: (value) {
+                      final price = nu.parseDouble(value);
+                      if (price == null || price <= 0) {
+                        return s.createUnitPriceLabel;
+                      }
+                      return null;
+                    },
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+              ],
+            ),
+            // Line total — subtle right-aligned text
+            if (rowTotal > 0) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '= ${_currencyFormat.format(rowTotal)}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: kOnSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+            // "More options" toggle for HSN + GST rate
+            const SizedBox(height: 6),
+            GestureDetector(
+              onTap: () => setState(() {
+                if (index < _showAdvanced.length) {
+                  _showAdvanced[index] = !_showAdvanced[index];
+                }
+              }),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      advanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      size: 16, color: kPrimary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      advanced ? 'Less options' : 'More options',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: kPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (advanced) ...[
+              const SizedBox(height: 8),
+              // HSN / SAC code
+              TextField(
+                controller: row['hsn'],
+                textCapitalization: TextCapitalization.characters,
+                decoration: _inputDecoration(s.hsnCodeLabel).copyWith(
+                  hintText: s.hsnCodeHint,
+                ),
+              ),
+              if (_gstEnabled) ...[
+                const SizedBox(height: 10),
+                const Text('GST Rate',
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                        color: kOnSurfaceVariant)),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6, runSpacing: 6,
+                  children: [0.0, 5.0, 12.0, 18.0, 28.0].map((rate) {
+                    final currentRate = nu.parseDouble(row['gstRate']!.text) ?? _gstRate;
+                    final selected = currentRate == rate;
+                    return GestureDetector(
+                      onTap: () => setState(() => row['gstRate']!.text = rate.toStringAsFixed(0)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: selected ? kPrimary : kSurfaceContainerLow,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          '${rate.toStringAsFixed(0)}%',
+                          style: TextStyle(
+                            color: selected ? Colors.white : kOnSurface,
+                            fontWeight: FontWeight.w600, fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Add Item buttons row ─────────────────────────────────────────────────
+
+  Widget _buildAddItemButtons() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: _addItemRow,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: kSurfaceLowest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kPrimary, width: 1.5),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.add_circle_rounded, color: kPrimary, size: 20),
+                    SizedBox(width: 8),
+                    Text('Add Item', style: TextStyle(color: kPrimary, fontWeight: FontWeight.w700, fontSize: 14)),
+                  ],
+                ),
+              ),
+            ),
           ),
-          // Left accent bar
-          Positioned(
-            left: 0,
-            top: 8,
-            bottom: 8,
-            child: Container(
-              width: 5,
-              decoration: BoxDecoration(
-                color: kPrimary,
-                borderRadius: BorderRadius.circular(3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                _addItemRow();
+                _pickProduct(itemRows.length - 1);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: kSurfaceLowest,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: kOutlineVariant, width: 1.5),
+                ),
+                child: const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.inventory_2_outlined, color: kOnSurfaceVariant, size: 18),
+                    SizedBox(width: 8),
+                    Text('From Products', style: TextStyle(color: kOnSurfaceVariant, fontWeight: FontWeight.w700, fontSize: 14)),
+                  ],
+                ),
               ),
             ),
           ),
@@ -756,132 +630,205 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
-  // ── GST section ───────────────────────────────────────────────────────────
+  // ── Invoice Settings (merged Status + Discount + GST) ──────────────────
 
-  Widget _buildGstSection(
-      double taxableAmount, double cgst, double sgst, double igst) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _sectionLabel('GST', step: 6),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: _cardDecoration(),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Toggle row
-              Row(
+  Widget _buildInvoiceSettings(
+    AppStrings s,
+    double subtotal,
+    double discountAmount,
+    double taxableAmount,
+    double cgstAmount,
+    double sgstAmount,
+    double igstAmount,
+  ) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _cardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Status pills ──
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: InvoiceStatus.values.map((status) {
+              final isSelected = _selectedStatus == status;
+              return _StatusPill(
+                label: _statusLabel(status, s),
+                isSelected: isSelected,
+                selectedBg: _statusBackgroundColor(status),
+                selectedBorder: _statusBorderColor(status),
+                selectedText: _statusTextColor(status),
+                onTap: () => setState(() => _selectedStatus = status),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          Container(height: 1, color: kSurfaceContainerLow),
+
+          // ── Add Discount (expandable) ──
+          InkWell(
+            onTap: () => setState(() => _showDiscountSection = !_showDiscountSection),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
                 children: [
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: _gstEnabled
-                          ? kSurfaceContainerLow
-                          : kSurfaceContainerLow,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      Icons.receipt_long_outlined,
-                      size: 18,
-                      color:
-                          _gstEnabled ? kPrimary : kTextTertiary,
-                    ),
+                  const Icon(Icons.discount_outlined, size: 18, color: kOnSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Text(
+                    discountAmount > 0
+                        ? 'Discount: -${_currencyFormat.format(discountAmount)}'
+                        : 'Add Discount',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kOnSurface),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Apply GST',
-                          style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: kOnSurface),
-                        ),
-                        Text(
-                          _gstEnabled
-                              ? 'GST is included in grand total'
-                              : 'Tap to enable GST on this invoice',
-                          style: const TextStyle(
-                              fontSize: 12, color: kOnSurfaceVariant),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Switch.adaptive(
-                    value: _gstEnabled,
-                    activeThumbColor: Colors.white,
-                    activeTrackColor: kPrimary,
-                    onChanged: (v) => setState(() => _gstEnabled = v),
-                  ),
+                  const Spacer(),
+                  Icon(_showDiscountSection ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kOnSurfaceVariant),
                 ],
               ),
-              if (_gstEnabled) ...[
-                const SizedBox(height: 14),
-                Container(
-                    height: 1, color: kSurfaceContainerLow),
-                const SizedBox(height: 14),
-                // Type selector
-                const Text(
-                  'GST TYPE',
-                  style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: kOnSurfaceVariant,
-                      letterSpacing: 0.8),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _GstTypeChip(
-                      label: 'CGST + SGST',
-                      subtitle: 'Intrastate',
-                      selected: _gstType == 'cgst_sgst',
-                      onTap: () =>
-                          setState(() => _gstType = 'cgst_sgst'),
+            ),
+          ),
+          if (_showDiscountSection) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                ...InvoiceDiscountType.values.map((discountType) {
+                  final isSelected = _selectedDiscountType == discountType;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _StatusPill(
+                      label: _discountTypeLabel(discountType, s),
+                      isSelected: isSelected,
+                      selectedBg: kSurfaceContainerLow,
+                      selectedBorder: kPrimaryContainer,
+                      selectedText: kPrimary,
+                      onTap: () => setState(() => _selectedDiscountType = discountType),
                     ),
-                    const SizedBox(width: 10),
-                    _GstTypeChip(
-                      label: 'IGST',
-                      subtitle: 'Interstate',
-                      selected: _gstType == 'igst',
-                      onTap: () => setState(() => _gstType = 'igst'),
+                  );
+                }),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: TextFormField(
+                    controller: _discountController,
+                    decoration: _inputDecoration(
+                      _selectedDiscountType == InvoiceDiscountType.percentage
+                          ? s.createDiscountPctField
+                          : s.createDiscountOverallField,
+                      suffix: _selectedDiscountType == InvoiceDiscountType.percentage ? '%' : 'INR',
+                    ).copyWith(
+                      hintText: _selectedDiscountType == InvoiceDiscountType.percentage
+                          ? s.createDiscountPctHint
+                          : s.createDiscountOverallHint,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                // Tax preview
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: kSurfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      if (_gstType == 'cgst_sgst') ...[
-                        _taxPreviewRow(
-                            'CGST',
-                            _currencyFormat.format(cgst)),
-                        const SizedBox(height: 4),
-                        _taxPreviewRow(
-                            'SGST',
-                            _currencyFormat.format(sgst)),
-                      ] else
-                        _taxPreviewRow(
-                            'IGST',
-                            _currencyFormat.format(igst)),
-                    ],
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    onChanged: (_) => setState(() {}),
                   ),
                 ),
               ],
+            ),
+            if (discountAmount > 0) ...[
+              const SizedBox(height: 6),
+              Text(
+                _discountPreviewText(subtotal, discountAmount, s),
+                style: const TextStyle(
+                  color: kOnSurfaceVariant,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
             ],
+          ],
+          Container(height: 1, color: kSurfaceContainerLow),
+
+          // ── GST Settings (expandable) ──
+          InkWell(
+            onTap: () => setState(() => _showGstSection = !_showGstSection),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.receipt_long_outlined, size: 18, color: kOnSurfaceVariant),
+                  const SizedBox(width: 10),
+                  Text(
+                    _gstEnabled ? 'GST: Enabled' : 'GST Settings',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kOnSurface),
+                  ),
+                  const Spacer(),
+                  Icon(_showGstSection ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down, color: kOnSurfaceVariant),
+                ],
+              ),
+            ),
           ),
-        ),
-      ],
+          if (_showGstSection) ...[
+            const SizedBox(height: 4),
+            // Toggle row
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _gstEnabled
+                        ? 'GST is included in grand total'
+                        : 'Tap to enable GST on this invoice',
+                    style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                  ),
+                ),
+                Switch.adaptive(
+                  value: _gstEnabled,
+                  activeThumbColor: Colors.white,
+                  activeTrackColor: kPrimary,
+                  onChanged: (v) => setState(() => _gstEnabled = v),
+                ),
+              ],
+            ),
+            if (_gstEnabled) ...[
+              const SizedBox(height: 10),
+              // Type selector
+              const Text('GST TYPE',
+                  style: TextStyle(
+                      fontSize: 11, fontWeight: FontWeight.w700,
+                      color: kOnSurfaceVariant, letterSpacing: 0.8)),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _GstTypeChip(
+                    label: 'CGST + SGST',
+                    subtitle: 'Intrastate',
+                    selected: _gstType == 'cgst_sgst',
+                    onTap: () => setState(() => _gstType = 'cgst_sgst'),
+                  ),
+                  const SizedBox(width: 10),
+                  _GstTypeChip(
+                    label: 'IGST',
+                    subtitle: 'Interstate',
+                    selected: _gstType == 'igst',
+                    onTap: () => setState(() => _gstType = 'igst'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              // Tax preview
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kSurfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  children: [
+                    if (_gstType == 'cgst_sgst') ...[
+                      _taxPreviewRow('CGST', _currencyFormat.format(cgstAmount)),
+                      const SizedBox(height: 4),
+                      _taxPreviewRow('SGST', _currencyFormat.format(sgstAmount)),
+                    ] else
+                      _taxPreviewRow('IGST', _currencyFormat.format(igstAmount)),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
     );
   }
 
@@ -974,168 +921,131 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(s.createCustomerLabel, step: 1),
-        Container(
-          decoration: BoxDecoration(
-            color: kSurfaceLowest,
-            borderRadius: BorderRadius.circular(20),
-            border: selectedClient != null
-                ? Border.all(color: kPrimary, width: 1.5)
-                : hasError ? Border.all(color: const Color(0xFFEF4444), width: 1.2) : null,
-            boxShadow: const [kWhisperShadow],
-          ),
-          child: InkWell(
-            onTap: _pickCustomer,
-            borderRadius: BorderRadius.circular(20),
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: selectedClient != null
-                        ? kPrimaryContainer
-                        : kSurfaceContainerLow,
-                    child: Text(
-                      selectedClient?.initials ?? '+',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                        color: kPrimary,
-                        fontSize: 17,
+        _sectionLabel(s.createCustomerLabel),
+        // Show selected customer card if one is picked
+        if (selectedClient != null) ...[
+          Container(
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPrimary, width: 1.5),
+              boxShadow: const [kWhisperShadow],
+            ),
+            child: InkWell(
+              onTap: _pickCustomer,
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: kPrimaryContainer,
+                      child: Text(
+                        selectedClient.initials,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          color: kPrimary,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedClient?.name ?? s.createSelectCustomer,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                            color: selectedClient != null ? kOnSurface : kOnSurfaceVariant,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedClient.name,
+                            style: const TextStyle(
+                              fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          selectedClient == null ? s.createCustomerHint : selectedClient.subtitle,
-                          style: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
-                        ),
-                      ],
+                          if (selectedClient.gstin.isNotEmpty)
+                            Text(
+                              '${s.customerGstinLabel}: ${selectedClient.gstin}',
+                              style: const TextStyle(fontSize: 11, color: kPrimary, fontWeight: FontWeight.w600),
+                            ),
+                        ],
+                      ),
                     ),
-                  ),
-                  Icon(
-                    selectedClient != null ? Icons.check_circle_rounded : Icons.chevron_right_rounded,
-                    color: selectedClient != null ? kPrimary : kOnSurfaceVariant,
-                  ),
-                ],
+                    const Icon(Icons.swap_horiz_rounded, size: 18, color: kOnSurfaceVariant),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        if (_selectedClient != null &&
-            _selectedClient!.gstin.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.receipt_long_outlined,
-                    size: 14, color: kPrimary),
-                const SizedBox(width: 6),
-                Text(
-                  '${s.customerGstinLabel}: ${_selectedClient!.gstin}',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: kPrimary,
-                  ),
+        ] else ...[
+          // Two action cards: Customers + Add New
+          Row(
+            children: [
+              Expanded(
+                child: _customerActionCard(
+                  icon: Icons.groups_2_outlined,
+                  label: s.createPickCustomer,
+                  onTap: _pickCustomer,
+                  hasError: hasError,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _customerActionCard(
+                  icon: Icons.person_add_alt_1_rounded,
+                  label: s.createAddNew,
+                  onTap: _addCustomer,
+                  hasError: false,
+                ),
+              ),
+            ],
           ),
+          if (hasError)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                s.createCustomerRequired,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.error,
+                  fontSize: 12,
+                ),
+              ),
+            ),
         ],
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (context, constraints) {
-            final shouldStackButtons = constraints.maxWidth < 360;
+      ],
+    );
+  }
 
-            final pickButton = OutlinedButton.icon(
-              onPressed: _pickCustomer,
-              icon: const Icon(Icons.groups_2_outlined, size: 18),
-              label: Text(
-                selectedClient == null
-                    ? s.createPickCustomer
-                    : s.createChangeCustomer,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: kPrimary,
-                side: const BorderSide(color: kPrimary),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-
-            final addButton = ElevatedButton.icon(
-              onPressed: _addCustomer,
-              icon: const Icon(Icons.person_add_alt_1_rounded,
-                  size: 18),
-              label: Text(
-                s.createAddNew,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kSurfaceContainerLow,
-                foregroundColor: kPrimary,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            );
-
-            if (shouldStackButtons) {
-              return Column(
-                children: [
-                  SizedBox(width: double.infinity, child: pickButton),
-                  const SizedBox(height: 10),
-                  SizedBox(width: double.infinity, child: addButton),
-                ],
-              );
-            }
-
-            return Row(
-              children: [
-                Expanded(child: pickButton),
-                const SizedBox(width: 10),
-                Expanded(child: addButton),
-              ],
-            );
-          },
+  Widget _customerActionCard({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    required bool hasError,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: kSurfaceLowest,
+          borderRadius: BorderRadius.circular(14),
+          border: hasError
+              ? Border.all(color: const Color(0xFFEF4444), width: 1.2)
+              : null,
+          boxShadow: const [kWhisperShadow],
         ),
-        if (hasError)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, left: 12),
-            child: Text(
-              s.createCustomerRequired,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.error,
-                fontSize: 12,
+        child: Column(
+          children: [
+            Icon(icon, size: 22, color: kPrimary),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface,
               ),
             ),
-          ),
-      ],
+          ],
+        ),
+      ),
     );
   }
 
@@ -1223,6 +1133,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   void _addItemRow() {
     setState(() {
       itemRows.add(_createItemRowControllers());
+      _showAdvanced.add(false);
     });
   }
 
@@ -1230,6 +1141,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final row = itemRows[index];
     setState(() {
       itemRows.removeAt(index);
+      _showAdvanced.removeAt(index);
       _disposeRowControllers(row);
     });
   }
@@ -1434,13 +1346,46 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     }
   }
 
-  String _normalizeItemUnit(String? unit) {
-    final normalized = unit?.trim().toLowerCase() ?? '';
-    if (_itemUnitOptions.contains(normalized)) {
-      return normalized;
+  Future<void> _showCustomUnitDialog(Map<String, TextEditingController> row) async {
+    final controller = TextEditingController(text:
+        _itemUnitOptions.contains(row['unit']!.text.toLowerCase()) ? '' : row['unit']!.text);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Custom Unit', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.none,
+          decoration: _inputDecoration('e.g. bag, roll, ft, sqft'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null && result.isNotEmpty) {
+      row['unit']!.text = result;
+      setState(() {});
     }
+  }
 
-    return _defaultItemUnit;
+  String _normalizeItemUnit(String? unit) {
+    final trimmed = unit?.trim() ?? '';
+    if (trimmed.isEmpty) return _defaultItemUnit;
+    final lower = trimmed.toLowerCase();
+    if (_itemUnitOptions.contains(lower)) return lower;
+    // Allow custom units as-is
+    return trimmed;
   }
 
   String _statusLabel(InvoiceStatus status, AppStrings s) {

@@ -44,11 +44,7 @@ class LimitReachedDialog extends StatelessWidget {
   }
 
   String _unlockPlanLabel() {
-    if (featureName == null) return 'a paid plan';
-    final plan = PlanService.cheapestPlanFor(
-      featureName!.toLowerCase().replaceAll(' ', '_'),
-    );
-    return PlanService.limits[plan]!.displayName;
+    return 'Pro';
   }
 
   @override

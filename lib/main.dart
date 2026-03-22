@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:ui';
 
 import 'package:billeasy/firebase_options.dart';
@@ -8,8 +7,6 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/login_screen.dart';
-import 'package:billeasy/screens/language_selection_screen.dart';
-import 'package:billeasy/screens/onboarding_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
 import 'package:billeasy/services/plan_service.dart';
@@ -167,118 +164,26 @@ class BillRajaApp extends StatelessWidget {
   }
 }
 
-class AuthGate extends StatefulWidget {
+class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
 
   @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  late final StreamSubscription<User?> _authSubscription;
-  User? _currentUser;
-  User? _previousUser;
-  bool _isAuthResolved = false;
-  bool _shouldRunPostLoginFlow = false;
-  int _postLoginFlowSession = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _currentUser = FirebaseAuth.instance.currentUser;
-    _previousUser = _currentUser;
-    _isAuthResolved = _currentUser != null;
-
-    _authSubscription = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (!mounted) {
-        return;
-      }
-
-      final isFreshLogin = _previousUser == null && user != null;
-
-      setState(() {
-        _currentUser = user;
-        _previousUser = user;
-        _isAuthResolved = true;
-
-        if (user == null) {
-          _shouldRunPostLoginFlow = false;
-          return;
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
-        if (isFreshLogin) {
-          _shouldRunPostLoginFlow = true;
-          _postLoginFlowSession++;
+        if (snapshot.data == null) {
+          return const LoginScreen();
         }
-      });
-    });
-  }
 
-  @override
-  void dispose() {
-    _authSubscription.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_isAuthResolved) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
-    }
-
-    if (_currentUser == null) {
-      return const LoginScreen();
-    }
-
-    if (_shouldRunPostLoginFlow) {
-      return PostLoginFlow(
-        key: ValueKey(_postLoginFlowSession),
-        onCompleted: _completePostLoginFlow,
-      );
-    }
-
-    return const SignedInHomeGate();
-  }
-
-  void _completePostLoginFlow() {
-    if (!mounted || !_shouldRunPostLoginFlow) {
-      return;
-    }
-
-    setState(() {
-      _shouldRunPostLoginFlow = false;
-    });
-  }
-}
-
-/// Fresh logins: language selection → onboarding.
-class PostLoginFlow extends StatefulWidget {
-  const PostLoginFlow({super.key, required this.onCompleted});
-
-  final VoidCallback onCompleted;
-
-  @override
-  State<PostLoginFlow> createState() => _PostLoginFlowState();
-}
-
-class _PostLoginFlowState extends State<PostLoginFlow> {
-  AppLanguage? _language;
-
-  @override
-  Widget build(BuildContext context) {
-    if (_language == null) {
-      return LanguageSelectionScreen(
-        onLanguageSelected: (lang) async {
-          await LanguageProvider.setLanguage(context, lang);
-          if (!mounted) return;
-          setState(() => _language = lang);
-        },
-      );
-    }
-
-    return OnboardingScreen(
-      language: _language!,
-      onCompleted: widget.onCompleted,
+        return const SignedInHomeGate();
+      },
     );
   }
 }

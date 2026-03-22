@@ -682,7 +682,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   ) async {
     final language = AppStrings.of(context).language;
     try {
-      final bytes = await _buildPdfBytes(profile, language);
+      final bytes = await _buildPdfBytes(profile, language, includePayment: false);
       await Printing.layoutPdf(
         name: InvoicePdfService().fileNameForInvoice(widget.invoice),
         onLayout: (_) async => bytes,
@@ -700,14 +700,15 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   ) async {
     final language = AppStrings.of(context).language;
     File? pdfFile;
+    Uint8List? pdfBytes;
     String? clientPhone;
 
     try {
-      final bytes = await _buildPdfBytes(profile, language);
+      pdfBytes = await _buildPdfBytes(profile, language, includePayment: false);
       final dir = await getTemporaryDirectory();
       final fileName = InvoicePdfService().fileNameForInvoice(widget.invoice);
       pdfFile = File('${dir.path}/$fileName');
-      await pdfFile.writeAsBytes(bytes);
+      await pdfFile.writeAsBytes(pdfBytes);
     } catch (_) {
       // PDF generation failed — we'll still open the sheet without a file
     }
@@ -729,6 +730,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       builder: (_) => WhatsAppShareSheet(
         invoice: widget.invoice,
         pdfFile: pdfFile,
+        pdfBytes: pdfBytes,
         currencyFormat: _currencyFormat,
         clientPhone: clientPhone,
       ),
@@ -737,14 +739,16 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
   Future<Uint8List> _buildPdfBytes(
     BusinessProfile? profile,
-    AppLanguage language,
-  ) async {
+    AppLanguage language, {
+    bool includePayment = true,
+  }) async {
     final resolvedProfile = await _resolveProfile(profile);
     return InvoicePdfService().buildInvoicePdf(
       invoice: widget.invoice,
       profile: resolvedProfile,
       language: language,
       template: _template,
+      includePayment: includePayment,
     );
   }
 

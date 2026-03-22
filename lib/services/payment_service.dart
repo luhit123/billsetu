@@ -3,9 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 
 import '../modals/payment.dart';
+import 'razorpay_checkout.dart';
 
 /// Razorpay key — use test key for debug, live key for release.
 /// Override at build time: --dart-define=RAZORPAY_KEY=rzp_live_XXXXXXX
@@ -16,22 +16,15 @@ const _razorpayKey = String.fromEnvironment(
 
 class PaymentService {
   PaymentService._() {
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _onPaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _onPaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _onExternalWallet);
+    _checkout = RazorpayCheckout();
   }
   static final PaymentService instance = PaymentService._();
 
-  late final Razorpay _razorpay;
+  late final RazorpayCheckout _checkout;
   final _functions = FirebaseFunctions.instance;
 
   bool _isProcessing = false;
   bool get isProcessing => _isProcessing;
-
-  // Completer to bridge Razorpay callbacks → purchasePlan future
-  Completer<PaymentResult>? _purchaseCompleter;
-  String? _pendingSubscriptionId;
 
   /// Purchase a plan via Razorpay Checkout.
   ///
@@ -72,11 +65,8 @@ class PaymentService {
       }
 
       final subscriptionId = data['subscriptionId'] as String;
-      _pendingSubscriptionId = subscriptionId;
 
       // Step 2: Open Razorpay Checkout
-      _purchaseCompleter = Completer<PaymentResult>();
-
       final options = <String, dynamic>{
         'key': _razorpayKey,
         'subscription_id': subscriptionId,
@@ -94,10 +84,57 @@ class PaymentService {
         },
       };
 
-      _razorpay.open(options);
+      final rzpResult = await _checkout.open(options);
 
-      // Wait for Razorpay callback
-      return await _purchaseCompleter!.future;
+      // Step 3: Handle result
+      if (rzpResult.walletName != null) {
+        return PaymentResult(
+          success: true,
+          message: 'Redirecting to ${rzpResult.walletName}. Your plan will activate once payment completes.',
+          paymentId: null,
+        );
+      }
+
+      if (!rzpResult.success) {
+        return PaymentResult(
+          success: false,
+          message: rzpResult.errorMessage ?? 'Payment failed. Please try again.',
+        );
+      }
+
+      // Step 4: Verify payment server-side
+      try {
+        final verifyResult = await _functions
+            .httpsCallable('verifyPayment')
+            .call({
+          'razorpayPaymentId': rzpResult.paymentId,
+          'razorpaySubscriptionId': subscriptionId,
+          'razorpaySignature': rzpResult.signature,
+        });
+
+        final verifyData = verifyResult.data as Map<String, dynamic>;
+        if (verifyData['verified'] == true) {
+          return PaymentResult(
+            success: true,
+            message: 'Plan activated successfully!',
+            paymentId: rzpResult.paymentId,
+          );
+        } else {
+          return PaymentResult(
+            success: false,
+            message: verifyData['message'] as String? ?? 'Payment verification failed',
+          );
+        }
+      } catch (e) {
+        // Even if verification call fails, the webhook will still activate
+        // the plan. Show success optimistically since Razorpay confirmed it.
+        debugPrint('Verify call failed (webhook will handle): $e');
+        return PaymentResult(
+          success: true,
+          message: 'Plan activated successfully!',
+          paymentId: rzpResult.paymentId,
+        );
+      }
     } on FirebaseFunctionsException catch (e) {
       debugPrint('Cloud Function error: ${e.code} — ${e.message}');
       return PaymentResult(
@@ -109,81 +146,7 @@ class PaymentService {
       return PaymentResult(success: false, message: 'Payment failed: $e');
     } finally {
       _isProcessing = false;
-      _purchaseCompleter = null;
-      _pendingSubscriptionId = null;
     }
-  }
-
-  // ── Razorpay callbacks ──────────────────────────────────────────────
-
-  void _onPaymentSuccess(PaymentSuccessResponse response) async {
-    debugPrint('Razorpay success: paymentId=${response.paymentId}');
-
-    try {
-      // Verify payment server-side
-      final verifyResult = await _functions
-          .httpsCallable('verifyPayment')
-          .call({
-        'razorpayPaymentId': response.paymentId,
-        'razorpaySubscriptionId': _pendingSubscriptionId,
-        'razorpaySignature': response.signature,
-      });
-
-      final data = verifyResult.data as Map<String, dynamic>;
-      if (data['verified'] == true) {
-        _purchaseCompleter?.complete(PaymentResult(
-          success: true,
-          message: 'Plan activated successfully!',
-          paymentId: response.paymentId,
-        ));
-      } else {
-        _purchaseCompleter?.complete(PaymentResult(
-          success: false,
-          message: data['message'] as String? ?? 'Payment verification failed',
-        ));
-      }
-    } catch (e) {
-      // Even if verification call fails, the webhook will still activate
-      // the plan. Show success optimistically since Razorpay confirmed it.
-      debugPrint('Verify call failed (webhook will handle): $e');
-      _purchaseCompleter?.complete(PaymentResult(
-        success: true,
-        message: 'Plan activated successfully!',
-        paymentId: response.paymentId,
-      ));
-    }
-  }
-
-  void _onPaymentError(PaymentFailureResponse response) {
-    debugPrint('Razorpay error: code=${response.code} message=${response.message}');
-
-    String message;
-    switch (response.code) {
-      case Razorpay.NETWORK_ERROR:
-        message = 'Network error. Please check your connection and try again.';
-        break;
-      case Razorpay.INVALID_OPTIONS:
-        message = 'Payment configuration error. Please contact support.';
-        break;
-      case Razorpay.PAYMENT_CANCELLED:
-        message = 'Payment cancelled.';
-        break;
-      default:
-        message = response.message ?? 'Payment failed. Please try again.';
-    }
-
-    _purchaseCompleter?.complete(PaymentResult(success: false, message: message));
-  }
-
-  void _onExternalWallet(ExternalWalletResponse response) {
-    debugPrint('External wallet: ${response.walletName}');
-    // External wallet selected — payment flow continues in the wallet app.
-    // The webhook will handle plan activation. Show a waiting message.
-    _purchaseCompleter?.complete(PaymentResult(
-      success: true,
-      message: 'Redirecting to ${response.walletName}. Your plan will activate once payment completes.',
-      paymentId: null,
-    ));
   }
 
   // ── Cancel / Reactivate ─────────────────────────────────────────────
@@ -240,19 +203,15 @@ class PaymentService {
             .toList());
   }
 
-  /// Clean up Razorpay listeners (call from app dispose if needed)
+  /// Clean up listeners (call from app dispose if needed)
   void dispose() {
-    _razorpay.clear();
+    _checkout.dispose();
   }
 
   static String _planDisplayName(String planId) {
     switch (planId) {
-      case 'raja':
-        return 'Raja';
-      case 'maharaja':
-        return 'Maharaja';
-      case 'king':
-        return 'King';
+      case 'pro':
+        return 'Pro';
       default:
         return planId;
     }

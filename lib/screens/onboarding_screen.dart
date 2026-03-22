@@ -695,16 +695,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(
-                        'BILLEASY2024',
-                        style: TextStyle(
-                          color: kOnSurface,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 2,
+                      Flexible(
+                        child: Text(
+                          'BILLEASY2024',
+                          style: TextStyle(
+                            color: kOnSurface,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      SizedBox(width: 10),
+                      SizedBox(width: 8),
                       Icon(Icons.copy_rounded, color: kOnSurfaceVariant, size: 16),
                     ],
                   ),
@@ -1003,7 +1006,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         children: [
           Icon(icon, color: color, size: 12),
           const SizedBox(width: 5),
-          Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+          Flexible(child: Text(label, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
         ],
       ),
     );

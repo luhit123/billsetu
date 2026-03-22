@@ -249,11 +249,13 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                         size: 32,
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        s.customerDetailsHistoryEmpty,
-                        style: const TextStyle(
-                          color: kOnSurfaceVariant,
-                          fontSize: 14,
+                      Expanded(
+                        child: Text(
+                          s.customerDetailsHistoryEmpty,
+                          style: const TextStyle(
+                            color: kOnSurfaceVariant,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ],

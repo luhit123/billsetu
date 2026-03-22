@@ -3,7 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-enum AppPlan { free, raja, maharaja, king }
+enum AppPlan { trial, expired, pro }
 
 class PlanLimits {
   final int maxInvoicesPerMonth;
@@ -19,7 +19,6 @@ class PlanLimits {
   final String displayName;
   final double priceMonthly; // incl GST
   final double priceAnnual; // incl GST
-  final double launchPriceAnnual; // first 500 users
 
   const PlanLimits({
     required this.maxInvoicesPerMonth,
@@ -35,7 +34,6 @@ class PlanLimits {
     required this.displayName,
     required this.priceMonthly,
     required this.priceAnnual,
-    this.launchPriceAnnual = 0,
   });
 }
 
@@ -44,13 +42,28 @@ class PlanService {
   static final PlanService instance = PlanService._();
 
   static const Map<AppPlan, PlanLimits> limits = {
-    AppPlan.free: PlanLimits(
-      name: 'free',
-      displayName: 'Free',
+    AppPlan.trial: PlanLimits(
+      name: 'trial',
+      displayName: 'Trial',
       priceMonthly: 0,
       priceAnnual: 0,
-      maxInvoicesPerMonth: 20,
-      maxCustomers: 10,
+      maxInvoicesPerMonth: -1,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxPdfTemplates: -1,
+      maxWhatsAppSharesPerMonth: -1,
+      hasReports: true,
+      hasEwayBill: true,
+      hasPurchaseOrders: true,
+      hasDataExport: true,
+    ),
+    AppPlan.expired: PlanLimits(
+      name: 'expired',
+      displayName: 'Expired',
+      priceMonthly: 0,
+      priceAnnual: 0,
+      maxInvoicesPerMonth: 5,
+      maxCustomers: 5,
       maxProducts: 20,
       maxPdfTemplates: 1,
       maxWhatsAppSharesPerMonth: 0,
@@ -59,46 +72,16 @@ class PlanService {
       hasPurchaseOrders: false,
       hasDataExport: false,
     ),
-    AppPlan.raja: PlanLimits(
-      name: 'raja',
-      displayName: 'Raja',
-      priceMonthly: 120,
+    AppPlan.pro: PlanLimits(
+      name: 'pro',
+      displayName: 'Pro',
+      priceMonthly: 129,
       priceAnnual: 999,
-      maxInvoicesPerMonth: -1,    // unlimited
-      maxCustomers: -1,           // unlimited
-      maxProducts: -1,            // unlimited
-      maxPdfTemplates: 2,
-      maxWhatsAppSharesPerMonth: 50,
-      hasReports: false,
-      hasEwayBill: false,
-      hasPurchaseOrders: true,
-      hasDataExport: true,
-    ),
-    AppPlan.maharaja: PlanLimits(
-      name: 'maharaja',
-      displayName: 'Maharaja',
-      priceMonthly: 239,
-      priceAnnual: 1999,
-      maxInvoicesPerMonth: -1,    // unlimited
-      maxCustomers: -1,           // unlimited
-      maxProducts: -1,            // unlimited
-      maxPdfTemplates: 5,
-      maxWhatsAppSharesPerMonth: 100,
-      hasReports: true,
-      hasEwayBill: true,
-      hasPurchaseOrders: true,
-      hasDataExport: true,
-    ),
-    AppPlan.king: PlanLimits(
-      name: 'king',
-      displayName: 'King',
-      priceMonthly: 499,
-      priceAnnual: 3999,
-      maxInvoicesPerMonth: -1,    // unlimited
-      maxCustomers: -1,           // unlimited
-      maxProducts: -1,            // unlimited
-      maxPdfTemplates: -1,        // unlimited
-      maxWhatsAppSharesPerMonth: -1, // unlimited
+      maxInvoicesPerMonth: -1,
+      maxCustomers: -1,
+      maxProducts: -1,
+      maxPdfTemplates: -1,
+      maxWhatsAppSharesPerMonth: -1,
       hasReports: true,
       hasEwayBill: true,
       hasPurchaseOrders: true,
@@ -106,9 +89,25 @@ class PlanService {
     ),
   };
 
-  AppPlan _currentPlan = AppPlan.free;
+  static String upgradeMessage = 'Upgrade to Pro';
+
+  AppPlan _currentPlan = AppPlan.trial;
   AppPlan get currentPlan => _currentPlan;
   PlanLimits get currentLimits => limits[_currentPlan]!;
+
+  DateTime? _trialExpiresAt;
+  DateTime? get trialExpiresAt => _trialExpiresAt;
+
+  bool get isTrial => _currentPlan == AppPlan.trial;
+  bool get isPro => _currentPlan == AppPlan.pro;
+  bool get isExpired => _currentPlan == AppPlan.expired;
+  bool get isFullAccess => isTrial || isPro;
+
+  int get trialDaysLeft {
+    if (_trialExpiresAt == null) return 0;
+    final diff = _trialExpiresAt!.difference(DateTime.now()).inDays;
+    return diff < 0 ? 0 : diff;
+  }
 
   bool _isInGracePeriod = false;
   bool get isInGracePeriod => _isInGracePeriod;
@@ -144,14 +143,13 @@ class PlanService {
         .collection('subscriptions')
         .doc(uid)
         .snapshots()
-        .listen((doc) {
+        .listen((doc) async {
       if (doc.exists) {
         final data = doc.data()!;
         _applyPlanFromData(data);
       } else {
-        _currentPlan = AppPlan.free;
-        _isInGracePeriod = false;
-        _subscriptionStatus = null;
+        // No subscription doc — determine trial status from user's createdAt
+        await _applyTrialFromUserDoc(uid);
       }
       _planController.add(_currentPlan);
       _cachePlan();
@@ -160,37 +158,87 @@ class PlanService {
     });
   }
 
+  Future<void> _applyTrialFromUserDoc(String uid) async {
+    try {
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+
+      if (userDoc.exists) {
+        final data = userDoc.data()!;
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        if (createdAt != null) {
+          _trialExpiresAt = DateTime(
+            createdAt.year,
+            createdAt.month + 6,
+            createdAt.day,
+            createdAt.hour,
+            createdAt.minute,
+            createdAt.second,
+          );
+          if (_trialExpiresAt!.isAfter(DateTime.now())) {
+            _currentPlan = AppPlan.trial;
+          } else {
+            _currentPlan = AppPlan.expired;
+          }
+        } else {
+          _currentPlan = AppPlan.expired;
+        }
+      } else {
+        _currentPlan = AppPlan.expired;
+      }
+    } catch (_) {
+      // Keep cached plan on error
+    }
+
+    _isInGracePeriod = false;
+    _subscriptionStatus = null;
+    _billingCycle = null;
+    _currentPeriodEnd = null;
+    _graceExpiresAt = null;
+  }
+
   void _applyPlanFromData(Map<String, dynamic> data) {
-    final planStr = data['plan'] as String? ?? 'free';
+    final planStr = data['plan'] as String? ?? 'expired';
     final status = data['status'] as String? ?? 'expired';
     final expiresAt = (data['currentPeriodEnd'] as Timestamp?)?.toDate();
     final graceAt = (data['graceExpiresAt'] as Timestamp?)?.toDate();
+    final trialEnd = (data['trialExpiresAt'] as Timestamp?)?.toDate();
 
     _subscriptionStatus = status;
     _billingCycle = data['billingCycle'] as String?;
     _currentPeriodEnd = expiresAt;
     _graceExpiresAt = graceAt;
+    _trialExpiresAt = trialEnd;
 
-    // Parse plan
-    final plan = AppPlan.values.firstWhere(
-      (p) => p.name == planStr,
-      orElse: () => AppPlan.free,
-    );
-
-    if (status == 'active') {
-      _currentPlan = plan;
-      _isInGracePeriod = false;
-    } else if (status == 'halted' && graceAt != null && graceAt.isAfter(DateTime.now())) {
-      // Grace period — still give access
-      _currentPlan = plan;
-      _isInGracePeriod = true;
-    } else if (status == 'pending') {
-      // Payment retry — keep access
-      _currentPlan = plan;
-      _isInGracePeriod = false;
+    // Active / halted / pending pro subscriber
+    if ((status == 'active' || status == 'halted' || status == 'pending') &&
+        planStr == 'pro') {
+      if (status == 'halted' && graceAt != null && graceAt.isAfter(DateTime.now())) {
+        _currentPlan = AppPlan.pro;
+        _isInGracePeriod = true;
+      } else if (status == 'halted') {
+        // Grace period expired — fall through to trial check
+        _resolveTrialOrExpired(trialEnd);
+        _isInGracePeriod = false;
+      } else {
+        _currentPlan = AppPlan.pro;
+        _isInGracePeriod = false;
+      }
     } else {
-      _currentPlan = AppPlan.free;
+      // Not an active pro subscriber — check trial
+      _resolveTrialOrExpired(trialEnd);
       _isInGracePeriod = false;
+    }
+  }
+
+  void _resolveTrialOrExpired(DateTime? trialEnd) {
+    if (trialEnd != null && trialEnd.isAfter(DateTime.now())) {
+      _currentPlan = AppPlan.trial;
+      _trialExpiresAt = trialEnd;
+    } else {
+      _currentPlan = AppPlan.expired;
     }
   }
 
@@ -201,8 +249,12 @@ class PlanService {
       if (cached != null) {
         _currentPlan = AppPlan.values.firstWhere(
           (p) => p.name == cached,
-          orElse: () => AppPlan.free,
+          orElse: () => AppPlan.trial,
         );
+      }
+      final cachedTrialMs = prefs.getInt('cached_trial_expires_at');
+      if (cachedTrialMs != null) {
+        _trialExpiresAt = DateTime.fromMillisecondsSinceEpoch(cachedTrialMs);
       }
     } catch (_) {}
   }
@@ -211,6 +263,10 @@ class PlanService {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('cached_plan', _currentPlan.name);
+      if (_trialExpiresAt != null) {
+        await prefs.setInt(
+            'cached_trial_expires_at', _trialExpiresAt!.millisecondsSinceEpoch);
+      }
     } catch (_) {}
   }
 
@@ -244,35 +300,15 @@ class PlanService {
   }
 
   bool canUseTemplate(int templateIndex) {
-    return templateIndex < currentLimits.maxPdfTemplates;
+    final max = currentLimits.maxPdfTemplates;
+    return max == -1 || templateIndex < max;
   }
 
   bool get hasReports => currentLimits.hasReports;
   bool get hasEwayBill => currentLimits.hasEwayBill;
   bool get hasPurchaseOrders => currentLimits.hasPurchaseOrders;
   bool get hasDataExport => currentLimits.hasDataExport;
-  bool get hasPdfTemplates => currentLimits.maxPdfTemplates > 1;
+  bool get hasPdfTemplates =>
+      currentLimits.maxPdfTemplates == -1 || currentLimits.maxPdfTemplates > 1;
   bool get hasWhatsAppShare => currentLimits.maxWhatsAppSharesPerMonth != 0;
-
-  /// For upgrade screen — which plan unlocks a feature
-  static AppPlan cheapestPlanFor(String feature) {
-    switch (feature) {
-      case 'purchase_orders':
-      case 'data_export':
-      case 'more_invoices':
-      case 'more_customers':
-      case 'more_products':
-        return AppPlan.raja;
-      case 'reports':
-      case 'eway_bill':
-      case 'e_way_bill':
-      case 'pdf_templates':
-        return AppPlan.maharaja;
-      case 'whatsapp':
-      case 'whatsapp_sharing':
-        return AppPlan.king; // unlimited WhatsApp is King-only
-      default:
-        return AppPlan.raja;
-    }
-  }
 }
