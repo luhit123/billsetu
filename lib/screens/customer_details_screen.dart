@@ -9,6 +9,7 @@ import 'package:billeasy/screens/customer_form_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/widgets/balance_reminder_sheet.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -167,6 +168,85 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 ),
               ],
             ),
+            // Outstanding balance reminder CTA
+            if (outstanding > 0) ...[
+              const SizedBox(height: 12),
+              GestureDetector(
+                onTap: () {
+                  final unpaid = _statsInvoices
+                      .where((inv) => inv.status != InvoiceStatus.paid)
+                      .toList();
+                  _sendBalanceReminder(client, unpaid);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFEF4444), Color(0xFFF97316)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x30EF4444),
+                        blurRadius: 8,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(40),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.notifications_active_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Send Payment Reminder',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '${_currency.format(outstanding)} outstanding',
+                              style: TextStyle(
+                                color: Colors.white.withAlpha(200),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: Colors.white70,
+                        size: 16,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             _SectionCard(
               title: s.customerDetailsContact,
@@ -376,6 +456,11 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   }
 
   PreferredSizeWidget _buildAppBar(AppStrings s, Client client) {
+    final unpaidInvoices = _statsInvoices
+        .where((inv) => inv.status != InvoiceStatus.paid)
+        .toList();
+    final hasOutstanding = unpaidInvoices.isNotEmpty;
+
     return AppBar(
       backgroundColor: kSurface,
       foregroundColor: kOnSurface,
@@ -391,6 +476,12 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ),
       ),
       actions: [
+        if (hasOutstanding)
+          IconButton(
+            onPressed: () => _sendBalanceReminder(client, unpaidInvoices),
+            tooltip: 'Send balance reminder',
+            icon: const Icon(Icons.notifications_active_outlined, color: kOverdue),
+          ),
         IconButton(
           onPressed: () => _editCustomer(client),
           tooltip: s.customerDetailsEditTooltip,
@@ -497,6 +588,23 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         ),
       );
     }
+  }
+
+  void _sendBalanceReminder(Client client, List<Invoice> unpaidInvoices) {
+    final outstanding = unpaidInvoices.fold<double>(
+      0,
+      (total, inv) => total + inv.grandTotal,
+    );
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => BalanceReminderSheet(
+        client: client,
+        unpaidInvoices: unpaidInvoices,
+        totalOutstanding: outstanding,
+      ),
+    );
   }
 
   String _valueOrFallback(String value, AppStrings s) {
