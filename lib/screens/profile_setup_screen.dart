@@ -487,6 +487,15 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       return;
     }
 
+    // Validate GSTIN format if provided
+    final gstin = _gstinController.text.trim();
+    if (gstin.isNotEmpty && !RegExp(r'^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$').hasMatch(gstin)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid GSTIN format. Please enter a valid 15-character GSTIN.')),
+      );
+      return;
+    }
+
     setState(() {
       _isSaving = true;
     });

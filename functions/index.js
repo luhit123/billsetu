@@ -1225,10 +1225,13 @@ const Razorpay = require('razorpay');
 function getRazorpay() {
   const keyId = process.env.RAZORPAY_KEY_ID;
   const keySecret = process.env.RAZORPAY_KEY_SECRET;
-  logger.info('Razorpay init', { keyId: keyId ? keyId.substring(0, 20) + '...' : 'MISSING', secretLen: keySecret ? keySecret.length : 0 });
+  logger.info('Razorpay init', { keyPresent: !!keyId, secretPresent: !!keySecret });
   return new Razorpay({ key_id: keyId, key_secret: keySecret });
 }
-const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'webhook_secret';
+const RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET;
+if (!RAZORPAY_WEBHOOK_SECRET) {
+  logger.warn('RAZORPAY_WEBHOOK_SECRET is not set — webhook signature verification will reject all requests');
+}
 
 // Plan pricing in paise (₹1 = 100 paise)
 const PLAN_PRICING = {
@@ -1345,7 +1348,7 @@ exports.createSubscription = onCall(
     } catch (planErr) {
       const errDetail = planErr.error || planErr;
       logger.error('ensureRazorpayPlan failed', { error: JSON.stringify(errDetail), statusCode: planErr.statusCode, stack: planErr.stack });
-      throw new HttpsError('internal', 'Failed to create billing plan: ' + JSON.stringify(errDetail));
+      throw new HttpsError('internal', 'Failed to create billing plan. Please try again later.');
     }
     const pricing = PLAN_PRICING[planId];
     const priceInPaise = pricing[billingCycle];
@@ -1462,6 +1465,40 @@ exports.cancelSubscription = onCall(
 );
 
 /**
+ * Reactivate a subscription that was set to cancel at period end.
+ * Reverses the cancelAtPeriodEnd flag so the subscription continues.
+ */
+exports.reactivateSubscription = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const subRef = db.collection('subscriptions').doc(uid);
+  const subDoc = await subRef.get();
+
+  if (!subDoc.exists) {
+    throw new HttpsError('not-found', 'No subscription found.');
+  }
+
+  const sub = subDoc.data();
+  if (sub.status !== 'active') {
+    throw new HttpsError('failed-precondition', 'Subscription is not active.');
+  }
+  if (!sub.cancelAtPeriodEnd) {
+    return { success: true, message: 'Subscription is already active.' };
+  }
+
+  await subRef.update({
+    cancelAtPeriodEnd: false,
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  logger.info('Subscription reactivated', { uid });
+  return { success: true };
+});
+
+/**
  * Verify payment signature after Razorpay checkout success.
  * Called by Flutter client to confirm payment is genuine.
  */
@@ -1534,20 +1571,22 @@ exports.razorpayWebhook = onRequest(
       const event = req.body;
       const eventType = event && event.event;
 
-      // Verify webhook signature
+      // Verify webhook signature (mandatory — reject unsigned requests)
       const webhookSignature = req.headers['x-razorpay-signature'];
-      if (webhookSignature) {
-        const expectedSignature = crypto
-          .createHmac('sha256', process.env.RAZORPAY_WEBHOOK_SECRET || RAZORPAY_WEBHOOK_SECRET)
-          .update(JSON.stringify(req.body))
-          .digest('hex');
-        if (webhookSignature !== expectedSignature) {
-          logger.warn('Webhook signature mismatch', { eventType });
-          res.status(401).send('Invalid signature');
-          return;
-        }
-      } else {
-        logger.warn('Webhook received without signature header', { eventType });
+      const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || RAZORPAY_WEBHOOK_SECRET;
+      if (!webhookSignature || !webhookSecret) {
+        logger.warn('Webhook rejected: missing signature or secret not configured', { eventType });
+        res.status(401).send('Unauthorized');
+        return;
+      }
+      const expectedSignature = crypto
+        .createHmac('sha256', webhookSecret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+      if (webhookSignature !== expectedSignature) {
+        logger.warn('Webhook signature mismatch', { eventType });
+        res.status(401).send('Invalid signature');
+        return;
       }
 
       logger.info('Razorpay webhook received', { eventType });

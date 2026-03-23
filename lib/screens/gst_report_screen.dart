@@ -23,7 +23,22 @@ const _kOverdueBg = Color(0xFFFEE2E2);
 enum _Period { monthly, quarterly, yearly }
 
 // ─── Tab enum ──────────────────────────────────────────────────────────────────
-enum _GstTab { output, input, net }
+enum _GstTab { output, input, net, hsn, gstr3b, taxRate }
+
+// ─── HSN aggregation model ────────────────────────────────────────────────────
+class _HsnAggregate {
+  _HsnAggregate(this.hsnCode);
+  final String hsnCode;
+  String description = '';
+  String unit = '';
+  double totalQuantity = 0;
+  double taxableAmount = 0;
+  double gstRate = 0;
+  double cgstAmount = 0;
+  double sgstAmount = 0;
+  double igstAmount = 0;
+  double totalTax = 0;
+}
 
 class GstReportScreen extends StatefulWidget {
   const GstReportScreen({super.key});
@@ -835,37 +850,41 @@ class _GstReportScreenState extends State<GstReportScreen> {
         color: kSurfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Row(
-        children: [
-          _tabItem('Output (Sales)', _GstTab.output),
-          _tabItem('Input (Purchases)', _GstTab.input),
-          _tabItem('Net Summary', _GstTab.net),
-        ],
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            _tabItem('Output', _GstTab.output),
+            _tabItem('Input', _GstTab.input),
+            _tabItem('Net', _GstTab.net),
+            _tabItem('HSN', _GstTab.hsn),
+            _tabItem('GSTR-3B', _GstTab.gstr3b),
+            _tabItem('Tax Rate', _GstTab.taxRate),
+          ],
+        ),
       ),
     );
   }
 
   Widget _tabItem(String label, _GstTab tab) {
     final selected = _activeTab == tab;
-    return Expanded(
-      child: GestureDetector(
-        onTap: () => setState(() => _activeTab = tab),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: selected ? kSurfaceLowest : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: selected ? const [kSubtleShadow] : null,
-          ),
-          child: Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-              color: selected ? kPrimary : kOnSurfaceVariant,
-            ),
+    return GestureDetector(
+      onTap: () => setState(() => _activeTab = tab),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        decoration: BoxDecoration(
+          color: selected ? kSurfaceLowest : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: selected ? const [kSubtleShadow] : null,
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? kPrimary : kOnSurfaceVariant,
           ),
         ),
       ),
@@ -1642,6 +1661,25 @@ class _GstReportScreenState extends State<GstReportScreen> {
                               _buildOutputTab(s, invoices)
                             else if (_activeTab == _GstTab.input)
                               _buildInputTab()
+                            else if (_activeTab == _GstTab.hsn)
+                              _buildHsnTab(invoices)
+                            else if (_activeTab == _GstTab.gstr3b)
+                              _buildGstr3bTab(
+                                outputTaxable: totalTaxable,
+                                outputCgst: totalCgst,
+                                outputSgst: totalSgst,
+                                outputIgst: totalIgst,
+                                outputTax: totalTax,
+                                inputTaxable: inputTaxable,
+                                inputCgst: inputCgst,
+                                inputSgst: inputSgst,
+                                inputIgst: inputIgst,
+                                inputTax: inputTax,
+                                invoiceCount: invoiceCount,
+                                poCount: poCount,
+                              )
+                            else if (_activeTab == _GstTab.taxRate)
+                              _buildTaxRateTab(invoices)
                             else
                               _netSummaryTab(
                                 outputTaxable: totalTaxable,
@@ -1721,6 +1759,733 @@ class _GstReportScreenState extends State<GstReportScreen> {
           ),
         );
       },
+    );
+  }
+
+  // ─── HSN Summary tab content ─────────────────────────────────────────────
+
+  Widget _buildHsnTab(List<Invoice> invoices) {
+    // Aggregate line items by HSN code
+    final hsnMap = <String, _HsnAggregate>{};
+    for (final inv in invoices) {
+      for (final item in inv.items) {
+        final code = item.hsnCode.trim().isEmpty ? 'No HSN' : item.hsnCode.trim();
+        final agg = hsnMap.putIfAbsent(code, () => _HsnAggregate(code));
+        agg.description = item.description;
+        agg.totalQuantity += item.quantity;
+        agg.unit = item.unit.isNotEmpty ? item.unit : agg.unit;
+        agg.taxableAmount += item.total;
+        final itemGstRate = item.gstRate > 0 ? item.gstRate : inv.gstRate;
+        agg.gstRate = itemGstRate;
+        final isIgst = inv.gstType == 'igst';
+        final tax = item.total * itemGstRate / 100;
+        if (isIgst) {
+          agg.igstAmount += tax;
+        } else {
+          agg.cgstAmount += tax / 2;
+          agg.sgstAmount += tax / 2;
+        }
+        agg.totalTax += tax;
+      }
+    }
+
+    final hsnList = hsnMap.values.toList()
+      ..sort((a, b) => b.taxableAmount.compareTo(a.taxableAmount));
+
+    if (hsnList.isEmpty) {
+      return _emptyState(AppStrings.of(context));
+    }
+
+    final totalTaxable = hsnList.fold<double>(0, (s, h) => s + h.taxableAmount);
+    final totalTax = hsnList.fold<double>(0, (s, h) => s + h.totalTax);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          // Summary row
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPrimary.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, size: 16, color: kPrimary),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'HSN summary for GSTR-1 filing — ${hsnList.length} HSN code${hsnList.length == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Header row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: kSurfaceContainerLow,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+            ),
+            child: const Row(
+              children: [
+                Expanded(flex: 3, child: Text('HSN Code', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+                Expanded(flex: 2, child: Text('Taxable', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+                Expanded(flex: 2, child: Text('Tax', textAlign: TextAlign.right, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+              ],
+            ),
+          ),
+
+          // HSN rows
+          Container(
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: [
+                ...hsnList.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final h = entry.value;
+                  return Column(
+                    children: [
+                      _hsnRow(h),
+                      if (i < hsnList.length - 1)
+                        Container(height: 1, color: kSurfaceContainerLow, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                    ],
+                  );
+                }),
+                // Total row
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: kSurfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Expanded(flex: 3, child: Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
+                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTaxable), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
+                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kPrimary))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Detailed breakdown cards
+          const SizedBox(height: 20),
+          _sectionLabel('DETAILED BREAKDOWN'),
+          ...hsnList.map((h) => _hsnDetailCard(h)),
+          const SizedBox(height: 90),
+        ],
+      ),
+    );
+  }
+
+  Widget _hsnRow(_HsnAggregate h) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 3,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+                Text(h.description, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant), overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(_currencyFormat.format(h.taxableAmount), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface)),
+          ),
+          Expanded(
+            flex: 2,
+            child: Text(_currencyFormat.format(h.totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hsnDetailCard(_HsnAggregate h) {
+    final isIgst = h.igstAmount > 0 && h.cgstAmount == 0;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: kSurfaceLowest,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: const [kSubtleShadow],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: kPrimaryContainer, borderRadius: BorderRadius.circular(20)),
+                child: Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
+              ),
+              const SizedBox(width: 8),
+              _gstRateBadge(h.gstRate),
+              const Spacer(),
+              Text(
+                '${_formatQty(h.totalQuantity)}${h.unit.isNotEmpty ? ' ${h.unit}' : ''}',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(h.description, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: kSurfaceContainerLow, borderRadius: BorderRadius.circular(10)),
+            child: Column(
+              children: [
+                _amountRow('Taxable', h.taxableAmount, kOnSurface),
+                if (isIgst) ...[
+                  const SizedBox(height: 4),
+                  _amountRow('IGST', h.igstAmount, kPrimary),
+                ] else ...[
+                  const SizedBox(height: 4),
+                  _amountRow('CGST', h.cgstAmount, kPrimary),
+                  const SizedBox(height: 4),
+                  _amountRow('SGST', h.sgstAmount, kPrimary),
+                ],
+                Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Divider(height: 1, color: kSurfaceDim)),
+                _amountRow('Total Tax', h.totalTax, kOnSurface, bold: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatQty(double qty) {
+    if (qty == qty.truncateToDouble()) return qty.toStringAsFixed(0);
+    return qty.toStringAsFixed(2).replaceAll(RegExp(r'0+$'), '');
+  }
+
+  // ─── GSTR-3B Summary tab ──────────────────────────────────────────────────
+
+  Widget _buildGstr3bTab({
+    required double outputTaxable,
+    required double outputCgst,
+    required double outputSgst,
+    required double outputIgst,
+    required double outputTax,
+    required double inputTaxable,
+    required double inputCgst,
+    required double inputSgst,
+    required double inputIgst,
+    required double inputTax,
+    required int invoiceCount,
+    required int poCount,
+  }) {
+    final netPayable = outputTax - inputTax;
+    final isCredit = netPayable < 0;
+
+    // Separate intrastate vs interstate from invoices
+    double intraCgst = 0, intraSgst = 0, interIgst = 0;
+    double intraTaxable = 0, interTaxable = 0;
+    for (final inv in _invoices) {
+      if (inv.gstType == 'igst') {
+        interIgst += inv.igstAmount;
+        interTaxable += inv.taxableAmount;
+      } else {
+        intraCgst += inv.cgstAmount;
+        intraSgst += inv.sgstAmount;
+        intraTaxable += inv.taxableAmount;
+      }
+    }
+
+    // Input ITC breakdown
+    double inputIntraCgst = 0, inputIntraSgst = 0, inputInterIgst = 0;
+    for (final po in _purchaseOrders) {
+      if (po.gstType == 'igst') {
+        inputInterIgst += po.igstAmount;
+      } else {
+        inputIntraCgst += po.cgstAmount;
+        inputIntraSgst += po.sgstAmount;
+      }
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          // Info banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.description_outlined, size: 16, color: Color(0xFF7C3AED)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'GSTR-3B Summary for $_periodLabel',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7C3AED)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Table 3.1 — Outward Supplies
+          _sectionLabel('3.1 — OUTWARD SUPPLIES'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: [
+                _gstr3bRow('(a) Outward taxable supplies (other than zero rated, nil rated and exempted)', outputTaxable, outputTax),
+                const SizedBox(height: 8),
+                Container(height: 1, color: kSurfaceContainerLow),
+                const SizedBox(height: 8),
+                _gstr3bSubRow('Intrastate', intraTaxable, intraCgst, intraSgst),
+                const SizedBox(height: 6),
+                _gstr3bSubRow('Interstate', interTaxable, 0, 0, igst: interIgst),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Table 4 — ITC Summary
+          _sectionLabel('4 — INPUT TAX CREDIT (ITC)'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: [
+                _gstr3bRow('(A) ITC Available', inputTaxable, inputTax),
+                const SizedBox(height: 8),
+                Container(height: 1, color: kSurfaceContainerLow),
+                const SizedBox(height: 8),
+                _gstr3bITCRow('CGST', inputIntraCgst, const Color(0xFF16A34A)),
+                const SizedBox(height: 6),
+                _gstr3bITCRow('SGST', inputIntraSgst, const Color(0xFF16A34A)),
+                const SizedBox(height: 6),
+                _gstr3bITCRow('IGST', inputInterIgst, const Color(0xFF16A34A)),
+                const SizedBox(height: 8),
+                Container(height: 1, color: kSurfaceContainerLow),
+                const SizedBox(height: 8),
+                _gstr3bITCRow('Total ITC', inputTax, const Color(0xFF16A34A), bold: true),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Table 6 — Payment of Tax
+          _sectionLabel('6 — PAYMENT OF TAX'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: isCredit
+                  ? const LinearGradient(colors: [Color(0xFF16A34A), Color(0xFF15803D)])
+                  : kSignatureGradient,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [kWhisperShadow],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isCredit ? 'ITC Credit Balance' : 'Net Tax Payable',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _currencyFormat.format(netPayable.abs()),
+                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _bannerBadge('Output: ${_currencyFormat.format(outputTax)}'),
+                    const SizedBox(width: 8),
+                    _bannerBadge('ITC: ${_currencyFormat.format(inputTax)}'),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    _bannerBadge('$invoiceCount Invoices'),
+                    const SizedBox(width: 8),
+                    _bannerBadge('$poCount POs'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // Component-wise net breakdown
+          _sectionLabel('COMPONENT-WISE NET TAX'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: [
+                _netComponentRow('CGST', outputCgst, inputIntraCgst),
+                const SizedBox(height: 8),
+                _netComponentRow('SGST', outputSgst, inputIntraSgst),
+                const SizedBox(height: 8),
+                _netComponentRow('IGST', outputIgst, inputInterIgst),
+              ],
+            ),
+          ),
+          const SizedBox(height: 90),
+        ],
+      ),
+    );
+  }
+
+  Widget _gstr3bRow(String label, double taxable, double tax) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Taxable Value', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                  Text(_currencyFormat.format(taxable), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  const Text('Tax Amount', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                  Text(_currencyFormat.format(tax), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kPrimary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _gstr3bSubRow(String label, double taxable, double cgst, double sgst, {double igst = 0}) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Row(
+        children: [
+          Container(width: 6, height: 6, decoration: BoxDecoration(color: kPrimary.withValues(alpha: 0.4), shape: BoxShape.circle)),
+          const SizedBox(width: 8),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: kOnSurfaceVariant))),
+          Text(_currencyFormat.format(taxable), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurface)),
+          const SizedBox(width: 12),
+          if (igst > 0)
+            Text('IGST: ${_currencyFormat.format(igst)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimary))
+          else
+            Text('C: ${_currencyFormat.format(cgst)} S: ${_currencyFormat.format(sgst)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _gstr3bITCRow(String label, double value, Color color, {bool bold = false}) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(label, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: kOnSurfaceVariant)),
+        ),
+        Text(
+          _currencyFormat.format(value),
+          style: TextStyle(fontSize: bold ? 15 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: color),
+        ),
+      ],
+    );
+  }
+
+  Widget _netComponentRow(String label, double output, double input) {
+    final net = output - input;
+    final isCredit = net < 0;
+    return Row(
+      children: [
+        SizedBox(width: 50, child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant))),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Text('Out: ${_currencyFormat.format(output)}', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+              Text('In: ${_currencyFormat.format(input)}', style: const TextStyle(fontSize: 10, color: Color(0xFF16A34A))),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isCredit ? const Color(0xFF16A34A).withValues(alpha: 0.1) : kPrimary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${isCredit ? '-' : ''}${_currencyFormat.format(net.abs())}',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: isCredit ? const Color(0xFF16A34A) : kPrimary,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ─── Tax Rate-wise breakdown tab ──────────────────────────────────────────
+
+  Widget _buildTaxRateTab(List<Invoice> invoices) {
+    // Group invoices by tax rate
+    final rateMap = <double, _TaxRateAggregate>{};
+    for (final inv in invoices) {
+      for (final item in inv.items) {
+        final rate = item.gstRate > 0 ? item.gstRate : inv.gstRate;
+        final agg = rateMap.putIfAbsent(rate, () => _TaxRateAggregate(rate));
+        agg.invoiceCount += 1;
+        agg.taxableAmount += item.total;
+        final tax = item.total * rate / 100;
+        agg.taxAmount += tax;
+        agg.totalAmount += item.total + tax;
+      }
+    }
+
+    final rates = rateMap.values.toList()..sort((a, b) => a.rate.compareTo(b.rate));
+
+    if (rates.isEmpty) {
+      return _emptyState(AppStrings.of(context));
+    }
+
+    final totalTaxable = rates.fold<double>(0, (s, r) => s + r.taxableAmount);
+    final totalTax = rates.fold<double>(0, (s, r) => s + r.taxAmount);
+    final maxTaxable = rates.map((r) => r.taxableAmount).fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+
+    // Colors for each rate
+    const rateColors = <double, Color>{
+      0: Color(0xFF94A3B8),
+      5: Color(0xFF22C55E),
+      12: Color(0xFF3B82F6),
+      18: Color(0xFFF59E0B),
+      28: Color(0xFFEF4444),
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 8),
+          // Info banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.pie_chart_outline_rounded, size: 16, color: Color(0xFFF59E0B)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Tax rate breakdown — ${rates.length} rate${rates.length == 1 ? '' : 's'} applied',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Visual donut chart
+          if (rates.length > 1) ...[
+            Center(
+              child: SizedBox(
+                width: 120,
+                height: 120,
+                child: CustomPaint(
+                  painter: _DonutChartPainter(
+                    segments: rates.map((r) {
+                      final fraction = totalTaxable > 0 ? r.taxableAmount / totalTaxable : 0.0;
+                      return _DonutSegment(fraction, rateColors[r.rate] ?? kPrimary);
+                    }).toList(),
+                  ),
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text('${rates.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kOnSurface)),
+                        const Text('Rates', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Rate cards
+          ...rates.map((r) {
+            final color = rateColors[r.rate] ?? kPrimary;
+            final barFraction = r.taxableAmount / maxTaxable;
+            return Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: kSurfaceLowest,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          '${r.rate.toStringAsFixed(r.rate.truncateToDouble() == r.rate ? 0 : 1)}% GST',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${r.invoiceCount} item${r.invoiceCount == 1 ? '' : 's'}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: kOnSurfaceVariant),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: barFraction,
+                      minHeight: 6,
+                      backgroundColor: kSurfaceContainerLow,
+                      valueColor: AlwaysStoppedAnimation(color),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Taxable', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                            Text(_currencyFormat.format(r.taxableAmount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            const Text('Tax', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                            Text(_currencyFormat.format(r.taxAmount), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text('Total', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                            Text(_currencyFormat.format(r.totalAmount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Summary
+          const SizedBox(height: 6),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.06),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: kPrimary.withValues(alpha: 0.15)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Total Taxable', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                      Text(_currencyFormat.format(totalTaxable), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kOnSurface)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      const Text('Total Tax', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                      Text(_currencyFormat.format(totalTax), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kPrimary)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 90),
+        ],
+      ),
     );
   }
 
@@ -1805,4 +2570,50 @@ class _GstReportScreenState extends State<GstReportScreen> {
       ],
     );
   }
+}
+
+// ── Tax Rate aggregation model ────────────────────────────────────────────────
+class _TaxRateAggregate {
+  _TaxRateAggregate(this.rate);
+  final double rate;
+  int invoiceCount = 0;
+  double taxableAmount = 0;
+  double taxAmount = 0;
+  double totalAmount = 0;
+}
+
+// ── Donut Chart Painter (for Tax Rate tab) ────────────────────────────────────
+class _DonutSegment {
+  _DonutSegment(this.fraction, this.color);
+  final double fraction;
+  final Color color;
+}
+
+class _DonutChartPainter extends CustomPainter {
+  _DonutChartPainter({required this.segments});
+  final List<_DonutSegment> segments;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round;
+
+    paint.color = const Color(0xFFE5E7EB);
+    canvas.drawArc(rect.deflate(7), 0, 2 * 3.14159265, false, paint);
+
+    double startAngle = -3.14159265 / 2;
+    for (final seg in segments) {
+      if (seg.fraction <= 0) continue;
+      final sweepAngle = seg.fraction * 2 * 3.14159265;
+      paint.color = seg.color;
+      canvas.drawArc(rect.deflate(7), startAngle, sweepAngle, false, paint);
+      startAngle += sweepAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
