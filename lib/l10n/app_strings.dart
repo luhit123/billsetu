@@ -70,6 +70,11 @@ class AppStrings {
   String get homeCreateInvoice => _t('homeCreateInvoice');
   String get homeDateApply => _t('homeDateApply');
   String get homeBottomInvoices => _t('homeBottomInvoices');
+  String get homeBottomHome => _t('homeBottomHome');
+  String get homeBottomClients => _t('homeBottomClients');
+  String get homeBottomProducts => _t('homeBottomProducts');
+  String get homeAddClient => _t('homeAddClient');
+  String get homeQuickActions => _t('homeQuickActions');
 
   // ── Drawer ─────────────────────────────────────────────────────────────────
 
@@ -153,6 +158,9 @@ class AppStrings {
   String createItemNumber(int number) =>
       _t('createItemNumber').replaceAll('\$number', number.toString());
   String get createSaveHint => _t('createSaveHint');
+  String get createDiscountEmptyHint => _t('createDiscountEmptyHint');
+  String get createErrorPctMax => _t('createErrorPctMax');
+  String get createErrorOverallMax => _t('createErrorOverallMax');
   String createFailedSave(String error) =>
       _t('createFailedSave').replaceAll('\$error', error);
   String createDiscountPreviewPct(String pct, String subtotal) =>
@@ -179,6 +187,8 @@ class AppStrings {
   String get createHsnLabel => _t('createHsnLabel');
   String get createHsnHint => _t('createHsnHint');
   String get createPerItemGstLabel => _t('createPerItemGstLabel');
+  String get hsnCodeLabel => _t('hsnCodeLabel');
+  String get hsnCodeHint => _t('hsnCodeHint');
 
   // ── Home Tabs ──────────────────────────────────────────────────────────────
 
@@ -207,6 +217,12 @@ class AppStrings {
   String get gstReportDetailsCgst => _t('gstReportDetailsCgst');
   String get gstReportDetailsSgst => _t('gstReportDetailsSgst');
   String get gstReportDetailsIgst => _t('gstReportDetailsIgst');
+  String get gstReportMonthly => _t('gstReportMonthly');
+  String get gstReportQuarterly => _t('gstReportQuarterly');
+  String get gstReportYearly => _t('gstReportYearly');
+  String get gstReportInvoiceBreakdown => _t('gstReportInvoiceBreakdown');
+  String get gstReportNoInvoices => _t('gstReportNoInvoices');
+  String get gstReportShareReport => _t('gstReportShareReport');
 
   // ── Status ─────────────────────────────────────────────────────────────────
 
@@ -301,6 +317,21 @@ class AppStrings {
 
   // ── Profile ────────────────────────────────────────────────────────────────
 
+  String get profileAppBarSetup => _t('profileAppBarSetup');
+  String get profileAppBarEdit => _t('profileAppBarEdit');
+  String get profileSignOutTooltip => _t('profileSignOutTooltip');
+  String get profilePromptTitleSetup => _t('profilePromptTitleSetup');
+  String get profilePromptTitleEdit => _t('profilePromptTitleEdit');
+  String get profilePromptBodySetup => _t('profilePromptBodySetup');
+  String get profilePromptBodyEdit => _t('profilePromptBodyEdit');
+  String get profileBadgeFallback => _t('profileBadgeFallback');
+  String get profileStoreLabel => _t('profileStoreLabel');
+  String get profileAddressLabel => _t('profileAddressLabel');
+  String get profilePhoneLabel => _t('profilePhoneLabel');
+  String get profileOptionalHint => _t('profileOptionalHint');
+  String get profileSaving => _t('profileSaving');
+  String get profileSaveAndContinue => _t('profileSaveAndContinue');
+  String get profileGstinLabel => _t('profileGstinLabel');
   String get profileTitle => _t('profileTitle');
   String get profileBusinessName => _t('profileBusinessName');
   String get profileBusinessNameHint => _t('profileBusinessNameHint');
@@ -332,7 +363,32 @@ class AppStrings {
   // ── Customers ──────────────────────────────────────────────────────────────
 
   String get customersTitle => _t('customersTitle');
+  String get customersSelectTitle => _t('customersSelectTitle');
   String get customersSearchHint => _t('customersSearchHint');
+  String get customersCloseSearch => _t('customersCloseSearch');
+  String get customersSearchTooltip => _t('customersSearchTooltip');
+  String get customersManageGroupsTooltip => _t('customersManageGroupsTooltip');
+  String get customersIntroTitle => _t('customersIntroTitle');
+  String get customersIntroBody => _t('customersIntroBody');
+  String get customersSelectIntroTitle => _t('customersSelectIntroTitle');
+  String get customersSelectIntroBody => _t('customersSelectIntroBody');
+  String get customersEmptyTitle => _t('customersEmptyTitle');
+  String get customersEmptySelectTitle => _t('customersEmptySelectTitle');
+  String get customersEmptyBody => _t('customersEmptyBody');
+  String get customersEmptySelectBody => _t('customersEmptySelectBody');
+  String get customersAddButton => _t('customersAddButton');
+  String get customersAll => _t('customersAll');
+  String get customersUngrouped => _t('customersUngrouped');
+  String get customersMoveToGroup => _t('customersMoveToGroup');
+  String get customersChangeGroup => _t('customersChangeGroup');
+  String get customersDeleteTitle => _t('customersDeleteTitle');
+  String get customersDeleteSubtitle => _t('customersDeleteSubtitle');
+  String get customersCancel => _t('customersCancel');
+  String get customersDelete => _t('customersDelete');
+  String get customersNoGroupSubtitle => _t('customersNoGroupSubtitle');
+  String get customersGroupsError => _t('customersGroupsError');
+  String get customersEmptyGroupTitle => _t('customersEmptyGroupTitle');
+  String get customersEmptyGroupBody => _t('customersEmptyGroupBody');
   String get customersNoCustomersTitle => _t('customersNoCustomersTitle');
   String get customersNoCustomersBody => _t('customersNoCustomersBody');
   String get customersAddFirst => _t('customersAddFirst');
