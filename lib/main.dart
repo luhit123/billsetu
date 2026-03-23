@@ -15,6 +15,7 @@ import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
 import 'package:billeasy/screens/home_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
@@ -44,6 +45,7 @@ Future<void> main() async {
     cacheSizeBytes: 104857600, // 100 MB — prevents device storage abuse
   );
 
+  ConnectivityService.instance.init();
   await AppCheckService.activate();
 
   // ── Firebase Remote Config ────────────────────────────────────────────────

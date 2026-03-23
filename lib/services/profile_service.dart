@@ -1,4 +1,5 @@
 import 'package:billeasy/modals/business_profile.dart';
+import 'package:billeasy/utils/firestore_helpers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -35,7 +36,7 @@ class ProfileService {
 
   Future<BusinessProfile?> getCurrentProfile() async {
     final ownerId = _requireOwnerId();
-    final snapshot = await _profileDoc(ownerId).get();
+    final snapshot = await resilientGet(_profileDoc(ownerId));
 
     if (!snapshot.exists) {
       return null;
@@ -53,7 +54,7 @@ class ProfileService {
     final currentUser = _requireCurrentUser();
 
     // Check if this is the first time saving (no existing doc) to set createdAt
-    final existing = await _profileDoc(currentUser.uid).get();
+    final existing = await resilientGet(_profileDoc(currentUser.uid));
     final isNew = !existing.exists;
 
     await _profileDoc(currentUser.uid).set({

@@ -1,3 +1,4 @@
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 class FirestorePage<T> {
@@ -26,7 +27,16 @@ extension QueryPageExtension on Query<Map<String, dynamic>> {
       query = query.startAfterDocument(startAfterDocument);
     }
 
-    final snapshot = await query.get();
+    QuerySnapshot<Map<String, dynamic>> snapshot;
+    if (ConnectivityService.instance.isOffline) {
+      snapshot = await query.get(const GetOptions(source: Source.cache));
+    } else {
+      try {
+        snapshot = await query.get().timeout(const Duration(seconds: 4));
+      } catch (_) {
+        snapshot = await query.get(const GetOptions(source: Source.cache));
+      }
+    }
     final docs = snapshot.docs;
     final hasMore = limit > 0 && docs.length > limit;
     final pageDocs = hasMore ? docs.sublist(0, limit) : docs;

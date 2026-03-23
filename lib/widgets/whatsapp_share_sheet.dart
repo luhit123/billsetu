@@ -6,6 +6,7 @@ import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
@@ -13,7 +14,8 @@ import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
 /// Bottom sheet for sharing an invoice via WhatsApp or SMS.
 ///
-/// Both options upload the PDF and include a branded download link.
+/// WhatsApp: shares the PDF file directly with a message that includes a
+/// persistent download link so the customer can re-download anytime.
 class WhatsAppShareSheet extends StatefulWidget {
   const WhatsAppShareSheet({
     super.key,
@@ -41,15 +43,25 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   String get _formattedAmount =>
       widget.currencyFormat.format(widget.invoice.grandTotal);
 
-  String _shareMessage(String downloadUrl) {
+  String _shareMessageWithLink(String downloadUrl) {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
-    return 'Hi $name! 🧾\n\n'
+    return 'Hi $name!\n\n'
         'Your invoice *#${widget.invoice.invoiceNumber}* for '
-        '*$_formattedAmount* is ready.\n\n'
-        '📥 View & Download:\n$downloadUrl\n\n'
-        'Thank you for your business! 🙏';
+        '*$_formattedAmount* is attached.\n\n'
+        'You can also download it anytime here:\n$downloadUrl\n\n'
+        'Thank you for your business!';
+  }
+
+  String _shareMessageWithoutLink() {
+    final name = widget.invoice.clientName.trim().isNotEmpty
+        ? widget.invoice.clientName.trim()
+        : 'Customer';
+    return 'Hi $name!\n\n'
+        'Your invoice *#${widget.invoice.invoiceNumber}* for '
+        '*$_formattedAmount* is attached.\n\n'
+        'Thank you for your business!';
   }
 
   String _smsMessage(String downloadUrl) {
@@ -78,11 +90,7 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
         invoice: widget.invoice,
         pdfBytes: bytes,
       );
-    } catch (e) {
-      if (!mounted) return null;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Upload failed: $e')),
-      );
+    } catch (_) {
       return null;
     }
   }
@@ -134,8 +142,8 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
               iconColor: const Color(0xFF25D366),
               title: 'WhatsApp',
               subtitle: _isLoadingWhatsApp
-                  ? 'Preparing link…'
-                  : 'Send invoice with download link',
+                  ? 'Preparing PDF…'
+                  : 'Send PDF with download link',
               isLoading: _isLoadingWhatsApp,
               onTap: _isLoadingWhatsApp ? null : () => _shareWhatsApp(context),
             ),
@@ -179,32 +187,35 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
       return;
     }
 
-    final phone = _normalizedPhone();
-    if (phone == null) {
+    if (widget.pdfFile == null) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No phone number for this customer')),
+        const SnackBar(content: Text('PDF not available')),
       );
       return;
     }
 
     setState(() => _isLoadingWhatsApp = true);
-    final url = await _uploadAndGetLink();
+
+    // Upload for a download link in the background — don't block if it fails.
+    final downloadUrl = await _uploadAndGetLink();
+
     if (!mounted) return;
     setState(() => _isLoadingWhatsApp = false);
 
-    if (url == null) return;
+    final message = downloadUrl != null
+        ? _shareMessageWithLink(downloadUrl)
+        : _shareMessageWithoutLink();
 
-    final message = Uri.encodeComponent(_shareMessage(url));
-    final uri = Uri.parse('https://wa.me/$phone?text=$message');
-    if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      await UsageTrackingService.instance.incrementWhatsAppShareCount();
-    } else {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open WhatsApp')),
-      );
-    }
+    // Share the PDF file directly via the system share sheet (targets WhatsApp).
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(widget.pdfFile!.path)],
+        text: message,
+      ),
+    );
+
+    await UsageTrackingService.instance.incrementWhatsAppShareCount();
   }
 
   Future<void> _shareSms(BuildContext context) async {
@@ -222,7 +233,13 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
     if (!mounted) return;
     setState(() => _isLoadingSms = false);
 
-    if (url == null) return;
+    if (url == null) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not generate download link. Check your internet connection.')),
+      );
+      return;
+    }
 
     final body = Uri.encodeComponent(_smsMessage(url));
     final uri = Uri.parse('sms:$phone?body=$body');

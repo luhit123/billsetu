@@ -1,4 +1,5 @@
 import 'package:billeasy/modals/client.dart';
+import 'package:billeasy/utils/firestore_helpers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:billeasy/services/firestore_page.dart';
@@ -124,7 +125,7 @@ class ClientService {
 
   Future<Client?> getClient(String clientId) async {
     final ownerId = _requireOwnerId();
-    final snapshot = await _clientsCollection(ownerId).doc(clientId).get();
+    final snapshot = await resilientGet(_clientsCollection(ownerId).doc(clientId));
     final data = snapshot.data();
 
     if (!snapshot.exists || data == null) {

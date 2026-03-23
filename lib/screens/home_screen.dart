@@ -8,7 +8,6 @@ import 'package:billeasy/screens/customers_screen.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
-import 'package:billeasy/screens/referral_screen.dart';
 import 'package:billeasy/screens/reports_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/screens/purchase_orders_screen.dart';
@@ -337,12 +336,6 @@ class _DashboardPageState extends State<_DashboardPage> {
                     builder: (_) => const CreatePurchaseOrderScreen(),
                   ),
                 ),
-                onReferral: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ReferralScreen(),
-                  ),
-                ),
               ),
             ),
           ),
@@ -510,21 +503,6 @@ class _DashboardPageState extends State<_DashboardPage> {
                         size: 16,
                       ),
                     ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Referral Banner ────────────────────────────────────────
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-              child: _ReferralBanner(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const ReferralScreen(),
                   ),
                 ),
               ),
@@ -1706,13 +1684,11 @@ class _QuickActionsSection extends StatelessWidget {
     required this.onCreateInvoice,
     required this.onAddClient,
     required this.onNewPurchase,
-    required this.onReferral,
   });
 
   final VoidCallback onCreateInvoice;
   final VoidCallback onAddClient;
   final VoidCallback onNewPurchase;
-  final VoidCallback onReferral;
 
   @override
   Widget build(BuildContext context) {
@@ -1800,75 +1776,6 @@ class _ActionButton extends StatelessWidget {
               ),
             ],
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Referral banner shown on the dashboard.
-class _ReferralBanner extends StatelessWidget {
-  const _ReferralBanner({required this.onTap});
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF6D00), Color(0xFFFFA000)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.people_alt_rounded,
-                color: Colors.white,
-                size: 22,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Invite friends, get 1 month free',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Share your referral code and earn Pro rewards',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: Colors.white,
-              size: 20,
-            ),
-          ],
         ),
       ),
     );

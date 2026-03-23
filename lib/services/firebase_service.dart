@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/firestore_page.dart';
+import 'package:billeasy/utils/firestore_helpers.dart';
 import 'package:billeasy/utils/invoice_search.dart';
 
 class FirebaseService {
@@ -224,23 +225,20 @@ class FirebaseService {
       ..['id'] = docRef.id
       ..['ownerId'] = ownerId;
 
-    await _firestore.runTransaction((transaction) async {
-      final clientRef = _clientsCollection(ownerId).doc(inv.clientId);
-      final clientSnapshot = await transaction.get(clientRef);
-      final clientData = <String, dynamic>{
-        'id': inv.clientId,
-        'name': inv.clientName,
-        'nameLower': inv.clientName.trim().toLowerCase(),
-        'updatedAt': Timestamp.fromDate(now),
-      };
+    final clientRef = _clientsCollection(ownerId).doc(inv.clientId);
+    final clientData = <String, dynamic>{
+      'id': inv.clientId,
+      'name': inv.clientName,
+      'nameLower': inv.clientName.trim().toLowerCase(),
+      'updatedAt': Timestamp.fromDate(now),
+    };
 
-      if (!clientSnapshot.exists) {
-        clientData['createdAt'] = Timestamp.fromDate(now);
-      }
-
-      transaction.set(docRef, data);
-      transaction.set(clientRef, clientData, SetOptions(merge: true));
-    });
+    final batch = _firestore.batch();
+    batch.set(docRef, data);
+    batch.set(clientRef, clientData, SetOptions(merge: true));
+    // Don't await — Firestore queues the write locally and syncs when online.
+    // Awaiting hangs the UI when offline.
+    batch.commit();
 
     return docRef.id;
   }
@@ -270,7 +268,7 @@ class FirebaseService {
   ) async {
     final ownerId = _requireOwnerId();
     final invoiceRef = _invoicesCollection.doc(invoiceId);
-    final snapshot = await invoiceRef.get();
+    final snapshot = await resilientGet(invoiceRef);
 
     if (!snapshot.exists) {
       throw StateError('Invoice not found.');

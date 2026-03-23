@@ -67,6 +67,9 @@ class AppStrings {
           .replaceAll('\$start', start)
           .replaceAll('\$end', end);
 
+  String get homeRecentInvoices => _t('homeRecentInvoices');
+  String get homeViewAll => _t('homeViewAll');
+  String get homeMonthlyRevenue => _t('homeMonthlyRevenue');
   String get homeCreateInvoice => _t('homeCreateInvoice');
   String get homeDateApply => _t('homeDateApply');
   String get homeBottomInvoices => _t('homeBottomInvoices');
@@ -161,12 +164,14 @@ class AppStrings {
   String get createDiscountEmptyHint => _t('createDiscountEmptyHint');
   String get createErrorPctMax => _t('createErrorPctMax');
   String get createErrorOverallMax => _t('createErrorOverallMax');
+  String get createSignInRequired => _t('createSignInRequired');
   String createFailedSave(String error) =>
       _t('createFailedSave').replaceAll('\$error', error);
-  String createDiscountPreviewPct(String pct, String subtotal) =>
+  String createDiscountPreviewPct(String pct, String subtotal, String discountAmount) =>
       _t('createDiscountPreviewPct')
           .replaceAll('\$pct', pct)
-          .replaceAll('\$subtotal', subtotal);
+          .replaceAll('\$subtotal', subtotal)
+          .replaceAll('\$discountAmount', discountAmount);
   String createDiscountPreviewOverall(String discAmt, String subtotal) =>
       _t('createDiscountPreviewOverall')
           .replaceAll('\$discAmt', discAmt)
@@ -348,6 +353,8 @@ class AppStrings {
   String get profileSetupTitle => _t('profileSetupTitle');
   String get profileSetupSubtitle => _t('profileSetupSubtitle');
   String get profileSavingProfile => _t('profileSavingProfile');
+  String get profileSignInRequired => _t('profileSignInRequired');
+  String get profileSavedSuccess => _t('profileSavedSuccess');
   String profileFailedSave(String error) =>
       _t('profileFailedSave').replaceAll('\$error', error);
   String profileFailedSignOut(String error) =>
@@ -398,6 +405,7 @@ class AppStrings {
   String customersReadyForBilling(String name) =>
       _t('customersReadyForBilling').replaceAll('\$name', name);
   String get customersAddCustomer => _t('customersAddCustomer');
+  String get customersSelected => _t('customersSelected');
 
   // ── Customer Form ──────────────────────────────────────────────────────────
 

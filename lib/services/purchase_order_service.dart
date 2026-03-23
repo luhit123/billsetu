@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/modals/stock_movement.dart';
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class PurchaseOrderService {
   PurchaseOrderService({FirebaseFirestore? firestore, FirebaseAuth? auth})
@@ -133,22 +136,47 @@ class PurchaseOrderService {
   // ── Order number sequencing ────────────────────────────────────────────
 
   Future<String> _reserveOrderNumber(String ownerId, int year) async {
-    final counterRef = _counterCol(ownerId).doc(year.toString());
-    int sequence = 1;
+    if (ConnectivityService.instance.isOffline) {
+      return _localOrderNumber(year);
+    }
 
-    await _db.runTransaction((tx) async {
-      final snap = await tx.get(counterRef);
-      sequence =
-          snap.exists ? ((snap.data()?['nextSequence'] as int?) ?? 1) : 1;
-      tx.set(
-        counterRef,
-        {'nextSequence': sequence + 1, 'year': year},
-        SetOptions(merge: true),
-      );
-    });
+    try {
+      final counterRef = _counterCol(ownerId).doc(year.toString());
+      int sequence = 1;
 
-    final seq = sequence.toString().padLeft(5, '0');
-    return 'PO-$year-$seq';
+      await _db.runTransaction((tx) async {
+        final snap = await tx.get(counterRef);
+        sequence =
+            snap.exists ? ((snap.data()?['nextSequence'] as int?) ?? 1) : 1;
+        tx.set(
+          counterRef,
+          {'nextSequence': sequence + 1, 'year': year},
+          SetOptions(merge: true),
+        );
+      }).timeout(const Duration(seconds: 5));
+
+      // Cache for offline fallback.
+      final prefs = await SharedPreferences.getInstance();
+      final key = 'last_po_seq_$year';
+      if (sequence > (prefs.getInt(key) ?? 0)) {
+        await prefs.setInt(key, sequence);
+      }
+
+      final seq = sequence.toString().padLeft(5, '0');
+      return 'PO-$year-$seq';
+    } catch (e) {
+      debugPrint('[PurchaseOrder] Transaction failed, using local: $e');
+      return _localOrderNumber(year);
+    }
+  }
+
+  Future<String> _localOrderNumber(int year) async {
+    final prefs = await SharedPreferences.getInstance();
+    final key = 'last_po_seq_$year';
+    final last = prefs.getInt(key) ?? 0;
+    final next = last + 1;
+    await prefs.setInt(key, next);
+    return 'PO-$year-${next.toString().padLeft(5, '0')}';
   }
 
   // ── Auth guard ─────────────────────────────────────────────────────────

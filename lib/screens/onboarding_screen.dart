@@ -23,13 +23,6 @@ class _Strings {
   final String feat3a;
   final String feat3b;
   final String feat3c;
-  final String step4Badge;
-  final String screen4Title;
-  final String screen4Subtitle;
-  final String feat4a;
-  final String feat4b;
-  final String feat4c;
-  final String referralCode;
   final String skip;
   final String next;
   final String getStarted;
@@ -53,13 +46,6 @@ class _Strings {
     required this.feat3a,
     required this.feat3b,
     required this.feat3c,
-    required this.step4Badge,
-    required this.screen4Title,
-    required this.screen4Subtitle,
-    required this.feat4a,
-    required this.feat4b,
-    required this.feat4c,
-    required this.referralCode,
     required this.skip,
     required this.next,
     required this.getStarted,
@@ -88,14 +74,6 @@ const _english = _Strings(
   feat3a: 'Create & assign customer groups',
   feat3b: 'Full invoice history per customer',
   feat3c: 'Track outstanding dues instantly',
-  step4Badge: '\u2726  Step 4 of 4',
-  screen4Title: 'Invite & Earn',
-  screen4Subtitle:
-      'Refer friends and get 1 month Pro free for each friend who joins BillEasy',
-  feat4a: 'Share your unique referral code',
-  feat4b: '1 month Pro free per referral',
-  feat4c: 'Friends get a discount too',
-  referralCode: 'BILLEASY2024',
   skip: 'Skip',
   next: 'Next',
   getStarted: 'Get Started',
@@ -123,14 +101,6 @@ const _hindi = _Strings(
   feat3a: '\u0917\u094d\u0930\u093e\u0939\u0915 \u0938\u092e\u0942\u0939 \u092c\u0928\u093e\u090f\u0902 \u0914\u0930 \u0905\u0938\u093e\u0907\u0928 \u0915\u0930\u0947\u0902',
   feat3b: '\u0939\u0930 \u0917\u094d\u0930\u093e\u0939\u0915 \u0915\u093e \u092a\u0942\u0930\u093e \u0907\u0928\u0935\u0949\u0907\u0938 \u0907\u0924\u093f\u0939\u093e\u0938',
   feat3c: '\u092c\u0915\u093e\u092f\u093e \u0930\u093e\u0936\u093f \u0924\u0941\u0930\u0902\u0924 \u091f\u094d\u0930\u0948\u0915 \u0915\u0930\u0947\u0902',
-  step4Badge: '\u2726  \u091a\u0930\u0923 4 / 4',
-  screen4Title: '\u0906\u092e\u0902\u0924\u094d\u0930\u093f\u0924 \u0915\u0930\u0947\u0902\n\u0914\u0930 \u0915\u092e\u093e\u090f\u0902',
-  screen4Subtitle:
-      '\u0926\u094b\u0938\u094d\u0924\u094b\u0902 \u0915\u094b \u0930\u0947\u092b\u0930 \u0915\u0930\u0947\u0902 \u0914\u0930 \u0939\u0930 \u0926\u094b\u0938\u094d\u0924 \u0915\u0947 \u091c\u0941\u0921\u093c\u0928\u0947 \u092a\u0930 1 \u092e\u0939\u0940\u0928\u093e Pro \u092e\u0941\u092b\u094d\u0924 \u092a\u093e\u090f\u0902',
-  feat4a: '\u0905\u092a\u0928\u093e \u0930\u0947\u092b\u0930\u0932 \u0915\u094b\u0921 \u0936\u0947\u092f\u0930 \u0915\u0930\u0947\u0902',
-  feat4b: '\u0939\u0930 \u0930\u0947\u092b\u0930\u0932 \u092a\u0930 1 \u092e\u0939\u0940\u0928\u093e Pro \u092e\u0941\u092b\u094d\u0924',
-  feat4c: '\u0926\u094b\u0938\u094d\u0924\u094b\u0902 \u0915\u094b \u092d\u0940 \u092e\u093f\u0932\u0924\u0940 \u0939\u0948 \u091b\u0942\u091f',
-  referralCode: 'BILLEASY2024',
   skip: '\u091b\u094b\u0921\u093c\u0947\u0902',
   next: '\u0906\u0917\u0947',
   getStarted: '\u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902',
@@ -158,14 +128,6 @@ const _assamese = _Strings(
   feat3a: '\u0997\u09cd\u09f0\u09be\u09b9\u0995 \u0997\u09cb\u099f \u09ac\u09a8\u09be\u0993\u0995 \u0986\u09f0\u09c1 \u09a8\u09bf\u09af\u09c1\u0995\u09cd\u09a4 \u0995\u09f0\u0995',
   feat3b: '\u09aa\u09cd\u09f0\u09a4\u09bf\u099c\u09a8 \u0997\u09cd\u09f0\u09be\u09b9\u0995\u09f0 \u09b8\u09ae\u09cd\u09aa\u09c2\u09f0\u09cd\u09a3 \u09ac\u09bf\u09b2\u09f0 \u0987\u09a4\u09bf\u09b9\u09be\u09b8',
   feat3c: '\u09ac\u0995\u09c7\u09af\u09bc\u09be \u09aa\u09f0\u09bf\u09ae\u09be\u09a3 \u09a4\u09ce\u0995\u09cd\u09b7\u09a3\u09be\u09ce \u099f\u09cd\u09f0\u09c7\u0995 \u0995\u09f0\u0995',
-  step4Badge: '\u2726  \u09aa\u09a6\u0995\u09cd\u09b7\u09c7\u09aa \u09ea / \u09ea',
-  screen4Title: '\u0986\u09ae\u09a8\u09cd\u09a4\u09cd\u09f0\u09a3 \u0995\u09f0\u0995\n\u0986\u09f0\u09c1 \u0989\u09aa\u09be\u09f0\u09cd\u099c\u09a8 \u0995\u09f0\u0995',
-  screen4Subtitle:
-      '\u09ac\u09a8\u09cd\u09a7\u09c1\u09b8\u0995\u09b2\u0995 \u09f0\u09c7\u09ab\u09be\u09f0 \u0995\u09f0\u0995 \u0986\u09f0\u09c1 \u09aa\u09cd\u09f0\u09a4\u09bf\u099c\u09a8 \u09ac\u09a8\u09cd\u09a7\u09c1\u09f0 \u09ac\u09be\u09ac\u09c7 \u09e7 \u09ae\u09be\u09b9 Pro \u09ac\u09bf\u09a8\u09be\u09ae\u09c2\u09b2\u09c0\u09af\u09bc\u09be\u0995\u09c8 \u09aa\u09be\u0993\u0995',
-  feat4a: '\u0986\u09aa\u09cb\u09a8\u09be\u09f0 \u09f0\u09c7\u09ab\u09be\u09f0\u09c7\u09b2 \u0995\u09cb\u09a1 \u09b6\u09cd\u09ac\u09c7\u09af\u09bc\u09be\u09f0 \u0995\u09f0\u0995',
-  feat4b: '\u09aa\u09cd\u09f0\u09a4\u09bf\u099f\u09cb \u09f0\u09c7\u09ab\u09be\u09f0\u09c7\u09b2\u09a4 \u09e7 \u09ae\u09be\u09b9 Pro \u09ac\u09bf\u09a8\u09be\u09ae\u09c2\u09b2\u09c0\u09af\u09bc\u09be',
-  feat4c: '\u09ac\u09a8\u09cd\u09a7\u09c1\u09b8\u0995\u09b2\u09c7\u0993 \u099b\u09be\u09dc \u09aa\u09be\u09af\u09bc',
-  referralCode: 'BILLEASY2024',
   skip: '\u098f\u09f0\u0995',
   next: '\u09aa\u09f0\u09f1\u09f0\u09cd\u09a4\u09c0',
   getStarted: '\u0986\u09f0\u09ae\u09cd\u09ad \u0995\u09f0\u0995',
@@ -261,7 +223,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _nextPage() {
-    if (_currentPage < 3) {
+    if (_currentPage < 2) {
       _slideController.reset();
       _pageController.nextPage(
         duration: const Duration(milliseconds: 500),
@@ -281,7 +243,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           PageView(
             controller: _pageController,
             onPageChanged: (page) => setState(() => _currentPage = page),
-            children: [_buildPage1(), _buildPage2(), _buildPage3(), _buildPage4()],
+            children: [_buildPage1(), _buildPage2(), _buildPage3()],
           ),
           // Bottom controls overlay
           Positioned(
@@ -514,82 +476,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
-  Widget _buildPage4() {
-    return Container(
-      decoration: _pageDecoration,
-      child: Stack(
-        children: [
-          _buildOrb(top: -60, right: -40, size: 220, opacity: 0.09),
-          _buildOrb(bottom: 140, left: -60, size: 180, opacity: 0.07),
-
-          SafeArea(
-            bottom: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(28, 24, 28, 140),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Align(
-                    alignment: Alignment.topRight,
-                    child: TextButton(
-                      onPressed: _completeOnboarding,
-                      child: Text(
-                        _s.skip,
-                        style: const TextStyle(
-                          color: kTextTertiary,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    flex: 5,
-                    child: Center(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: AnimatedBuilder(
-                          animation: _floatAnimation,
-                          builder: (context, child) => Transform.translate(
-                            offset: Offset(0, _floatAnimation.value * 0.8),
-                            child: child,
-                          ),
-                          child: _buildReferralIllustration(),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-                  SlideTransition(
-                    position: _slideAnimation,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildBadge(_s.step4Badge),
-                        const SizedBox(height: 20),
-                        _buildTitle(_s.screen4Title),
-                        const SizedBox(height: 14),
-                        _buildSubtitle(_s.screen4Subtitle),
-                        const SizedBox(height: 28),
-                        _buildFeatureRow(Icons.share_rounded, _s.feat4a),
-                        const SizedBox(height: 12),
-                        _buildFeatureRow(Icons.card_giftcard_rounded, _s.feat4b),
-                        const SizedBox(height: 12),
-                        _buildFeatureRow(Icons.emoji_events_rounded, _s.feat4c),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Shared text builders ────────────────────────────────────────────────
 
   Widget _buildBadge(String text) {
@@ -636,176 +522,6 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   // ── Illustrations ───────────────────────────────────────────────────────
-
-  Widget _buildReferralIllustration() {
-    return SizedBox(
-      width: 310,
-      height: 280,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 240,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: const [kWhisperShadow],
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedBuilder(
-                  animation: _pulseAnimation,
-                  builder: (_, child) => Transform.scale(
-                    scale: _pulseAnimation.value,
-                    child: child,
-                  ),
-                  child: Container(
-                    width: 64,
-                    height: 64,
-                    decoration: const BoxDecoration(
-                      color: kPrimaryContainer,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.people_alt_rounded,
-                      color: kPrimary,
-                      size: 34,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'Your Referral Code',
-                  style: TextStyle(
-                    color: kOnSurfaceVariant,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: kSurfaceContainer,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          'BILLEASY2024',
-                          style: TextStyle(
-                            color: kOnSurface,
-                            fontSize: 16,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 1.5,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(Icons.copy_rounded, color: kOnSurfaceVariant, size: 16),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: kPrimary,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.share_rounded, size: 16, color: kOnPrimary),
-                      SizedBox(width: 8),
-                      Text(
-                        'Share & Earn',
-                        style: TextStyle(
-                          color: kOnPrimary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // Floating reward badge
-          Positioned(
-            top: 8,
-            right: 0,
-            child: AnimatedBuilder(
-              animation: _floatAnimation,
-              builder: (_, child) => Transform.translate(
-                offset: Offset(_floatAnimation.value * 0.5, 0),
-                child: child,
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: kPaidBg,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.star_rounded, color: kPaid, size: 12),
-                    SizedBox(width: 4),
-                    Text(
-                      '1 Month Free',
-                      style: TextStyle(color: kPaid, fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // Floating friend badge
-          Positioned(
-            bottom: 16,
-            left: 0,
-            child: AnimatedBuilder(
-              animation: _floatAnimation,
-              builder: (_, child) => Transform.translate(
-                offset: Offset(0, _floatAnimation.value * 0.5),
-                child: child,
-              ),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: kSurfaceContainerLow,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: const [kSubtleShadow],
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.people_rounded, color: kPrimary, size: 12),
-                    SizedBox(width: 4),
-                    Text(
-                      '3 Friends Joined',
-                      style: TextStyle(color: kOnSurfaceVariant, fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildCustomerGroupsIllustration() {
     return SizedBox(
@@ -1013,7 +729,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildBottomControls() {
-    final isLast = _currentPage == 3;
+    final isLast = _currentPage == 2;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
@@ -1028,7 +744,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
-            children: List.generate(4, (index) {
+            children: List.generate(3, (index) {
               final isActive = index == _currentPage;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),

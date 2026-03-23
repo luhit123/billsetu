@@ -32,6 +32,15 @@ class AuthService {
     required Function(String error) onError,
     Function(PhoneAuthCredential)? onAutoVerified,
   }) async {
+    // Suppress reCAPTCHA web redirect on Android — use native Play Integrity
+    // or silent APNs verification on iOS instead.
+    if (!kIsWeb) {
+      await _firebaseAuth.setSettings(
+        appVerificationDisabledForTesting: false,
+        forceRecaptchaFlow: false,
+      );
+    }
+
     await _firebaseAuth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
       verificationCompleted: (PhoneAuthCredential credential) {
