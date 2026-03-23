@@ -108,6 +108,7 @@ const Map<String, String> hiTranslations = {
   'createFailedSave': 'इनवॉइस सहेजना विफल: $error',
   'createDiscountEmptyHint': 'पूरे उप-कुल पर इनवॉइस रखने के लिए छूट खाली छोड़ें।',
   'createDiscountPreviewOverall': '$discAmt का कुल छूट $subtotal पर लागू होगा।',
+  'pdfInvoice': 'INVOICE',
   'pdfInvoiceNo': 'चालान नं.',
   'pdfInvoiceDate': 'इनवॉइस तिथि',
   'pdfFrom': 'विक्रेता',

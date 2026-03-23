@@ -108,6 +108,7 @@ const Map<String, String> asTranslations = {
   'createFailedSave': 'বিল সংৰক্ষণ বিফল: $error',
   'createDiscountEmptyHint': 'পূৰ্ণ উপ-মুঠত বিল ৰাখিবলৈ ৰেহাই খালি ৰাখক।',
   'createDiscountPreviewOverall': '$discAmt-ৰ সামগ্ৰিক ৰেহাই $subtotal-ত প্ৰযোজ্য হ\\\'ব।',
+  'pdfInvoice': 'INVOICE',
   'pdfInvoiceNo': 'বিল নং.',
   'pdfInvoiceDate': 'বিলৰ তাৰিখ',
   'pdfFrom': 'বিক্ৰেতা',

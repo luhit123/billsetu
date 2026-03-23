@@ -108,6 +108,7 @@ const Map<String, String> guTranslations = {
   'createFailedSave': 'ઇн्वॉइस सहेजना विफल: $error',
   'createDiscountEmptyHint': 'ઇن्वॉइस पूरे पेटा-कुल पर रखने के लिए छूट खाली छोड़ें.',
   'createDiscountPreviewOverall': '$discAmt ની એकंदर छूट $subtotal पर लागू थशे.',
+  'pdfInvoice': 'INVOICE',
   'pdfInvoiceNo': 'ઇন્વૉઇસ નં.',
   'pdfInvoiceDate': 'ઇن्वॉइस तारीख',
   'pdfFrom': 'પ્રેષક',

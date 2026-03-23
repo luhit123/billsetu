@@ -108,6 +108,7 @@ const Map<String, String> teTranslations = {
   'createFailedSave': 'Failed to save invoice: $error',
   'createDiscountEmptyHint': 'Leave discount empty to keep the invoice at full subtotal.',
   'createDiscountPreviewOverall': 'Overall discount of $discAmt will be applied to $subtotal.',
+  'pdfInvoice': 'INVOICE',
   'pdfInvoiceNo': 'Invoice No.',
   'pdfInvoiceDate': 'Invoice Date',
   'pdfFrom': 'FROM',

@@ -2304,7 +2304,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     final maxTaxable = rates.map((r) => r.taxableAmount).fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
 
     // Colors for each rate
-    const rateColors = <double, Color>{
+    final rateColors = <double, Color>{
       0: Color(0xFF94A3B8),
       5: Color(0xFF22C55E),
       12: Color(0xFF3B82F6),

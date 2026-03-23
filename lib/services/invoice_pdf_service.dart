@@ -127,6 +127,7 @@ class InvoicePdfService {
           _fontRegular = pw.Font.ttf(dataTa);
           _fontBold = pw.Font.ttf(dataTa);
         case AppLanguage.english:
+        default:
           _fontRegular = pw.Font.helvetica();
           _fontBold = pw.Font.helveticaBold();
       }

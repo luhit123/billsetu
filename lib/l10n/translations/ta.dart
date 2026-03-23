@@ -108,6 +108,7 @@ const Map<String, String> taTranslations = {
   'createFailedSave': 'விலைப்பட்டியலை சேமிப்பதில் தோல்வி: $error',
   'createDiscountEmptyHint': 'விலைப்பட்டியலை முழு உப மொத்தத்தில் வைக்க தள்ளுபடியை காலியாக விடுங்கள்.',
   'createDiscountPreviewOverall': '$discAmt இன் ஒட்டுமொத்த தள்ளுபடி $subtotal க்கு பயன்படுத்தப்படும்.',
+  'pdfInvoice': 'INVOICE',
   'pdfInvoiceNo': 'விலைப்பட்டியல் எண்.',
   'pdfInvoiceDate': 'விலைப்பட்டியல் தேதி',
   'pdfFrom': 'இருந்து',

@@ -67,6 +67,10 @@ class AppStrings {
           .replaceAll('\$start', start)
           .replaceAll('\$end', end);
 
+  String get homeCreateInvoice => _t('homeCreateInvoice');
+  String get homeDateApply => _t('homeDateApply');
+  String get homeBottomInvoices => _t('homeBottomInvoices');
+
   // ── Drawer ─────────────────────────────────────────────────────────────────
 
   String get drawerWorkspace => _t('drawerWorkspace');
@@ -86,6 +90,7 @@ class AppStrings {
   String get drawerGstDesc => _t('drawerGstDesc');
   String get drawerSettingsDesc => _t('drawerSettingsDesc');
   String get drawerProfileLoadError => _t('drawerProfileLoadError');
+  String get drawerMyProfileFallback => _t('drawerMyProfileFallback');
   String drawerFailedLogOut(String error) =>
       _t('drawerFailedLogOut').replaceAll('\$error', error);
 
@@ -203,9 +208,36 @@ class AppStrings {
   String get gstReportDetailsSgst => _t('gstReportDetailsSgst');
   String get gstReportDetailsIgst => _t('gstReportDetailsIgst');
 
+  // ── Status ─────────────────────────────────────────────────────────────────
+
+  String get statusPaid => _t('statusPaid');
+  String get statusPending => _t('statusPending');
+  String get statusOverdue => _t('statusOverdue');
+
   // ── Invoice Details ────────────────────────────────────────────────────────
 
   String get detailsTitle => _t('detailsTitle');
+  String get detailsPreviewPrint => _t('detailsPreviewPrint');
+  String get detailsSeller => _t('detailsSeller');
+  String get detailsStore => _t('detailsStore');
+  String get detailsAddress => _t('detailsAddress');
+  String get detailsNotAddedYet => _t('detailsNotAddedYet');
+  String get detailsPhone => _t('detailsPhone');
+  String get detailsEmail => _t('detailsEmail');
+  String get detailsCustomer => _t('detailsCustomer');
+  String get detailsName => _t('detailsName');
+  String get detailsReference => _t('detailsReference');
+  String get detailsOpenProfile => _t('detailsOpenProfile');
+  String get detailsItems => _t('detailsItems');
+  String get detailsItemQty => _t('detailsItemQty');
+  String get detailsItemUnitPrice => _t('detailsItemUnitPrice');
+  String get detailsDiscount => _t('detailsDiscount');
+  String get detailsItemsCount => _t('detailsItemsCount');
+  String get detailsStatus => _t('detailsStatus');
+  String get detailsNoDiscount => _t('detailsNoDiscount');
+  String get detailsOverallDiscount => _t('detailsOverallDiscount');
+  String get detailsYourStore => _t('detailsYourStore');
+  String get detailsAmountSummary => _t('detailsAmountSummary');
   String get detailsInvoiceLabel => _t('detailsInvoiceLabel');
   String get detailsDateLabel => _t('detailsDateLabel');
   String get detailsStatusLabel => _t('detailsStatusLabel');
@@ -313,6 +345,15 @@ class AppStrings {
 
   // ── Customer Form ──────────────────────────────────────────────────────────
 
+  String get customerFormTitleAdd => _t('customerFormTitleAdd');
+  String get customerFormSubtitleAdd => _t('customerFormSubtitleAdd');
+  String get customerFormSubtitleEdit => _t('customerFormSubtitleEdit');
+  String get customerFormNameError => _t('customerFormNameError');
+  String get customerFormOptionalHint => _t('customerFormOptionalHint');
+  String get customerGstinLabel => _t('customerGstinLabel');
+  String get customerGstinHint => _t('customerGstinHint');
+  String get customerFormSaveChanges => _t('customerFormSaveChanges');
+  String get customerFormCreate => _t('customerFormCreate');
   String get customerFormTitleNew => _t('customerFormTitleNew');
   String get customerFormTitleEdit => _t('customerFormTitleEdit');
   String get customerFormNameLabel => _t('customerFormNameLabel');
@@ -386,6 +427,21 @@ class AppStrings {
   // ── Customer Groups ────────────────────────────────────────────────────────
 
   String get groupsTitle => _t('groupsTitle');
+  String get groupsSubtitle => _t('groupsSubtitle');
+  String get groupsAdd => _t('groupsAdd');
+  String get groupsLoadError => _t('groupsLoadError');
+  String get groupsEmpty => _t('groupsEmpty');
+  String get groupsRenameHint => _t('groupsRenameHint');
+  String get groupsRenameTooltip => _t('groupsRenameTooltip');
+  String get groupsAddTitle => _t('groupsAddTitle');
+  String get groupsRenameTitle => _t('groupsRenameTitle');
+  String get groupsCancel => _t('groupsCancel');
+  String get groupsPickerTitle => _t('groupsPickerTitle');
+  String get groupsPickerSubtitle => _t('groupsPickerSubtitle');
+  String get groupsManage => _t('groupsManage');
+  String get groupsUngrouped => _t('groupsUngrouped');
+  String get groupsUngroupedSubtitle => _t('groupsUngroupedSubtitle');
+  String get groupsPickerEmpty => _t('groupsPickerEmpty');
   String get groupsSearchHint => _t('groupsSearchHint');
   String get groupsNoGroupsTitle => _t('groupsNoGroupsTitle');
   String get groupsNoGroupsBody => _t('groupsNoGroupsBody');
@@ -456,6 +512,18 @@ class AppStrings {
 
   // ── PDF ────────────────────────────────────────────────────────────────────
 
+  String get pdfInvoiceNo => _t('pdfInvoiceNo');
+  String get pdfInvoiceDate => _t('pdfInvoiceDate');
+  String get pdfInvoice => _t('pdfInvoice');
+  String get pdfFrom => _t('pdfFrom');
+  String get pdfBillTo => _t('pdfBillTo');
+  String get pdfItem => _t('pdfItem');
+  String get pdfAmount => _t('pdfAmount');
+  String get pdfAddressNotAdded => _t('pdfAddressNotAdded');
+  String get pdfPhoneNotAdded => _t('pdfPhoneNotAdded');
+  String get pdfGeneratedBy => _t('pdfGeneratedBy');
+  String get pdfPage => _t('pdfPage');
+  String get pdfOf => _t('pdfOf');
   String pdfItemsCount(int n) =>
       _t('pdfItemsCount').replaceAll('\$n', n.toString());
 
