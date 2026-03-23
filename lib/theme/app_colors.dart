@@ -45,6 +45,16 @@ const kOverdueBg  = Color(0xFFFEE2E2);
 const kError      = Color(0xFF9E3F4E);
 const kErrorContainer = Color(0xFFFF8B9A);
 
+// ── Purchase-order status colours ───────────────────────────────────────────
+const kDraft       = Color(0xFF6B7280);
+const kDraftBg     = Color(0xFFF3F4F6);
+const kConfirmed   = Color(0xFFF59E0B);
+const kConfirmedBg = Color(0xFFFEF3C7);
+const kReceived    = Color(0xFF22C55E);
+const kReceivedBg  = Color(0xFFDCFCE7);
+const kCancelled   = Color(0xFFEF4444);
+const kCancelledBg = Color(0xFFFEE2E2);
+
 // ── Shadows (whisper shadow — inverse_surface at 4%) ────────────────────────
 const kWhisperShadow = BoxShadow(
   color: Color(0x0A0C0F10),
@@ -57,6 +67,25 @@ const kSubtleShadow = BoxShadow(
   blurRadius: 8,
   offset: Offset(0, 4),
 );
+
+const kCardShadow = Color(0x0E0F4A75);
+
+// ── Reusable card decoration ────────────────────────────────────────────────
+BoxDecoration kCardDecoration({bool error = false}) => BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(20),
+      border: Border.all(
+        color: error ? kOverdue : kBorder,
+        width: error ? 1.5 : 1.2,
+      ),
+      boxShadow: [
+        BoxShadow(
+          color: error ? const Color(0x10EF4444) : kCardShadow,
+          blurRadius: 16,
+          offset: const Offset(0, 4),
+        ),
+      ],
+    );
 
 // ── Legacy aliases (for backward compat during migration) ────────────────────
 const kNavy       = kOnSurface;
