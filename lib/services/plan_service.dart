@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'remote_config_service.dart';
+
 enum AppPlan { trial, expired, pro }
 
 class PlanLimits {
@@ -41,53 +43,58 @@ class PlanService {
   PlanService._();
   static final PlanService instance = PlanService._();
 
-  static const Map<AppPlan, PlanLimits> limits = {
-    AppPlan.trial: PlanLimits(
-      name: 'trial',
-      displayName: 'Trial',
-      priceMonthly: 0,
-      priceAnnual: 0,
-      maxInvoicesPerMonth: -1,
-      maxCustomers: -1,
-      maxProducts: -1,
-      maxPdfTemplates: -1,
-      maxWhatsAppSharesPerMonth: -1,
-      hasReports: true,
-      hasEwayBill: true,
-      hasPurchaseOrders: true,
-      hasDataExport: true,
-    ),
-    AppPlan.expired: PlanLimits(
-      name: 'expired',
-      displayName: 'Expired',
-      priceMonthly: 0,
-      priceAnnual: 0,
-      maxInvoicesPerMonth: 5,
-      maxCustomers: 5,
-      maxProducts: 20,
-      maxPdfTemplates: 1,
-      maxWhatsAppSharesPerMonth: 0,
-      hasReports: false,
-      hasEwayBill: false,
-      hasPurchaseOrders: false,
-      hasDataExport: false,
-    ),
-    AppPlan.pro: PlanLimits(
-      name: 'pro',
-      displayName: 'Pro',
-      priceMonthly: 129,
-      priceAnnual: 999,
-      maxInvoicesPerMonth: -1,
-      maxCustomers: -1,
-      maxProducts: -1,
-      maxPdfTemplates: -1,
-      maxWhatsAppSharesPerMonth: -1,
-      hasReports: true,
-      hasEwayBill: true,
-      hasPurchaseOrders: true,
-      hasDataExport: true,
-    ),
-  };
+  /// Plan limits are now driven by Firebase Remote Config.
+  /// Trial gets the same limits as Pro (full access during trial).
+  static Map<AppPlan, PlanLimits> get limits {
+    final rc = RemoteConfigService.instance;
+    return {
+      AppPlan.trial: PlanLimits(
+        name: 'trial',
+        displayName: 'Trial',
+        priceMonthly: 0,
+        priceAnnual: 0,
+        maxInvoicesPerMonth: -1,
+        maxCustomers: -1,
+        maxProducts: -1,
+        maxPdfTemplates: -1,
+        maxWhatsAppSharesPerMonth: -1,
+        hasReports: true,
+        hasEwayBill: true,
+        hasPurchaseOrders: true,
+        hasDataExport: true,
+      ),
+      AppPlan.expired: PlanLimits(
+        name: 'expired',
+        displayName: 'Expired',
+        priceMonthly: 0,
+        priceAnnual: 0,
+        maxInvoicesPerMonth: rc.expiredMaxInvoices,
+        maxCustomers: rc.expiredMaxCustomers,
+        maxProducts: rc.expiredMaxProducts,
+        maxPdfTemplates: rc.expiredMaxPdfTemplates,
+        maxWhatsAppSharesPerMonth: rc.expiredMaxWhatsAppShares,
+        hasReports: rc.expiredHasReports,
+        hasEwayBill: rc.expiredHasEwayBill,
+        hasPurchaseOrders: rc.expiredHasPurchaseOrders,
+        hasDataExport: rc.expiredHasDataExport,
+      ),
+      AppPlan.pro: PlanLimits(
+        name: 'pro',
+        displayName: 'Pro',
+        priceMonthly: rc.proPriceMonthly,
+        priceAnnual: rc.proPriceAnnual,
+        maxInvoicesPerMonth: rc.proMaxInvoices,
+        maxCustomers: rc.proMaxCustomers,
+        maxProducts: rc.proMaxProducts,
+        maxPdfTemplates: rc.proMaxPdfTemplates,
+        maxWhatsAppSharesPerMonth: rc.proMaxWhatsAppShares,
+        hasReports: rc.proHasReports,
+        hasEwayBill: rc.proHasEwayBill,
+        hasPurchaseOrders: rc.proHasPurchaseOrders,
+        hasDataExport: rc.proHasDataExport,
+      ),
+    };
+  }
 
   static String upgradeMessage = 'Upgrade to Pro';
 
@@ -304,11 +311,28 @@ class PlanService {
     return max == -1 || templateIndex < max;
   }
 
-  bool get hasReports => currentLimits.hasReports;
-  bool get hasEwayBill => currentLimits.hasEwayBill;
-  bool get hasPurchaseOrders => currentLimits.hasPurchaseOrders;
-  bool get hasDataExport => currentLimits.hasDataExport;
+  /// Feature access checks combine plan-level gating with global feature flags
+  /// from Remote Config — so a feature can be killed even for Pro users.
+  bool get hasReports =>
+      currentLimits.hasReports &&
+      RemoteConfigService.instance.featureReports;
+
+  bool get hasEwayBill =>
+      currentLimits.hasEwayBill &&
+      RemoteConfigService.instance.featureEwayBill;
+
+  bool get hasPurchaseOrders =>
+      currentLimits.hasPurchaseOrders &&
+      RemoteConfigService.instance.featurePurchaseOrders;
+
+  bool get hasDataExport =>
+      currentLimits.hasDataExport &&
+      RemoteConfigService.instance.featureDataExport;
+
   bool get hasPdfTemplates =>
       currentLimits.maxPdfTemplates == -1 || currentLimits.maxPdfTemplates > 1;
-  bool get hasWhatsAppShare => currentLimits.maxWhatsAppSharesPerMonth != 0;
+
+  bool get hasWhatsAppShare =>
+      currentLimits.maxWhatsAppSharesPerMonth != 0 &&
+      RemoteConfigService.instance.featureWhatsAppShare;
 }

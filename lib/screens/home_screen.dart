@@ -20,6 +20,7 @@ import 'package:billeasy/screens/subscriptions_screen.dart';
 import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
@@ -340,6 +341,7 @@ class _DashboardPageState extends State<_DashboardPage> {
           ),
 
           // ── Membership & Subscriptions Card ────────────────────────
+          if (RemoteConfigService.instance.featureMembership)
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),

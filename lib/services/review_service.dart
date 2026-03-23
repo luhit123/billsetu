@@ -1,6 +1,8 @@
 import 'package:in_app_review/in_app_review.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'remote_config_service.dart';
+
 class ReviewService {
   ReviewService._();
   static final ReviewService instance = ReviewService._();
@@ -17,8 +19,8 @@ class ReviewService {
     final sessions = (prefs.getInt(_kSessionCount) ?? 0) + 1;
     await prefs.setInt(_kSessionCount, sessions);
 
-    // Trigger after 5th session
-    if (sessions >= 5) {
+    final threshold = RemoteConfigService.instance.reviewSessionThreshold;
+    if (sessions >= threshold) {
       await _requestReview(prefs);
     }
   }
@@ -31,8 +33,8 @@ class ReviewService {
     final count = (prefs.getInt(_kInvoiceCount) ?? 0) + 1;
     await prefs.setInt(_kInvoiceCount, count);
 
-    // Trigger after 3rd invoice
-    if (count >= 3) {
+    final threshold = RemoteConfigService.instance.reviewInvoiceThreshold;
+    if (count >= threshold) {
       await _requestReview(prefs);
     }
   }

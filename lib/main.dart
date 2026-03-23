@@ -6,10 +6,13 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
+import 'package:billeasy/screens/force_update_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
+import 'package:billeasy/screens/maintenance_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:flutter/material.dart';
@@ -42,6 +45,11 @@ Future<void> main() async {
   );
 
   await AppCheckService.activate();
+
+  // ── Firebase Remote Config ────────────────────────────────────────────────
+  // Must init before PlanService so that plan limits are available.
+  await RemoteConfigService.instance.init();
+
   await PlanService.instance.loadPlan();
   runApp(const BillRajaApp());
 }
@@ -157,10 +165,48 @@ class BillRajaApp extends StatelessWidget {
               ),
             ),
           ),
-          home: const AuthGate(),
+          home: const AppGate(),
         ),
       ),
     );
+  }
+}
+
+/// Top-level gate that checks force-update and maintenance mode before
+/// allowing access to the rest of the app.
+class AppGate extends StatefulWidget {
+  const AppGate({super.key});
+
+  @override
+  State<AppGate> createState() => _AppGateState();
+}
+
+class _AppGateState extends State<AppGate> {
+  @override
+  void initState() {
+    super.initState();
+    // Rebuild when remote config changes (e.g. maintenance toggled off).
+    RemoteConfigService.instance.onConfigUpdated.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rc = RemoteConfigService.instance;
+
+    // Priority 1: Force update
+    if (rc.needsForceUpdate) {
+      return const ForceUpdateScreen();
+    }
+
+    // Priority 2: Maintenance mode
+    if (rc.maintenanceEnabled) {
+      return const MaintenanceScreen();
+    }
+
+    // Normal flow
+    return const AuthGate();
   }
 }
 

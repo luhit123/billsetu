@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/plan_service.dart';
 import '../services/payment_service.dart';
+import '../services/remote_config_service.dart';
 import '../theme/app_colors.dart';
 
 class UpgradeScreen extends StatefulWidget {
@@ -126,6 +127,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   @override
   Widget build(BuildContext context) {
     final trialDays = PlanService.instance.trialDaysLeft;
+    final rc = RemoteConfigService.instance;
 
     return Scaffold(
       backgroundColor: kSurface,
@@ -159,9 +161,9 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                         child: const Icon(Icons.workspace_premium_rounded, color: Colors.amber, size: 32),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'Upgrade to Pro',
-                        style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                      Text(
+                        rc.upgradeTitle,
+                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
                       ),
                       if (widget.featureName != null) ...[
                         const SizedBox(height: 6),
@@ -191,6 +193,30 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: 20),
+
+                  // Promo banner (remote config driven)
+                  if (rc.promoBannerEnabled && rc.promoBannerText.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(14),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: _parseColor(rc.promoBannerColor).withAlpha(20),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: _parseColor(rc.promoBannerColor).withAlpha(80)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.local_offer_rounded, color: _parseColor(rc.promoBannerColor), size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              rc.promoBannerText,
+                              style: TextStyle(fontWeight: FontWeight.w600, color: _parseColor(rc.promoBannerColor), fontSize: 14),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   // Trial countdown
                   if (_isTrial && trialDays > 0)
@@ -245,7 +271,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                                 const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 22),
                                 const SizedBox(width: 10),
                                 Text(
-                                  'Upgrade to Pro \u2014 ${_priceLabel()}',
+                                  '${rc.upgradeCtaText} \u2014 ${_priceLabel()}',
                                   style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                                 ),
                               ],
@@ -383,18 +409,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   }
 
   Widget _buildProCard() {
-    const features = [
-      (Icons.receipt_long, 'Unlimited Invoices'),
-      (Icons.people, 'Unlimited Customers'),
-      (Icons.inventory_2, 'Unlimited Products'),
-      (Icons.picture_as_pdf, '20 PDF Templates'),
-      (Icons.chat, 'Unlimited WhatsApp Sharing'),
-      (Icons.shopping_cart, 'Purchase Orders'),
-      (Icons.bar_chart, 'Reports & Analytics'),
-      (Icons.local_shipping, 'E-Way Bill'),
-      (Icons.download, 'Data Export'),
-      (Icons.palette, 'Custom Branding'),
-    ];
+    final rc = RemoteConfigService.instance;
+    final features = rc.upgradeFeatures;
 
     return Container(
       decoration: BoxDecoration(
@@ -435,11 +451,11 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 5),
                   child: Row(
                     children: [
-                      Icon(f.$1, size: 18, color: kPrimary),
+                      Icon(_resolveIcon(f['icon'] ?? ''), size: 18, color: kPrimary),
                       const SizedBox(width: 10),
                       Expanded(
                         child: Text(
-                          f.$2,
+                          f['label'] ?? '',
                           style: const TextStyle(fontSize: 13, color: kOnSurface, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -453,5 +469,37 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         ],
       ),
     );
+  }
+
+  /// Maps icon name strings from Remote Config to Material Icons.
+  static IconData _resolveIcon(String name) {
+    const map = <String, IconData>{
+      'receipt_long': Icons.receipt_long,
+      'people': Icons.people,
+      'inventory_2': Icons.inventory_2,
+      'picture_as_pdf': Icons.picture_as_pdf,
+      'chat': Icons.chat,
+      'shopping_cart': Icons.shopping_cart,
+      'bar_chart': Icons.bar_chart,
+      'local_shipping': Icons.local_shipping,
+      'download': Icons.download,
+      'palette': Icons.palette,
+      'workspace_premium': Icons.workspace_premium_rounded,
+      'star': Icons.star,
+      'bolt': Icons.bolt,
+      'diamond': Icons.diamond,
+      'support': Icons.support_agent,
+      'cloud': Icons.cloud,
+      'security': Icons.security,
+      'speed': Icons.speed,
+    };
+    return map[name] ?? Icons.check_circle_outline;
+  }
+
+  /// Parses a hex color string like "#0057FF" into a Color.
+  static Color _parseColor(String hex) {
+    hex = hex.replaceFirst('#', '');
+    if (hex.length == 6) hex = 'FF$hex';
+    return Color(int.parse(hex, radix: 16));
   }
 }
