@@ -117,6 +117,11 @@ class RemoteConfigService {
     'promo_banner_enabled': false,
     'promo_banner_text': '',
     'promo_banner_color': '#0057FF',
+
+    // Language control — empty string means all languages enabled.
+    // Comma-separated list of AppLanguage enum names to show.
+    // e.g. "english,hindi,bengali,tamil,telugu,marathi,gujarati"
+    'enabled_languages': '',
   };
 
   // ── Force Update / Maintenance ────────────────────────────────────────
@@ -211,6 +216,16 @@ class RemoteConfigService {
   bool get promoBannerEnabled => _rc.getBool('promo_banner_enabled');
   String get promoBannerText => _rc.getString('promo_banner_text');
   String get promoBannerColor => _rc.getString('promo_banner_color');
+
+  // ── Language Control ──────────────────────────────────────────────────
+
+  /// Returns the list of enabled language names (AppLanguage enum names).
+  /// Empty list means all languages are enabled.
+  List<String> get enabledLanguages {
+    final raw = _rc.getString('enabled_languages').trim();
+    if (raw.isEmpty) return [];
+    return raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+  }
 
   // ── Helpers ───────────────────────────────────────────────────────────
 

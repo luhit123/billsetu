@@ -1,5 +1,6 @@
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/screens/customers_screen.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
@@ -266,42 +267,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 8),
           _TonalCard(
             child: Column(
-              children: [
-                _LanguageTile(
-                  label: 'English',
-                  isSelected: currentLanguage == AppLanguage.english,
-                  isBusy: _isUpdatingLanguage,
-                  onTap: () => _changeLanguage(AppLanguage.english),
-                ),
-                const _TileDivider(),
-                _LanguageTile(
-                  label: '\u0939\u093F\u0928\u094D\u0926\u0940',
-                  isSelected: currentLanguage == AppLanguage.hindi,
-                  isBusy: _isUpdatingLanguage,
-                  onTap: () => _changeLanguage(AppLanguage.hindi),
-                ),
-                const _TileDivider(),
-                _LanguageTile(
-                  label: '\u0985\u09B8\u09AE\u09C0\u09AF\u09BC\u09BE',
-                  isSelected: currentLanguage == AppLanguage.assamese,
-                  isBusy: _isUpdatingLanguage,
-                  onTap: () => _changeLanguage(AppLanguage.assamese),
-                ),
-                const _TileDivider(),
-                _LanguageTile(
-                  label: '\u0A97\u0AC1\u0A9C\u0AB0\u0ABE\u0AA4\u0AC0',
-                  isSelected: currentLanguage == AppLanguage.gujarati,
-                  isBusy: _isUpdatingLanguage,
-                  onTap: () => _changeLanguage(AppLanguage.gujarati),
-                ),
-                const _TileDivider(),
-                _LanguageTile(
-                  label: '\u0BA4\u0BAE\u0BBF\u0BB4\u0BCD',
-                  isSelected: currentLanguage == AppLanguage.tamil,
-                  isBusy: _isUpdatingLanguage,
-                  onTap: () => _changeLanguage(AppLanguage.tamil),
-                ),
-              ],
+              children: _buildLanguageTiles(currentLanguage),
             ),
           ),
 
@@ -500,14 +466,60 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return strings.drawerNotSignedIn;
   }
 
+  /// Builds language tiles dynamically, filtered by Remote Config.
+  List<Widget> _buildLanguageTiles(AppLanguage currentLanguage) {
+    final rc = RemoteConfigService.instance;
+    final enabled = rc.enabledLanguages;
+    final languages = enabled.isEmpty
+        ? AppLanguage.values
+        : AppLanguage.values
+            .where((l) => enabled.contains(l.name))
+            .toList();
+
+    final tiles = <Widget>[];
+    for (var i = 0; i < languages.length; i++) {
+      if (i > 0) tiles.add(const _TileDivider());
+      final lang = languages[i];
+      tiles.add(
+        _LanguageTile(
+          label: _nativeLanguageLabel(lang),
+          isSelected: currentLanguage == lang,
+          isBusy: _isUpdatingLanguage,
+          onTap: () => _changeLanguage(lang),
+        ),
+      );
+    }
+    return tiles;
+  }
+
+  static const _nativeLabels = <AppLanguage, String>{
+    AppLanguage.english: 'English',
+    AppLanguage.hindi: '\u0939\u093f\u0928\u094d\u0926\u0940',
+    AppLanguage.bengali: '\u09ac\u09be\u0982\u09b2\u09be',
+    AppLanguage.telugu: '\u0c24\u0c46\u0c32\u0c41\u0c17\u0c41',
+    AppLanguage.marathi: '\u092e\u0930\u093e\u0920\u0940',
+    AppLanguage.tamil: '\u0ba4\u0bae\u0bbf\u0bb4\u0bcd',
+    AppLanguage.urdu: '\u0627\u0631\u062f\u0648',
+    AppLanguage.gujarati: '\u0a97\u0ac1\u0a9c\u0ab0\u0abe\u0aa4\u0ac0',
+    AppLanguage.kannada: '\u0c95\u0ca8\u0ccd\u0ca8\u0ca1',
+    AppLanguage.odia: '\u0b13\u0b21\u0b3c\u0b3f\u0b06',
+    AppLanguage.malayalam: '\u0d2e\u0d32\u0d2f\u0d3e\u0d33\u0d02',
+    AppLanguage.punjabi: '\u0a2a\u0a70\u0a1c\u0a3e\u0a2c\u0a40',
+    AppLanguage.assamese: '\u0985\u09b8\u09ae\u09c0\u09af\u09bc\u09be',
+    AppLanguage.maithili: '\u092e\u0948\u0925\u093f\u0932\u0940',
+    AppLanguage.santali: '\u1c65\u1c5f\u1c71\u1c5b\u1c5f\u1c63\u1c64',
+    AppLanguage.kashmiri: '\u06a9\u0672\u0634\u064f\u0631',
+    AppLanguage.nepali: '\u0928\u0947\u092a\u093e\u0932\u0940',
+    AppLanguage.sindhi: '\u0633\u0646\u068c\u064a',
+    AppLanguage.konkani: '\u0915\u094b\u0902\u0915\u0923\u0940',
+    AppLanguage.dogri: '\u0921\u094b\u0917\u0930\u0940',
+    AppLanguage.manipuri: '\u09ae\u09c8\u09a4\u09c8\u09b2\u09cb\u09a8',
+    AppLanguage.bodo: '\u092c\u0930\u094b',
+    AppLanguage.sanskrit: '\u0938\u0902\u0938\u094d\u0915\u0943\u0924\u092e\u094d',
+  };
+
   String _nativeLanguageLabel(AppLanguage language) {
-    return switch (language) {
-      AppLanguage.english => 'English',
-      AppLanguage.hindi => '\u0939\u093F\u0928\u094D\u0926\u0940',
-      AppLanguage.assamese => '\u0985\u09B8\u09AE\u09C0\u09AF\u09BC\u09BE',
-      AppLanguage.gujarati => '\u0A97\u0AC1\u0A9C\u0AB0\u0ABE\u0AA4\u0AC0',
-      AppLanguage.tamil => '\u0BA4\u0BAE\u0BBF\u0BB4\u0BCD',
-    };
+    return _nativeLabels[language] ?? language.name;
   }
 }
 
