@@ -12,7 +12,9 @@ import 'package:billeasy/theme/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' show NumberFormat;
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Status colours (kept as semantic)
 const _kPaid = Color(0xFF22C55E);
@@ -77,7 +79,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _subscribeRevenue();
     _subscribeReceivables();
     _subscribeProducts();
@@ -377,6 +379,9 @@ class _ReportsScreenState extends State<ReportsScreen>
             Tab(text: 'Party-wise'),
             Tab(text: 'Products'),
             Tab(text: 'Profit & Loss'),
+            Tab(text: 'Sales Trend'),
+            Tab(text: 'Top Sellers'),
+            Tab(text: 'Cash Flow'),
           ],
         ),
       ),
@@ -388,6 +393,9 @@ class _ReportsScreenState extends State<ReportsScreen>
           _buildPartyWiseTab(),
           _buildProductsTab(),
           _buildProfitLossTab(),
+          _buildSalesTrendTab(),
+          _buildTopSellersTab(),
+          _buildCashFlowTab(),
         ],
       ),
     );
@@ -1673,6 +1681,624 @@ class _ReportsScreenState extends State<ReportsScreen>
       ),
     );
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 6 — Sales Trend
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildSalesTrendTab() {
+    if (_revenueLoading) return _loadingWidget();
+    if (_revenueError != null) {
+      return _errorWidget('$_revenueError', _subscribeRevenue);
+    }
+
+    final invoices = _revenueInvoices;
+    if (invoices.isEmpty) {
+      return _emptyState(
+        icon: Icons.show_chart_rounded,
+        iconColor: const Color(0xFF3B82F6),
+        title: 'No sales data',
+        subtitle: 'Create invoices to see your sales trend.',
+      );
+    }
+
+    // Group by day
+    final dayFormat = DateFormat('dd MMM');
+    final dayMap = <String, double>{};
+    final dayKeys = <String, DateTime>{};
+    for (final inv in invoices) {
+      final key = DateFormat('yyyy-MM-dd').format(inv.createdAt);
+      dayMap[key] = (dayMap[key] ?? 0) + inv.grandTotal;
+      dayKeys.putIfAbsent(key, () => inv.createdAt);
+    }
+    final sortedDays = dayMap.keys.toList()..sort();
+
+    // Group by week
+    final weekMap = <String, double>{};
+    for (final inv in invoices) {
+      final weekStart = inv.createdAt.subtract(Duration(days: inv.createdAt.weekday - 1));
+      final key = DateFormat('dd MMM').format(weekStart);
+      weekMap[key] = (weekMap[key] ?? 0) + inv.grandTotal;
+    }
+    final sortedWeeks = weekMap.keys.toList();
+
+    // Group by month
+    final monthMap = <String, double>{};
+    for (final inv in invoices) {
+      final key = DateFormat('MMM yy').format(inv.createdAt);
+      monthMap[key] = (monthMap[key] ?? 0) + inv.grandTotal;
+    }
+
+    // Calculate growth
+    final totalRevenue = invoices.fold<double>(0, (s, i) => s + i.grandTotal);
+    final avgDaily = sortedDays.isNotEmpty ? totalRevenue / sortedDays.length : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _buildPeriodPicker(),
+        const SizedBox(height: 16),
+
+        // Summary cards
+        Row(
+          children: [
+            Expanded(
+              child: _miniStatCard(
+                label: 'Total Revenue',
+                value: totalRevenue,
+                color: kPrimary,
+                bgColor: kPrimaryContainer,
+                icon: Icons.trending_up_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniStatCard(
+                label: 'Avg / Day',
+                value: avgDaily,
+                color: const Color(0xFF3B82F6),
+                bgColor: const Color(0xFFDBEAFE),
+                icon: Icons.calendar_today_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Daily trend line chart (visual bars)
+        _sectionLabel('Daily Revenue'),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _cardDeco(),
+          child: Column(
+            children: () {
+              final maxVal = dayMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+              final recentDays = sortedDays.length > 14 ? sortedDays.sublist(sortedDays.length - 14) : sortedDays;
+              return recentDays.map((key) {
+                final value = dayMap[key]!;
+                final fraction = value / maxVal;
+                final label = dayFormat.format(dayKeys[key]!);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 52,
+                        child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                      ),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: fraction,
+                            minHeight: 14,
+                            backgroundColor: kSurfaceContainerLow,
+                            valueColor: const AlwaysStoppedAnimation(Color(0xFF3B82F6)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 60,
+                        child: Text(
+                          _currencyFmt.format(value),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: kOnSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList();
+            }(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Monthly breakdown
+        if (monthMap.length > 1) ...[
+          _sectionLabel('Monthly Trend'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _cardDeco(),
+            child: Column(
+              children: () {
+                final maxVal = monthMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+                return monthMap.entries.map((e) {
+                  final fraction = e.value / maxVal;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 52,
+                          child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                        ),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 16,
+                              backgroundColor: kSurfaceContainerLow,
+                              valueColor: const AlwaysStoppedAnimation(kPrimary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 65,
+                          child: Text(
+                            _currencyFmt.format(e.value),
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList();
+              }(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 7 — Top Sellers (Best/Slow Movers)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildTopSellersTab() {
+    if (_productsLoading) return _loadingWidget();
+    if (_productsError != null) {
+      return _errorWidget('$_productsError', _subscribeProducts);
+    }
+
+    final stats = _aggregateProducts();
+    if (stats.isEmpty) {
+      return _emptyState(
+        icon: Icons.star_outline_rounded,
+        iconColor: const Color(0xFFFF9500),
+        title: 'No product data',
+        subtitle: 'Create invoices to see your best and slow sellers.',
+      );
+    }
+
+    final topSellers = stats.take(10).toList();
+    final slowMovers = stats.length > 5 ? stats.reversed.take(5).toList() : <_ProductStat>[];
+    final totalRevenue = stats.fold<double>(0, (s, p) => s + p.totalRevenue);
+    final maxRev = topSellers.isNotEmpty ? topSellers.first.totalRevenue.clamp(1.0, double.infinity) : 1.0;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        // Top sellers header
+        _heroCard(
+          label: 'Product Revenue',
+          value: totalRevenue,
+          icon: Icons.star_rounded,
+          subtitle: '${stats.length} product${stats.length == 1 ? '' : 's'} sold',
+        ),
+        const SizedBox(height: 16),
+
+        // Best sellers
+        _sectionLabel('Best Sellers'),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: _cardDeco(),
+          child: Column(
+            children: topSellers.asMap().entries.map((e) {
+              final rank = e.key + 1;
+              final p = e.value;
+              final barFraction = p.totalRevenue / maxRev;
+              final share = totalRevenue > 0 ? (p.totalRevenue / totalRevenue * 100) : 0.0;
+
+              return Padding(
+                padding: EdgeInsets.only(bottom: rank < topSellers.length ? 12 : 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: rank <= 3 ? kPrimary : kSurfaceContainerLow,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$rank',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: rank <= 3 ? Colors.white : kOnSurfaceVariant),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
+                            Text('${share.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: barFraction,
+                        minHeight: 4,
+                        backgroundColor: kSurfaceContainerLow,
+                        valueColor: const AlwaysStoppedAnimation(kPrimary),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _statPill('${p.timesInvoiced}x sold'),
+                        const SizedBox(width: 6),
+                        _statPill('Qty: ${_formatQty(p.totalQty)}'),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Slow movers
+        if (slowMovers.isNotEmpty) ...[
+          _sectionLabel('Slow Movers'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _kRedBg,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: slowMovers.asMap().entries.map((e) {
+                final p = e.value;
+                final isLast = e.key == slowMovers.length - 1;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.trending_down_rounded, size: 16, color: _kRed),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _kRed)),
+                          Text('${p.timesInvoiced}x sold', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        // WhatsApp share button
+        _buildWhatsAppShareButton('Top Sellers Report', () {
+          final buf = StringBuffer('*Top Sellers Report*\n\n');
+          for (var i = 0; i < topSellers.length; i++) {
+            final p = topSellers[i];
+            buf.writeln('${i + 1}. ${p.name}');
+            buf.writeln('   Revenue: ${_currencyFmt.format(p.totalRevenue)}  |  Qty: ${_formatQty(p.totalQty)}');
+          }
+          if (slowMovers.isNotEmpty) {
+            buf.writeln('\n*Slow Movers:*');
+            for (final p in slowMovers) {
+              buf.writeln('- ${p.name}: ${_currencyFmt.format(p.totalRevenue)}');
+            }
+          }
+          return buf.toString();
+        }),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 8 — Cash Flow Statement
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildCashFlowTab() {
+    if (_revenueLoading || _purchaseOrdersLoading) return _loadingWidget();
+
+    final invoices = _revenueInvoices;
+    final pos = _purchaseOrders;
+
+    final totalInflow = invoices
+        .where((i) => i.status == InvoiceStatus.paid)
+        .fold<double>(0, (s, i) => s + i.grandTotal);
+    final totalPending = invoices
+        .where((i) => i.status != InvoiceStatus.paid)
+        .fold<double>(0, (s, i) => s + i.grandTotal);
+    final totalOutflow = pos.fold<double>(0, (s, po) => s + po.grandTotal);
+    final netCashFlow = totalInflow - totalOutflow;
+
+    // Monthly cash flow
+    final monthlyIn = <String, double>{};
+    final monthlyOut = <String, double>{};
+    for (final inv in invoices.where((i) => i.status == InvoiceStatus.paid)) {
+      final key = DateFormat('MMM yy').format(inv.createdAt);
+      monthlyIn[key] = (monthlyIn[key] ?? 0) + inv.grandTotal;
+    }
+    for (final po in pos) {
+      final key = DateFormat('MMM yy').format(po.createdAt);
+      monthlyOut[key] = (monthlyOut[key] ?? 0) + po.grandTotal;
+    }
+    final allMonths = {...monthlyIn.keys, ...monthlyOut.keys}.toList()..sort();
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _buildPeriodPicker(),
+        const SizedBox(height: 16),
+
+        // Net Cash Flow hero
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: netCashFlow >= 0
+                ? kSignatureGradient
+                : const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [kWhisperShadow],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Net Cash Flow', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70)),
+                    const SizedBox(height: 8),
+                    Text(
+                      _currencyFmt.format(netCashFlow.abs()),
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        netCashFlow >= 0 ? 'Positive Cash Flow' : 'Negative Cash Flow',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  netCashFlow >= 0 ? Icons.account_balance_wallet_rounded : Icons.warning_rounded,
+                  size: 30,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Inflow / Outflow / Pending cards
+        Row(
+          children: [
+            Expanded(
+              child: _miniStatCard(
+                label: 'Inflow (Paid)',
+                value: totalInflow,
+                color: _kPaid,
+                bgColor: _kPaidBg,
+                icon: Icons.arrow_downward_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniStatCard(
+                label: 'Outflow (Cost)',
+                value: totalOutflow,
+                color: _kRed,
+                bgColor: _kRedBg,
+                icon: Icons.arrow_upward_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _miniStatCard(
+          label: 'Pending Receivables',
+          value: totalPending,
+          color: _kAmber,
+          bgColor: _kAmberBg,
+          icon: Icons.hourglass_empty_rounded,
+        ),
+        const SizedBox(height: 16),
+
+        // Monthly cash flow breakdown
+        if (allMonths.isNotEmpty) ...[
+          _sectionLabel('Monthly Cash Flow'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: _cardDeco(),
+            child: Column(
+              children: allMonths.map((month) {
+                final inVal = monthlyIn[month] ?? 0;
+                final outVal = monthlyOut[month] ?? 0;
+                final net = inVal - outVal;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(month, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: net >= 0 ? _kPaidBg : _kRedBg,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${net >= 0 ? '+' : ''}${_currencyFmt.format(net)}',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: net >= 0 ? _kPaid : _kRed),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('In', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                                Text(_currencyFmt.format(inVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kPaid)),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('Out', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                                Text(_currencyFmt.format(outVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kRed)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        // WhatsApp share
+        _buildWhatsAppShareButton('Cash Flow Report', () {
+          final buf = StringBuffer('*Cash Flow Report*\n\n');
+          buf.writeln('Net Cash Flow: ${_currencyFmt.format(netCashFlow)}');
+          buf.writeln('Inflow (Paid): ${_currencyFmt.format(totalInflow)}');
+          buf.writeln('Outflow (Cost): ${_currencyFmt.format(totalOutflow)}');
+          buf.writeln('Pending: ${_currencyFmt.format(totalPending)}');
+          if (allMonths.isNotEmpty) {
+            buf.writeln('\n*Monthly Breakdown:*');
+            for (final month in allMonths) {
+              final inVal = monthlyIn[month] ?? 0;
+              final outVal = monthlyOut[month] ?? 0;
+              buf.writeln('$month: In ${_currencyFmt.format(inVal)} | Out ${_currencyFmt.format(outVal)}');
+            }
+          }
+          return buf.toString();
+        }),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ── WhatsApp Share Button ──────────────────────────────────────────────────
+
+  Widget _buildWhatsAppShareButton(String reportName, String Function() contentBuilder) {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              final text = contentBuilder();
+              final encoded = Uri.encodeComponent(text);
+              final whatsappUrl = Uri.parse('https://wa.me/?text=$encoded');
+              launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF25D366),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_rounded, size: 18, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Share via WhatsApp', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: () {
+            final text = contentBuilder();
+            SharePlus.instance.share(ShareParams(text: text, subject: reportName));
+          },
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.share_rounded, size: 18, color: kOnSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Shared UI helpers ─────────────────────────────────────────────────────
 
   Widget _emptyState({
     required IconData icon,
