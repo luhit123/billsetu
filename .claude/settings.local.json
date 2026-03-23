@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(keytool:*)",
+      "Bash(flutter pub:*)",
+      "Bash(dart analyze:*)",
+      "Bash(flutter analyze:*)",
+      "Bash(curl -L \"https://github.com/google/fonts/raw/main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf\" -o /Users/northeo/Desktop/billeasy/assets/fonts/NotoSans-Regular.ttf)",
+      "WebFetch(domain:stitch.withgoogle.com)",
+      "Bash(firebase deploy:*)",
+      "Bash(sed -i '' '/^const _kPrimaryDeep/d' /Users/northeo/Desktop/billeasy/lib/screens/home_screen.dart)",
+      "Bash(sed -i '' '/^const _kCardGlow/d' /Users/northeo/Desktop/billeasy/lib/screens/home_screen.dart)",
+      "Bash(sed -i '' '/^const _kChipUnselectedBg/d' /Users/northeo/Desktop/billeasy/lib/screens/customers_screen.dart)",
+      "Bash(ls -la /Users/northeo/Desktop/billeasy/lib/screens/subscription*.dart)",
+      "Bash(python3 -c \"import sys,json; data=[json.loads\\(l\\) for l in sys.stdin if l.strip\\(\\)]; last=data[-1] if data else {}; msg=last.get\\(''''message'''',{}\\); content=msg.get\\(''''content'''',[]\\) if isinstance\\(msg,dict\\) else []; print\\(content[0].get\\(''''text'''',''''working...''''\\)[:200] if content and content[0].get\\(''''type''''\\)==''''text'''' else ''''working...''''\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(d.get\\(''''result'''',''''not done yet''''\\)[:3000]\\)\")",
+      "Bash(grep -r http:// /Users/northeo/Desktop/billeasy/lib/ --include=*.dart)",
+      "Bash(grep -rn \"AIzaSy\\\\|firebase\\\\|apiKey\\\\|api_key\\\\|secret\\\\|password\\\\|ACCESS_KEY\" /Users/northeo/Desktop/billeasy/lib/ --include=*.dart)",
+      "Bash(firebase projects:list)",
+      "Bash(npm install:*)",
+      "Bash(firebase firestore:indexes)",
+      "Bash(python3 -c \"import sys,json; data=json.load\\(sys.stdin\\); [print\\(json.dumps\\(i, indent=2\\)\\) for i in data[''''indexes''''] if i[''''collectionGroup''''] in \\(''''products'''',''''clients''''\\)]\")",
+      "Bash(flutter build:*)",
+      "Bash(grep -r razorpay /Users/northeo/Desktop/billeasy/pubspec.yaml /Users/northeo/Desktop/billeasy/lib --include=*.dart)",
+      "Bash(openssl rand:*)",
+      "Bash(firebase functions:secrets:set RAZORPAY_WEBHOOK_SECRET --data-file=-)",
+      "Bash(ls /Users/northeo/Desktop/billeasy/firebase* /Users/northeo/Desktop/billeasy/storage.rules)",
+      "Bash(ls /Users/northeo/Desktop/billeasy/*.rules)",
+      "Bash(grep -E \"\\\\.\\(dart|js\\)$\")",
+      "Bash(grep -n \"canCreateInvoice\\\\|canAddCustomer\\\\|canAddProduct\\\\|canShareWhatsApp\\\\|canUseTemplate\" /Users/northeo/Desktop/billeasy/lib/screens/*.dart)",
+      "Bash(xargs cat:*)",
+      "Bash(node --check index.js)"
+    ]
+  }
+}

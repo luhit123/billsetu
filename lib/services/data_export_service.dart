@@ -52,10 +52,7 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/invoices_export.csv');
-    await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)], text: 'Invoices Export');
+    await _shareAndCleanup(csv, 'invoices_export.csv', 'Invoices Export');
   }
 
   Future<void> exportCustomersCSV() async {
@@ -83,10 +80,7 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/customers_export.csv');
-    await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)], text: 'Customers Export');
+    await _shareAndCleanup(csv, 'customers_export.csv', 'Customers Export');
   }
 
   Future<void> exportProductsCSV() async {
@@ -128,9 +122,20 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
+    await _shareAndCleanup(csv, 'products_export.csv', 'Products Export');
+  }
+
+  /// Write CSV to a temp file, share it, then delete the file.
+  Future<void> _shareAndCleanup(String csv, String fileName, String subject) async {
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/products_export.csv');
-    await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)], text: 'Products Export');
+    final file = File('${dir.path}/$fileName');
+    try {
+      await file.writeAsString(csv);
+      await Share.shareXFiles([XFile(file.path)], text: subject);
+    } finally {
+      try {
+        if (await file.exists()) await file.delete();
+      } catch (_) {}
+    }
   }
 }

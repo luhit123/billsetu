@@ -173,13 +173,11 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
       String message;
       switch (e.code) {
         case 'invalid-verification-code':
-          message = 'Invalid OTP. Please check and try again.';
-          break;
         case 'session-expired':
-          message = 'OTP has expired. Please request a new one.';
+          message = 'Invalid or expired OTP. Please try again.';
           break;
         default:
-          message = e.message ?? 'Verification failed. Please try again.';
+          message = 'Verification failed. Please try again.';
       }
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
@@ -187,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Verification failed: $e')),
+        const SnackBar(content: Text('Verification failed. Please try again.')),
       );
     } finally {
       if (mounted) setState(() => _isVerifyingOtp = false);

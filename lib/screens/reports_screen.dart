@@ -1,13 +1,20 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/purchase_order_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart' show NumberFormat;
+import 'package:intl/intl.dart' show DateFormat, NumberFormat;
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // Status colours (kept as semantic)
 const _kPaid = Color(0xFF22C55E);
@@ -65,13 +72,18 @@ class _ReportsScreenState extends State<ReportsScreen>
   bool _productsLoading = true;
   Object? _productsError;
 
+  // ── Profit & Loss tab state ───────────────────────────────────────────────
+  List<PurchaseOrder> _purchaseOrders = [];
+  bool _purchaseOrdersLoading = true;
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 8, vsync: this);
     _subscribeRevenue();
     _subscribeReceivables();
     _subscribeProducts();
+    _loadPurchaseOrders();
   }
 
   @override
@@ -195,6 +207,40 @@ class _ReportsScreenState extends State<ReportsScreen>
             });
           },
         );
+  }
+
+  // ── Purchase orders for Profit & Loss ──────────────────────────────────────
+
+  Future<void> _loadPurchaseOrders() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final (start, end) = _dateRange;
+    try {
+      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('purchaseOrders')
+          .orderBy('createdAt', descending: true);
+      if (start != null) {
+        q = q.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start));
+      }
+      if (end != null) {
+        q = q.where('createdAt', isLessThan: Timestamp.fromDate(end));
+      }
+      final snap = await q.limit(500).get();
+      if (!mounted) return;
+      setState(() {
+        _purchaseOrders = snap.docs
+            .map((d) => PurchaseOrder.fromMap(d.data(), docId: d.id))
+            .where((po) => po.status == PurchaseOrderStatus.received)
+            .toList();
+        _purchaseOrdersLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _purchaseOrdersLoading = false);
+    }
   }
 
   // ── Product aggregation ────────────────────────────────────────────────────
@@ -325,10 +371,17 @@ class _ReportsScreenState extends State<ReportsScreen>
             fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Revenue'),
             Tab(text: 'Receivables'),
+            Tab(text: 'Party-wise'),
             Tab(text: 'Products'),
+            Tab(text: 'Profit & Loss'),
+            Tab(text: 'Sales Trend'),
+            Tab(text: 'Top Sellers'),
+            Tab(text: 'Cash Flow'),
           ],
         ),
       ),
@@ -337,7 +390,12 @@ class _ReportsScreenState extends State<ReportsScreen>
         children: [
           _buildRevenueTab(),
           _buildReceivablesTab(),
+          _buildPartyWiseTab(),
           _buildProductsTab(),
+          _buildProfitLossTab(),
+          _buildSalesTrendTab(),
+          _buildTopSellersTab(),
+          _buildCashFlowTab(),
         ],
       ),
     );
@@ -406,6 +464,23 @@ class _ReportsScreenState extends State<ReportsScreen>
           ],
         ),
         const SizedBox(height: 16),
+
+        // ── Payment Status Visual ──
+        if (invoices.isNotEmpty) ...[
+          _sectionLabel('Payment Status'),
+          _buildPaymentStatusChart(invoices),
+          const SizedBox(height: 16),
+
+          // ── Monthly Revenue Bars ──
+          _sectionLabel('Monthly Breakdown'),
+          _buildMonthlyRevenueChart(invoices),
+          const SizedBox(height: 16),
+
+          // ── Collection Rate ──
+          _sectionLabel('Collection Rate'),
+          _buildCollectionRateCard(collected, totalRevenue),
+          const SizedBox(height: 16),
+        ],
 
         // Top 5 Customers
         if (top5.isNotEmpty) ...[
@@ -527,6 +602,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 if (_period == period) return;
                 setState(() => _period = period);
                 _subscribeRevenue();
+                _loadPurchaseOrders();
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
@@ -889,6 +965,502 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 3 — Party-wise Outstanding
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPartyWiseTab() {
+    if (_receivablesLoading) return _loadingWidget();
+    if (_receivablesError != null) {
+      return _errorWidget('$_receivablesError', _subscribeReceivables);
+    }
+
+    // Aggregate outstanding by customer
+    final partyMap = <String, _PartyOutstanding>{};
+    for (final inv in _receivablesInvoices) {
+      final name = inv.clientName.isEmpty ? 'Unknown' : inv.clientName;
+      final party = partyMap.putIfAbsent(name, () => _PartyOutstanding(name));
+      party.totalOutstanding += inv.grandTotal;
+      party.invoiceCount += 1;
+      final days = DateTime.now().difference(inv.createdAt).inDays;
+      if (days > party.oldestDays) party.oldestDays = days;
+      party.invoices.add(inv);
+    }
+
+    final parties = partyMap.values.toList()
+      ..sort((a, b) => b.totalOutstanding.compareTo(a.totalOutstanding));
+
+    if (parties.isEmpty) {
+      return _emptyState(
+        icon: Icons.check_circle_outline_rounded,
+        iconColor: const Color(0xFF34C759),
+        title: 'No outstanding dues!',
+        subtitle: 'All your customers have paid up.',
+      );
+    }
+
+    final grandTotal = parties.fold<double>(0, (s, p) => s + p.totalOutstanding);
+    final maxParty = parties.first.totalOutstanding.clamp(1.0, double.infinity);
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _heroCard(
+          label: 'Total Receivables',
+          value: grandTotal,
+          icon: Icons.people_outline_rounded,
+          subtitle: '${parties.length} customer${parties.length == 1 ? '' : 's'} with dues',
+          color: _kAmber,
+        ),
+        const SizedBox(height: 16),
+        _sectionLabel('Customer-wise Breakdown'),
+        ...parties.map((party) {
+          final barFraction = party.totalOutstanding / maxParty;
+          final urgencyColor = party.oldestDays > 90
+              ? _kRed
+              : party.oldestDays > 30
+                  ? _kAmber
+                  : kPrimary;
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceLowest,
+              borderRadius: BorderRadius.circular(14),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        party.name,
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      _currencyFmt.format(party.totalOutstanding),
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: urgencyColor),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: barFraction,
+                    minHeight: 5,
+                    backgroundColor: kSurfaceContainerLow,
+                    valueColor: AlwaysStoppedAnimation(urgencyColor),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    _statPill('${party.invoiceCount} invoice${party.invoiceCount == 1 ? '' : 's'}'),
+                    const SizedBox(width: 6),
+                    _statPill('Oldest: ${party.oldestDays}d'),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 5 — Profit & Loss
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildProfitLossTab() {
+    if (_revenueLoading || _purchaseOrdersLoading) return _loadingWidget();
+
+    final totalSales = _revenueInvoices.fold<double>(0, (s, inv) => s + inv.grandTotal);
+    final totalPurchases = _purchaseOrders.fold<double>(0, (s, po) => s + po.grandTotal);
+    final grossProfit = totalSales - totalPurchases;
+    final margin = totalSales > 0 ? (grossProfit / totalSales * 100) : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _buildPeriodPicker(),
+        const SizedBox(height: 16),
+
+        // Gross Profit Hero
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: grossProfit >= 0 ? kSignatureGradient : const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [kWhisperShadow],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      grossProfit >= 0 ? 'Gross Profit' : 'Net Loss',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _currencyFmt.format(grossProfit.abs()),
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${margin.toStringAsFixed(1)}% margin',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  grossProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                  size: 30, color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Sales vs Purchases visual bar
+        _sectionLabel('Breakdown'),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _cardDeco(),
+          child: Column(
+            children: [
+              _plRow('Total Sales (Revenue)', totalSales, kPrimary, Icons.arrow_upward_rounded),
+              const SizedBox(height: 14),
+              _plRow('Total Purchases (Cost)', totalPurchases, const Color(0xFFEF4444), Icons.arrow_downward_rounded),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Container(height: 1, color: kSurfaceContainerLow),
+              ),
+              _plRow(
+                grossProfit >= 0 ? 'Gross Profit' : 'Net Loss',
+                grossProfit.abs(),
+                grossProfit >= 0 ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
+                grossProfit >= 0 ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded,
+                bold: true,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Visual comparison bar
+        if (totalSales > 0 || totalPurchases > 0) ...[
+          _sectionLabel('Visual Comparison'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _cardDeco(),
+            child: Column(
+              children: [
+                _visualBar('Sales', totalSales, kPrimary, totalSales, totalPurchases),
+                const SizedBox(height: 12),
+                _visualBar('Purchases', totalPurchases, const Color(0xFFEF4444), totalSales, totalPurchases),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+
+        // Summary stats
+        Row(
+          children: [
+            Expanded(
+              child: _miniStatCard(
+                label: 'Invoices',
+                value: _revenueInvoices.length.toDouble(),
+                color: kPrimary,
+                bgColor: kPrimaryContainer,
+                icon: Icons.receipt_long_rounded,
+                isCount: true,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniStatCard(
+                label: 'Purchase Orders',
+                value: _purchaseOrders.length.toDouble(),
+                color: const Color(0xFF7C3AED),
+                bgColor: const Color(0xFFEDE9FE),
+                icon: Icons.inventory_2_outlined,
+                isCount: true,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  Widget _plRow(String label, double value, Color color, IconData icon, {bool bold = false}) {
+    return Row(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+              color: kOnSurface,
+            ),
+          ),
+        ),
+        Text(
+          _currencyFmt.format(value),
+          style: TextStyle(
+            fontSize: bold ? 16 : 14,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _visualBar(String label, double value, Color color, double sales, double purchases) {
+    final maxVal = math.max(sales, purchases).clamp(1.0, double.infinity);
+    final fraction = value / maxVal;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+            const Spacer(),
+            Text(_currencyFmt.format(value), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            value: fraction,
+            minHeight: 12,
+            backgroundColor: kSurfaceContainerLow,
+            valueColor: AlwaysStoppedAnimation(color),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VISUAL CHARTS
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildPaymentStatusChart(List<Invoice> invoices) {
+    final paid = invoices.where((i) => i.status == InvoiceStatus.paid).length;
+    final pending = invoices.where((i) => i.status == InvoiceStatus.pending).length;
+    final overdue = invoices.where((i) => i.status == InvoiceStatus.overdue).length;
+    final total = invoices.length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDeco(),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 100,
+            height: 100,
+            child: CustomPaint(
+              painter: _DonutChartPainter(
+                segments: [
+                  _DonutSegment(paid / total, _kPaid),
+                  _DonutSegment(pending / total, _kAmber),
+                  _DonutSegment(overdue / total, _kRed),
+                ],
+              ),
+              child: Center(
+                child: Text(
+                  '$total',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kOnSurface),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _legendRow('Paid', paid, _kPaid),
+                const SizedBox(height: 10),
+                _legendRow('Pending', pending, _kAmber),
+                const SizedBox(height: 10),
+                _legendRow('Overdue', overdue, _kRed),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _legendRow(String label, int count, Color color) {
+    return Row(
+      children: [
+        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 8),
+        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+        const Spacer(),
+        Text('$count', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+      ],
+    );
+  }
+
+  Widget _buildMonthlyRevenueChart(List<Invoice> invoices) {
+    // Group invoices by month
+    final monthMap = <String, double>{};
+    for (final inv in invoices) {
+      final key = '${inv.createdAt.year}-${inv.createdAt.month.toString().padLeft(2, '0')}';
+      monthMap[key] = (monthMap[key] ?? 0) + inv.grandTotal;
+    }
+
+    if (monthMap.isEmpty) return const SizedBox.shrink();
+
+    final sortedKeys = monthMap.keys.toList()..sort();
+    final maxVal = monthMap.values.fold<double>(0, (a, b) => math.max(a, b)).clamp(1.0, double.infinity);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDeco(),
+      child: Column(
+        children: sortedKeys.map((key) {
+          final parts = key.split('-');
+          final monthIdx = int.parse(parts[1]) - 1;
+          final label = '${monthNames[monthIdx]} ${parts[0].substring(2)}';
+          final value = monthMap[key]!;
+          final fraction = value / maxVal;
+
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(
+                      width: 50,
+                      child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: fraction,
+                          minHeight: 16,
+                          backgroundColor: kSurfaceContainerLow,
+                          valueColor: const AlwaysStoppedAnimation(kPrimary),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 65,
+                      child: Text(
+                        _currencyFmt.format(value),
+                        textAlign: TextAlign.right,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildCollectionRateCard(double collected, double total) {
+    final rate = total > 0 ? (collected / total * 100) : 0.0;
+    final rateColor = rate >= 80 ? _kPaid : rate >= 50 ? _kAmber : _kRed;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDeco(),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 70,
+            height: 70,
+            child: CustomPaint(
+              painter: _RingChartPainter(
+                fraction: rate / 100,
+                color: rateColor,
+                bgColor: rateColor.withValues(alpha: 0.15),
+              ),
+              child: Center(
+                child: Text(
+                  '${rate.toStringAsFixed(0)}%',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: rateColor),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Collection Rate', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface)),
+                const SizedBox(height: 4),
+                Text(
+                  '${_currencyFmt.format(collected)} of ${_currencyFmt.format(total)} collected',
+                  style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  rate >= 80 ? 'Excellent collection!' : rate >= 50 ? 'Follow up on pending invoices' : 'Needs attention — many unpaid invoices',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: rateColor),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _statPill(String label) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -992,6 +1564,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     required Color color,
     required Color bgColor,
     required IconData icon,
+    bool isCount = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1005,7 +1578,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           Icon(icon, size: 18, color: color),
           const SizedBox(height: 8),
           Text(
-            _currencyFmt.format(value),
+            isCount ? value.toInt().toString() : _currencyFmt.format(value),
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
@@ -1109,6 +1682,624 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 6 — Sales Trend
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildSalesTrendTab() {
+    if (_revenueLoading) return _loadingWidget();
+    if (_revenueError != null) {
+      return _errorWidget('$_revenueError', _subscribeRevenue);
+    }
+
+    final invoices = _revenueInvoices;
+    if (invoices.isEmpty) {
+      return _emptyState(
+        icon: Icons.show_chart_rounded,
+        iconColor: const Color(0xFF3B82F6),
+        title: 'No sales data',
+        subtitle: 'Create invoices to see your sales trend.',
+      );
+    }
+
+    // Group by day
+    final dayFormat = DateFormat('dd MMM');
+    final dayMap = <String, double>{};
+    final dayKeys = <String, DateTime>{};
+    for (final inv in invoices) {
+      final key = DateFormat('yyyy-MM-dd').format(inv.createdAt);
+      dayMap[key] = (dayMap[key] ?? 0) + inv.grandTotal;
+      dayKeys.putIfAbsent(key, () => inv.createdAt);
+    }
+    final sortedDays = dayMap.keys.toList()..sort();
+
+    // Group by week
+    final weekMap = <String, double>{};
+    for (final inv in invoices) {
+      final weekStart = inv.createdAt.subtract(Duration(days: inv.createdAt.weekday - 1));
+      final key = DateFormat('dd MMM').format(weekStart);
+      weekMap[key] = (weekMap[key] ?? 0) + inv.grandTotal;
+    }
+    final sortedWeeks = weekMap.keys.toList();
+
+    // Group by month
+    final monthMap = <String, double>{};
+    for (final inv in invoices) {
+      final key = DateFormat('MMM yy').format(inv.createdAt);
+      monthMap[key] = (monthMap[key] ?? 0) + inv.grandTotal;
+    }
+
+    // Calculate growth
+    final totalRevenue = invoices.fold<double>(0, (s, i) => s + i.grandTotal);
+    final avgDaily = sortedDays.isNotEmpty ? totalRevenue / sortedDays.length : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _buildPeriodPicker(),
+        const SizedBox(height: 16),
+
+        // Summary cards
+        Row(
+          children: [
+            Expanded(
+              child: _miniStatCard(
+                label: 'Total Revenue',
+                value: totalRevenue,
+                color: kPrimary,
+                bgColor: kPrimaryContainer,
+                icon: Icons.trending_up_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniStatCard(
+                label: 'Avg / Day',
+                value: avgDaily,
+                color: const Color(0xFF3B82F6),
+                bgColor: const Color(0xFFDBEAFE),
+                icon: Icons.calendar_today_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Daily trend line chart (visual bars)
+        _sectionLabel('Daily Revenue'),
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: _cardDeco(),
+          child: Column(
+            children: () {
+              final maxVal = dayMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+              final recentDays = sortedDays.length > 14 ? sortedDays.sublist(sortedDays.length - 14) : sortedDays;
+              return recentDays.map((key) {
+                final value = dayMap[key]!;
+                final fraction = value / maxVal;
+                final label = dayFormat.format(dayKeys[key]!);
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 52,
+                        child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                      ),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(3),
+                          child: LinearProgressIndicator(
+                            value: fraction,
+                            minHeight: 14,
+                            backgroundColor: kSurfaceContainerLow,
+                            valueColor: const AlwaysStoppedAnimation(Color(0xFF3B82F6)),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 60,
+                        child: Text(
+                          _currencyFmt.format(value),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: kOnSurface),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList();
+            }(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Monthly breakdown
+        if (monthMap.length > 1) ...[
+          _sectionLabel('Monthly Trend'),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: _cardDeco(),
+            child: Column(
+              children: () {
+                final maxVal = monthMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+                return monthMap.entries.map((e) {
+                  final fraction = e.value / maxVal;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: 52,
+                          child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                        ),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: fraction,
+                              minHeight: 16,
+                              backgroundColor: kSurfaceContainerLow,
+                              valueColor: const AlwaysStoppedAnimation(kPrimary),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          width: 65,
+                          child: Text(
+                            _currencyFmt.format(e.value),
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList();
+              }(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 7 — Top Sellers (Best/Slow Movers)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildTopSellersTab() {
+    if (_productsLoading) return _loadingWidget();
+    if (_productsError != null) {
+      return _errorWidget('$_productsError', _subscribeProducts);
+    }
+
+    final stats = _aggregateProducts();
+    if (stats.isEmpty) {
+      return _emptyState(
+        icon: Icons.star_outline_rounded,
+        iconColor: const Color(0xFFFF9500),
+        title: 'No product data',
+        subtitle: 'Create invoices to see your best and slow sellers.',
+      );
+    }
+
+    final topSellers = stats.take(10).toList();
+    final slowMovers = stats.length > 5 ? stats.reversed.take(5).toList() : <_ProductStat>[];
+    final totalRevenue = stats.fold<double>(0, (s, p) => s + p.totalRevenue);
+    final maxRev = topSellers.isNotEmpty ? topSellers.first.totalRevenue.clamp(1.0, double.infinity) : 1.0;
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        // Top sellers header
+        _heroCard(
+          label: 'Product Revenue',
+          value: totalRevenue,
+          icon: Icons.star_rounded,
+          subtitle: '${stats.length} product${stats.length == 1 ? '' : 's'} sold',
+        ),
+        const SizedBox(height: 16),
+
+        // Best sellers
+        _sectionLabel('Best Sellers'),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: _cardDeco(),
+          child: Column(
+            children: topSellers.asMap().entries.map((e) {
+              final rank = e.key + 1;
+              final p = e.value;
+              final barFraction = p.totalRevenue / maxRev;
+              final share = totalRevenue > 0 ? (p.totalRevenue / totalRevenue * 100) : 0.0;
+
+              return Padding(
+                padding: EdgeInsets.only(bottom: rank < topSellers.length ? 12 : 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: rank <= 3 ? kPrimary : kSurfaceContainerLow,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '$rank',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: rank <= 3 ? Colors.white : kOnSurfaceVariant),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                        ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
+                            Text('${share.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: barFraction,
+                        minHeight: 4,
+                        backgroundColor: kSurfaceContainerLow,
+                        valueColor: const AlwaysStoppedAnimation(kPrimary),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        _statPill('${p.timesInvoiced}x sold'),
+                        const SizedBox(width: 6),
+                        _statPill('Qty: ${_formatQty(p.totalQty)}'),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Slow movers
+        if (slowMovers.isNotEmpty) ...[
+          _sectionLabel('Slow Movers'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _kRedBg,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [kSubtleShadow],
+            ),
+            child: Column(
+              children: slowMovers.asMap().entries.map((e) {
+                final p = e.value;
+                final isLast = e.key == slowMovers.length - 1;
+                return Padding(
+                  padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.trending_down_rounded, size: 16, color: _kRed),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _kRed)),
+                          Text('${p.timesInvoiced}x sold', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        // WhatsApp share button
+        _buildWhatsAppShareButton('Top Sellers Report', () {
+          final buf = StringBuffer('*Top Sellers Report*\n\n');
+          for (var i = 0; i < topSellers.length; i++) {
+            final p = topSellers[i];
+            buf.writeln('${i + 1}. ${p.name}');
+            buf.writeln('   Revenue: ${_currencyFmt.format(p.totalRevenue)}  |  Qty: ${_formatQty(p.totalQty)}');
+          }
+          if (slowMovers.isNotEmpty) {
+            buf.writeln('\n*Slow Movers:*');
+            for (final p in slowMovers) {
+              buf.writeln('- ${p.name}: ${_currencyFmt.format(p.totalRevenue)}');
+            }
+          }
+          return buf.toString();
+        }),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // TAB 8 — Cash Flow Statement
+  // ══════════════════════════════════════════════════════════════════════════
+
+  Widget _buildCashFlowTab() {
+    if (_revenueLoading || _purchaseOrdersLoading) return _loadingWidget();
+
+    final invoices = _revenueInvoices;
+    final pos = _purchaseOrders;
+
+    final totalInflow = invoices
+        .where((i) => i.status == InvoiceStatus.paid)
+        .fold<double>(0, (s, i) => s + i.grandTotal);
+    final totalPending = invoices
+        .where((i) => i.status != InvoiceStatus.paid)
+        .fold<double>(0, (s, i) => s + i.grandTotal);
+    final totalOutflow = pos.fold<double>(0, (s, po) => s + po.grandTotal);
+    final netCashFlow = totalInflow - totalOutflow;
+
+    // Monthly cash flow
+    final monthlyIn = <String, double>{};
+    final monthlyOut = <String, double>{};
+    for (final inv in invoices.where((i) => i.status == InvoiceStatus.paid)) {
+      final key = DateFormat('MMM yy').format(inv.createdAt);
+      monthlyIn[key] = (monthlyIn[key] ?? 0) + inv.grandTotal;
+    }
+    for (final po in pos) {
+      final key = DateFormat('MMM yy').format(po.createdAt);
+      monthlyOut[key] = (monthlyOut[key] ?? 0) + po.grandTotal;
+    }
+    final allMonths = {...monthlyIn.keys, ...monthlyOut.keys}.toList()..sort();
+
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      children: [
+        _buildPeriodPicker(),
+        const SizedBox(height: 16),
+
+        // Net Cash Flow hero
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: netCashFlow >= 0
+                ? kSignatureGradient
+                : const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [kWhisperShadow],
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Net Cash Flow', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70)),
+                    const SizedBox(height: 8),
+                    Text(
+                      _currencyFmt.format(netCashFlow.abs()),
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        netCashFlow >= 0 ? 'Positive Cash Flow' : 'Negative Cash Flow',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  netCashFlow >= 0 ? Icons.account_balance_wallet_rounded : Icons.warning_rounded,
+                  size: 30,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Inflow / Outflow / Pending cards
+        Row(
+          children: [
+            Expanded(
+              child: _miniStatCard(
+                label: 'Inflow (Paid)',
+                value: totalInflow,
+                color: _kPaid,
+                bgColor: _kPaidBg,
+                icon: Icons.arrow_downward_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _miniStatCard(
+                label: 'Outflow (Cost)',
+                value: totalOutflow,
+                color: _kRed,
+                bgColor: _kRedBg,
+                icon: Icons.arrow_upward_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _miniStatCard(
+          label: 'Pending Receivables',
+          value: totalPending,
+          color: _kAmber,
+          bgColor: _kAmberBg,
+          icon: Icons.hourglass_empty_rounded,
+        ),
+        const SizedBox(height: 16),
+
+        // Monthly cash flow breakdown
+        if (allMonths.isNotEmpty) ...[
+          _sectionLabel('Monthly Cash Flow'),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: _cardDeco(),
+            child: Column(
+              children: allMonths.map((month) {
+                final inVal = monthlyIn[month] ?? 0;
+                final outVal = monthlyOut[month] ?? 0;
+                final net = inVal - outVal;
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(month, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          const Spacer(),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: net >= 0 ? _kPaidBg : _kRedBg,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${net >= 0 ? '+' : ''}${_currencyFmt.format(net)}',
+                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: net >= 0 ? _kPaid : _kRed),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('In', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                                Text(_currencyFmt.format(inVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kPaid)),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                const Text('Out', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                                Text(_currencyFmt.format(outVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kRed)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
+        const SizedBox(height: 16),
+
+        // WhatsApp share
+        _buildWhatsAppShareButton('Cash Flow Report', () {
+          final buf = StringBuffer('*Cash Flow Report*\n\n');
+          buf.writeln('Net Cash Flow: ${_currencyFmt.format(netCashFlow)}');
+          buf.writeln('Inflow (Paid): ${_currencyFmt.format(totalInflow)}');
+          buf.writeln('Outflow (Cost): ${_currencyFmt.format(totalOutflow)}');
+          buf.writeln('Pending: ${_currencyFmt.format(totalPending)}');
+          if (allMonths.isNotEmpty) {
+            buf.writeln('\n*Monthly Breakdown:*');
+            for (final month in allMonths) {
+              final inVal = monthlyIn[month] ?? 0;
+              final outVal = monthlyOut[month] ?? 0;
+              buf.writeln('$month: In ${_currencyFmt.format(inVal)} | Out ${_currencyFmt.format(outVal)}');
+            }
+          }
+          return buf.toString();
+        }),
+        const SizedBox(height: 16),
+      ],
+    );
+  }
+
+  // ── WhatsApp Share Button ──────────────────────────────────────────────────
+
+  Widget _buildWhatsAppShareButton(String reportName, String Function() contentBuilder) {
+    return Row(
+      children: [
+        Expanded(
+          child: GestureDetector(
+            onTap: () {
+              final text = contentBuilder();
+              final encoded = Uri.encodeComponent(text);
+              final whatsappUrl = Uri.parse('https://wa.me/?text=$encoded');
+              launchUrl(whatsappUrl, mode: LaunchMode.externalApplication);
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF25D366),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.chat_rounded, size: 18, color: Colors.white),
+                  SizedBox(width: 8),
+                  Text('Share via WhatsApp', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: () {
+            final text = contentBuilder();
+            SharePlus.instance.share(ShareParams(text: text, subject: reportName));
+          },
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: kSurfaceContainerLow,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.share_rounded, size: 18, color: kOnSurfaceVariant),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Shared UI helpers ─────────────────────────────────────────────────────
+
   Widget _emptyState({
     required IconData icon,
     required String title,
@@ -1154,8 +2345,84 @@ class _ReportsScreenState extends State<ReportsScreen>
   }
 }
 
+// ── Party outstanding model ────────────────────────────────────────────────────
+class _PartyOutstanding {
+  _PartyOutstanding(this.name);
+  final String name;
+  double totalOutstanding = 0;
+  int invoiceCount = 0;
+  int oldestDays = 0;
+  final List<Invoice> invoices = [];
+}
+
 BoxDecoration _cardDeco() => BoxDecoration(
       color: kSurfaceLowest,
       borderRadius: BorderRadius.circular(16),
       boxShadow: const [kSubtleShadow],
     );
+
+// ── Donut Chart Painter ─────────────────────────────────────────────────────
+
+class _DonutSegment {
+  _DonutSegment(this.fraction, this.color);
+  final double fraction;
+  final Color color;
+}
+
+class _DonutChartPainter extends CustomPainter {
+  _DonutChartPainter({required this.segments});
+  final List<_DonutSegment> segments;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 14
+      ..strokeCap = StrokeCap.round;
+
+    // Background ring
+    paint.color = kSurfaceContainerLow;
+    canvas.drawArc(rect.deflate(7), 0, 2 * math.pi, false, paint);
+
+    // Segments
+    double startAngle = -math.pi / 2;
+    for (final seg in segments) {
+      if (seg.fraction <= 0) continue;
+      final sweepAngle = seg.fraction * 2 * math.pi;
+      paint.color = seg.color;
+      canvas.drawArc(rect.deflate(7), startAngle, sweepAngle, false, paint);
+      startAngle += sweepAngle;
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+// ── Ring Chart Painter ──────────────────────────────────────────────────────
+
+class _RingChartPainter extends CustomPainter {
+  _RingChartPainter({required this.fraction, required this.color, required this.bgColor});
+  final double fraction;
+  final Color color;
+  final Color bgColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 8
+      ..strokeCap = StrokeCap.round;
+
+    paint.color = bgColor;
+    canvas.drawArc(rect.deflate(4), 0, 2 * math.pi, false, paint);
+
+    paint.color = color;
+    canvas.drawArc(rect.deflate(4), -math.pi / 2, fraction.clamp(0, 1) * 2 * math.pi, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}

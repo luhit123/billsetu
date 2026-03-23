@@ -4,6 +4,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+
 import '../modals/payment.dart';
 import 'razorpay_checkout.dart';
 
@@ -126,12 +127,12 @@ class PaymentService {
           );
         }
       } catch (e) {
-        // Even if verification call fails, the webhook will still activate
-        // the plan. Show success optimistically since Razorpay confirmed it.
-        debugPrint('Verify call failed (webhook will handle): $e');
+        // Verification call failed — don't claim success.
+        // The webhook may still activate the plan later.
+        debugPrint('Verify call failed: $e');
         return PaymentResult(
-          success: true,
-          message: 'Plan activated successfully!',
+          success: false,
+          message: 'Payment received but verification pending. Your plan will activate shortly.',
           paymentId: rzpResult.paymentId,
         );
       }
@@ -143,7 +144,7 @@ class PaymentService {
       );
     } catch (e) {
       debugPrint('PaymentService error: $e');
-      return PaymentResult(success: false, message: 'Payment failed: $e');
+      return PaymentResult(success: false, message: 'Payment failed. Please try again.');
     } finally {
       _isProcessing = false;
     }
@@ -174,15 +175,13 @@ class PaymentService {
     if (uid == null) return false;
 
     try {
-      await FirebaseFirestore.instance
-          .collection('subscriptions')
-          .doc(uid)
-          .update({
-        'cancelAtPeriodEnd': false,
-        'updatedAt': Timestamp.fromDate(DateTime.now()),
-      });
-      return true;
+      final result = await _functions
+          .httpsCallable('reactivateSubscription')
+          .call({});
+      final data = result.data as Map<String, dynamic>;
+      return data['success'] == true;
     } catch (e) {
+      debugPrint('Reactivate error: $e');
       return false;
     }
   }

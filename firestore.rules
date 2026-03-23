@@ -262,13 +262,12 @@ service cloud.firestore {
       }
     }
 
-    // Subscription doc — client can read; write allowed in demo mode
-    // TODO: Remove client write access before production — use Cloud Functions only
+    // Subscription doc — client can read only; all writes via Cloud Functions
     match /subscriptions/{userId} {
-      allow read, write: if isOwner(userId);
+      allow read: if isOwner(userId);
 
       match /payments/{paymentId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwner(userId);
       }
     }
 
@@ -277,10 +276,14 @@ service cloud.firestore {
       allow read: if isSignedIn();
     }
 
-    // Shared invoice landing pages — public read, authenticated write
+    // Shared invoice landing pages — public read (needed for landing page),
+    // authenticated write only if the user owns the invoice
     match /shared_invoices/{shortCode} {
       allow read;
-      allow create, update: if isSignedIn();
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid;
     }
   }
 }

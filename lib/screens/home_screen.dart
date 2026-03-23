@@ -17,6 +17,7 @@ import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/screens/settings_screen.dart';
 import 'package:billeasy/screens/subscriptions_screen.dart';
+import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
@@ -24,6 +25,7 @@ import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -157,6 +159,10 @@ class _DashboardPageState extends State<_DashboardPage> {
   List<Invoice>? _injectedInvoices;
   Object? _injectedInvoicesError;
 
+  // Low stock alerts
+  List<Product> _lowStockProducts = [];
+  bool _lowStockLoading = true;
+
   /// Client-side filtered view: search applied on top of _allInvoices.
   List<Invoice> get _filteredInvoices {
     if (_searchQuery.isEmpty) return _allInvoices;
@@ -182,6 +188,7 @@ class _DashboardPageState extends State<_DashboardPage> {
       _subscribeToInvoices();
     }
     _refreshDashboardStream();
+    _loadLowStockProducts();
   }
 
   @override
@@ -339,6 +346,94 @@ class _DashboardPageState extends State<_DashboardPage> {
               ),
             ),
           ),
+
+          // ── Low Stock Alerts ──────────────────────────────────────
+          if (!_lowStockLoading && _lowStockProducts.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.inventory_2_outlined, size: 16, color: Color(0xFFB45309)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              'Low Stock Alert (${_lowStockProducts.length})',
+                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Color(0xFFB45309)),
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProductsScreen())),
+                            child: const Text('View All', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFF59E0B))),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ...(_lowStockProducts.take(5).map((p) {
+                        final isOutOfStock = p.currentStock <= 0;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: isOutOfStock ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  p.name,
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF78350F)),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isOutOfStock ? const Color(0xFFFEE2E2) : Colors.white,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Text(
+                                  isOutOfStock
+                                      ? 'Out of Stock'
+                                      : '${p.currentStock.toStringAsFixed(p.currentStock == p.currentStock.truncateToDouble() ? 0 : 1)} ${p.unit}',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: isOutOfStock ? const Color(0xFFEF4444) : const Color(0xFFB45309),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      })),
+                    ],
+                  ),
+                ),
+              ),
+            ),
 
           // ── Membership & Subscriptions Card ────────────────────────
           if (RemoteConfigService.instance.featureMembership)
@@ -671,6 +766,35 @@ class _DashboardPageState extends State<_DashboardPage> {
       setState(() => _dashboardSummaryStream = newStream);
     } else {
       _dashboardSummaryStream = newStream;
+    }
+  }
+
+  Future<void> _loadLowStockProducts() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      if (mounted) setState(() => _lowStockLoading = false);
+      return;
+    }
+    try {
+      final snap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('products')
+          .where('trackInventory', isEqualTo: true)
+          .get();
+      if (!mounted) return;
+      final products = snap.docs
+          .map((d) => Product.fromMap(d.data(), docId: d.id))
+          .where((p) => p.currentStock <= p.minStockAlert && p.minStockAlert > 0)
+          .toList()
+        ..sort((a, b) => a.currentStock.compareTo(b.currentStock));
+      setState(() {
+        _lowStockProducts = products;
+        _lowStockLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _lowStockLoading = false);
     }
   }
 
