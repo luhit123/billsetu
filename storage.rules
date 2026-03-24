@@ -1,16 +1,16 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Invoice PDFs: authenticated read (shared links use signed download URLs), owner write
+    // Invoice PDFs: owner read/write only.
+    // Shared invoice links must use signed download URLs (time-limited),
+    // not rely on broad authenticated-read here.
     match /invoices/{ownerId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == ownerId;
+      allow read, write: if request.auth != null && request.auth.uid == ownerId;
     }
 
-    // User assets (logo, UPI QR): authenticated read, owner write
+    // User assets (logo, UPI QR): owner read/write only.
     match /users/{userId}/{allPaths=**} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
 
     // Default: deny all

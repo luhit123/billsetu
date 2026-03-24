@@ -14,6 +14,7 @@ import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -1394,6 +1395,37 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         gstRate: nu.parseDouble(row['gstRate']!.text.trim()) ?? _gstRate,
       );
     }).toList();
+
+    // Validate line-item amounts — all quantities and prices must be > 0,
+    // and GST rates must be one of the permitted values (0, 5, 12, 18, 28).
+    final allowedGstRates = {0.0, 5.0, 12.0, 18.0, 28.0};
+    for (final item in items) {
+      if (item.quantity <= 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Quantity must be greater than zero for all items.')),
+          );
+        }
+        return;
+      }
+      if (item.unitPrice < 0) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Unit price cannot be negative.')),
+          );
+        }
+        return;
+      }
+      if (!allowedGstRates.contains(item.gstRate)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('GST rate must be 0%, 5%, 12%, 18%, or 28%.')),
+          );
+        }
+        return;
+      }
+    }
+
     final selectedClient = _selectedClient!;
     final currentUser = FirebaseAuth.instance.currentUser;
 
@@ -1426,6 +1458,24 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     try {
       await _saveLastUsedGstSettings();
 
+      // Server-side plan limit check — authoritative validation that cannot be
+      // bypassed by manipulating client-side counters.
+      try {
+        await FirebaseFunctions.instance
+            .httpsCallable('checkInvoiceLimit')
+            .call();
+      } on FirebaseFunctionsException catch (e) {
+        if (!mounted) return;
+        setState(() => _isSaving = false);
+        await LimitReachedDialog.show(
+          context,
+          title: 'Invoice Limit Reached',
+          message: e.message ?? 'You have reached your invoice limit for this month.',
+          featureName: 'more invoices',
+        );
+        return;
+      }
+
       final invoiceNumber = await InvoiceNumberService()
           .reserveNextInvoiceNumber(year: invoiceDate.year);
 
@@ -1449,7 +1499,8 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       );
 
       final invoiceId = await FirebaseService().addInvoice(invoice);
-      await UsageTrackingService.instance.incrementInvoiceCount();
+      // Invoice count is incremented server-side by the syncInvoiceAnalytics
+      // Cloud Function trigger — no client write needed.
       if (!mounted) {
         return;
       }

@@ -743,7 +743,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     bool includePayment = true,
   }) async {
     final resolvedProfile = await _resolveProfile(profile);
-    return InvoicePdfService().buildInvoicePdf(
+    return InvoicePdfService().buildInvoicePdfBackground(
       invoice: widget.invoice,
       profile: resolvedProfile,
       language: language,

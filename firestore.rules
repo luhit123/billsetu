@@ -251,14 +251,11 @@ service cloud.firestore {
         }
       }
 
-      // Usage counters — client can read and increment (never decrement)
+      // Usage counters — read-only for the client; all writes go through
+      // Cloud Functions (syncInvoiceAnalytics trigger + trackWhatsAppShare callable)
+      // so counters cannot be manipulated client-side to bypass plan limits.
       match /usage/{periodKey} {
         allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
-          && request.resource.data.invoicesCreated is int
-          && request.resource.data.invoicesCreated >= 0;
-        allow update: if isOwner(userId)
-          && request.resource.data.invoicesCreated >= resource.data.invoicesCreated;
       }
     }
 

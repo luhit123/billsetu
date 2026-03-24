@@ -132,6 +132,19 @@ exports.syncInvoiceAnalytics = onDocumentWritten('invoices/{invoiceId}', async (
       return;
     }
 
+    // If this is a brand-new invoice, increment the owner's usage counter.
+    // Doing this server-side (in the trigger) ensures clients cannot fake the count.
+    if (!beforeData && afterData && afterData.ownerId) {
+      const ownerId = afterData.ownerId;
+      const createdAt = afterData.createdAt ? afterData.createdAt.toDate() : new Date();
+      const periodKey = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, '0')}`;
+      const usageRef = db.collection('users').doc(ownerId).collection('usage').doc(periodKey);
+      await usageRef.set({
+        invoicesCreated: FieldValue.increment(1),
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
     // Early exit: skip expensive aggregation when no analytics-relevant fields changed.
     if (!analyticsFieldsChanged(beforeData, afterData)) {
       logger.info('syncInvoiceAnalytics: skipping — no analytics-relevant fields changed', {
@@ -171,25 +184,38 @@ exports.cleanupInvoicesAfterClientDelete = onDocumentDeleted(
       clientId,
     );
 
-    const invoicesSnapshot = await db
+    // Paginate to avoid loading an unbounded number of invoices into memory.
+    const PAGE_SIZE = 500;
+    const baseQuery = db
       .collection('invoices')
       .where('ownerId', '==', ownerId)
       .where('clientId', '==', clientId)
-      .get();
+      .limit(PAGE_SIZE);
 
     const writer = db.bulkWriter();
     let updatedCount = 0;
+    let lastDoc = null;
 
-    invoicesSnapshot.forEach((doc) => {
-      updatedCount += 1;
-      writer.set(doc.ref, {
-        clientId: '',
-        clientDeleted: true,
-        clientDeletedAt: FieldValue.serverTimestamp(),
-        orphanedClientId: clientId,
-        orphanedClientName: deletedClientName,
-      }, { merge: true });
-    });
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const query = lastDoc ? baseQuery.startAfter(lastDoc) : baseQuery;
+      const invoicesSnapshot = await query.get();
+      if (invoicesSnapshot.empty) break;
+
+      invoicesSnapshot.forEach((doc) => {
+        updatedCount += 1;
+        writer.set(doc.ref, {
+          clientId: '',
+          clientDeleted: true,
+          clientDeletedAt: FieldValue.serverTimestamp(),
+          orphanedClientId: clientId,
+          orphanedClientName: deletedClientName,
+        }, { merge: true });
+      });
+
+      lastDoc = invoicesSnapshot.docs[invoicesSnapshot.docs.length - 1];
+      if (invoicesSnapshot.size < PAGE_SIZE) break;
+    }
 
     await writer.close();
 
@@ -1298,6 +1324,28 @@ async function ensureRazorpayPlan(planId, billingCycle) {
   return rzpPlan.id;
 }
 
+// ── Rate-limiting helper ──────────────────────────────────────────────────────
+/**
+ * Enforce a per-user cooldown for sensitive callable functions.
+ * Throws HttpsError 'resource-exhausted' if the user called within cooldownMs.
+ */
+async function enforceRateLimit(uid, actionKey, cooldownMs) {
+  const rateLimitRef = db.collection('_rateLimits').doc(`${uid}_${actionKey}`);
+  const now = Date.now();
+  const doc = await rateLimitRef.get();
+  if (doc.exists) {
+    const lastCall = doc.data().lastCall || 0;
+    if (now - lastCall < cooldownMs) {
+      const waitSecs = Math.ceil((cooldownMs - (now - lastCall)) / 1000);
+      throw new HttpsError(
+        'resource-exhausted',
+        `Too many requests. Please wait ${waitSecs} seconds before trying again.`,
+      );
+    }
+  }
+  await rateLimitRef.set({ lastCall: now, uid }, { merge: true });
+}
+
 /**
  * Creates a Razorpay subscription for the user.
  * Returns the subscription ID for client-side checkout.
@@ -1309,6 +1357,9 @@ exports.createSubscription = onCall(
     if (!uid) {
       throw new HttpsError('unauthenticated', 'Sign in required.');
     }
+
+    // Rate limit: max 1 subscription creation attempt per 30 seconds per user.
+    await enforceRateLimit(uid, 'createSubscription', 30_000);
 
     const { planId, billingCycle } = request.data || {};
     if (!planId || planId !== 'pro') {
@@ -1510,6 +1561,9 @@ exports.verifyPayment = onCall(
       throw new HttpsError('unauthenticated', 'Sign in required.');
     }
 
+    // Rate limit: max 1 verify attempt per 10 seconds per user.
+    await enforceRateLimit(uid, 'verifyPayment', 10_000);
+
     const { razorpayPaymentId, razorpaySubscriptionId, razorpaySignature } = request.data || {};
     if (!razorpayPaymentId || !razorpaySubscriptionId || !razorpaySignature) {
       throw new HttpsError('invalid-argument', 'Missing payment verification parameters.');
@@ -1554,6 +1608,104 @@ exports.verifyPayment = onCall(
     return { verified: true };
   }
 );
+
+// ── Plan limit constants (must mirror Remote Config defaults) ────────────────
+const PLAN_LIMITS_EXPIRED = { maxInvoicesPerMonth: 5 };
+const PLAN_LIMITS_TRIAL = { maxInvoicesPerMonth: -1 };  // -1 = unlimited
+const PLAN_LIMITS_PRO = { maxInvoicesPerMonth: -1 };    // -1 = unlimited
+
+/**
+ * Validate that the authenticated user has not exceeded their plan's invoice
+ * creation limit for the current month. Call this from the Flutter client
+ * before writing the invoice document.
+ *
+ * Returns { allowed: true } or throws HttpsError 'resource-exhausted'.
+ */
+exports.checkInvoiceLimit = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const now = new Date();
+  const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+  // Determine user's current plan
+  const subDoc = await db.collection('subscriptions').doc(uid).get();
+  let maxInvoices;
+
+  if (subDoc.exists) {
+    const sub = subDoc.data();
+    const plan = sub.plan || 'expired';
+    const status = sub.status || 'expired';
+
+    if (plan === 'pro' && (status === 'active' || status === 'pending')) {
+      maxInvoices = PLAN_LIMITS_PRO.maxInvoicesPerMonth;
+    } else {
+      // Check trial via user doc
+      const userDoc = await db.collection('users').doc(uid).get();
+      const trialEnd = userDoc.exists && userDoc.data().trialExpiresAt
+        ? userDoc.data().trialExpiresAt.toDate()
+        : null;
+      if (trialEnd && trialEnd > now) {
+        maxInvoices = PLAN_LIMITS_TRIAL.maxInvoicesPerMonth;
+      } else {
+        maxInvoices = PLAN_LIMITS_EXPIRED.maxInvoicesPerMonth;
+      }
+    }
+  } else {
+    // No subscription doc — check trial
+    const userDoc = await db.collection('users').doc(uid).get();
+    const trialEnd = userDoc.exists && userDoc.data().trialExpiresAt
+      ? userDoc.data().trialExpiresAt.toDate()
+      : null;
+    maxInvoices = (trialEnd && trialEnd > now)
+      ? PLAN_LIMITS_TRIAL.maxInvoicesPerMonth
+      : PLAN_LIMITS_EXPIRED.maxInvoicesPerMonth;
+  }
+
+  if (maxInvoices === -1) {
+    return { allowed: true };
+  }
+
+  // Read current month usage counter (written by syncInvoiceAnalytics trigger)
+  const usageDoc = await db
+    .collection('users').doc(uid)
+    .collection('usage').doc(periodKey)
+    .get();
+  const invoicesCreated = (usageDoc.exists && usageDoc.data().invoicesCreated) || 0;
+
+  if (invoicesCreated >= maxInvoices) {
+    throw new HttpsError(
+      'resource-exhausted',
+      `Invoice limit reached for this month (${maxInvoices} invoices on your current plan).`,
+    );
+  }
+
+  return { allowed: true, invoicesCreated, maxInvoices };
+});
+
+/**
+ * Record a WhatsApp share for the current usage period.
+ * Called by the Flutter client instead of writing to Firestore directly,
+ * so the counter cannot be manipulated by a client-side write.
+ */
+exports.trackWhatsAppShare = onCall(async (request) => {
+  const uid = request.auth && request.auth.uid;
+  if (!uid) {
+    throw new HttpsError('unauthenticated', 'Sign in required.');
+  }
+
+  const now = new Date();
+  const periodKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const usageRef = db.collection('users').doc(uid).collection('usage').doc(periodKey);
+  await usageRef.set({
+    whatsappShares: FieldValue.increment(1),
+    updatedAt: FieldValue.serverTimestamp(),
+  }, { merge: true });
+
+  return { ok: true };
+});
 
 /**
  * Razorpay webhook handler (HTTP endpoint).

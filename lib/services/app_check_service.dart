@@ -1,19 +1,33 @@
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:flutter/foundation.dart';
 
+/// reCAPTCHA v3 site key for web.
+/// Set at build time: --dart-define=RECAPTCHA_SITE_KEY=6Lc...
+/// Get a key at https://www.google.com/recaptcha/admin/create (v3)
+const _recaptchaSiteKey = String.fromEnvironment('RECAPTCHA_SITE_KEY');
+
 class AppCheckService {
   AppCheckService._();
 
   static Future<void> activate() async {
     if (kIsWeb) {
-      // Skip App Check on web until reCAPTCHA Enterprise is configured.
-      // To enable, replace with:
-      // webProvider: ReCaptchaEnterpriseProvider('YOUR_SITE_KEY')
+      if (_recaptchaSiteKey.isEmpty) {
+        // No site key configured — App Check is inactive on web.
+        // Provide RECAPTCHA_SITE_KEY at build time to enforce it.
+        assert(false, 'RECAPTCHA_SITE_KEY must be set for web builds');
+        return;
+      }
+      await FirebaseAppCheck.instance.activate(
+        // ignore: deprecated_member_use
+        webProvider: ReCaptchaV3Provider(_recaptchaSiteKey),
+      );
       return;
     }
     await FirebaseAppCheck.instance.activate(
+      // ignore: deprecated_member_use
       androidProvider:
           kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
+      // ignore: deprecated_member_use
       appleProvider:
           kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
     );

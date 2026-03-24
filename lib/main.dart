@@ -1,9 +1,11 @@
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:billeasy/firebase_options.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/force_update_screen.dart';
@@ -13,7 +15,6 @@ import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
-import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
@@ -23,12 +24,22 @@ import 'package:billeasy/theme/app_colors.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Route Flutter and platform errors to Crashlytics in release mode;
+  // keep debug prints in debug mode for developer convenience.
   FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+    if (kDebugMode) {
+      debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+    } else {
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    }
   };
 
   PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[PlatformError] $error\n$stack');
+    if (kDebugMode) {
+      debugPrint('[PlatformError] $error\n$stack');
+    } else {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    }
     return true;
   };
   if (Firebase.apps.isEmpty) {
@@ -44,6 +55,10 @@ Future<void> main() async {
     persistenceEnabled: true,
     cacheSizeBytes: 104857600, // 100 MB — prevents device storage abuse
   );
+
+  // Enable Crashlytics in release; disable in debug so errors show in IDE.
+  await FirebaseCrashlytics.instance
+      .setCrashlyticsCollectionEnabled(!kDebugMode);
 
   ConnectivityService.instance.init();
   await AppCheckService.activate();

@@ -174,24 +174,11 @@ class PlanService {
 
       if (userDoc.exists) {
         final data = userDoc.data()!;
-        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
-        if (createdAt != null) {
-          _trialExpiresAt = DateTime(
-            createdAt.year,
-            createdAt.month + 6,
-            createdAt.day,
-            createdAt.hour,
-            createdAt.minute,
-            createdAt.second,
-          );
-          if (_trialExpiresAt!.isAfter(DateTime.now())) {
-            _currentPlan = AppPlan.trial;
-          } else {
-            _currentPlan = AppPlan.expired;
-          }
-        } else {
-          _currentPlan = AppPlan.expired;
-        }
+        // Read the server-set trialExpiresAt written by the setupUserTrial
+        // Cloud Function. Never compute it client-side from createdAt — the
+        // server timestamp is authoritative and cannot be spoofed.
+        final trialEnd = (data['trialExpiresAt'] as Timestamp?)?.toDate();
+        _resolveTrialOrExpired(trialEnd);
       } else {
         _currentPlan = AppPlan.expired;
       }

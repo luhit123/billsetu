@@ -1,6 +1,8 @@
 import 'package:billeasy/utils/firestore_helpers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 class UsageTrackingService {
@@ -88,24 +90,20 @@ class UsageTrackingService {
   }
 
   // ── Increment counters ────────────────────────────────────────────────
+  // Invoice counts are incremented server-side by the syncInvoiceAnalytics
+  // Cloud Function trigger when a new invoice document is created. No client
+  // write is needed (and is blocked by Firestore rules).
 
-  Future<void> incrementInvoiceCount() async {
-    final ref = _usageRef;
-    if (ref == null) return;
-    // Fire-and-forget: don't block the UI waiting for server sync.
-    ref.set({
-      'invoicesCreated': FieldValue.increment(1),
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
-  }
-
+  /// Records a WhatsApp share via Cloud Function so the counter cannot be
+  /// manipulated by a direct client write.
   Future<void> incrementWhatsAppShareCount() async {
-    final ref = _usageRef;
-    if (ref == null) return;
-    ref.set({
-      'whatsappShares': FieldValue.increment(1),
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    final uid = _uid;
+    if (uid == null) return;
+    try {
+      await FirebaseFunctions.instance.httpsCallable('trackWhatsAppShare').call();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[UsageTracking] trackWhatsAppShare failed: $e');
+    }
   }
 
   // ── Real-time stream ──────────────────────────────────────────────────

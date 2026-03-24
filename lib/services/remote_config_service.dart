@@ -46,9 +46,9 @@ class RemoteConfigService {
     _rc.onConfigUpdated.listen((_) async {
       await _rc.activate();
       _updateController.add(null);
-      debugPrint('[RemoteConfig] Config updated & activated');
+      if (kDebugMode) debugPrint('[RemoteConfig] Config updated & activated');
     }, onError: (e) {
-      debugPrint('[RemoteConfig] Real-time listener error: $e');
+      if (kDebugMode) debugPrint('[RemoteConfig] Real-time listener error: $e');
     });
   }
 

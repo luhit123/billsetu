@@ -30,7 +30,13 @@
       "Bash(grep -E \"\\\\.\\(dart|js\\)$\")",
       "Bash(grep -n \"canCreateInvoice\\\\|canAddCustomer\\\\|canAddProduct\\\\|canShareWhatsApp\\\\|canUseTemplate\" /Users/northeo/Desktop/billeasy/lib/screens/*.dart)",
       "Bash(xargs cat:*)",
-      "Bash(node --check index.js)"
+      "Bash(node --check index.js)",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(done)",
+      "Bash(git pull:*)",
+      "Bash(grep -E '\\\\.dart$')",
+      "Bash(git add:*)"
     ]
   }
 }

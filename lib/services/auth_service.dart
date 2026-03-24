@@ -44,13 +44,13 @@ class AuthService {
     await _firebaseAuth.verifyPhoneNumber(
       phoneNumber: phoneNumber,
       verificationCompleted: (PhoneAuthCredential credential) {
-        debugPrint('[AuthService] Auto-verification completed.');
+        if (kDebugMode) debugPrint('[AuthService] Auto-verification completed.');
         onAutoVerified?.call(credential);
       },
       verificationFailed: (FirebaseAuthException e) {
-        debugPrint(
-          '[AuthService] verificationFailed: ${e.code} — ${e.message}',
-        );
+        if (kDebugMode) {
+          debugPrint('[AuthService] verificationFailed: ${e.code} — ${e.message}');
+        }
         String message;
         switch (e.code) {
           case 'invalid-phone-number':
@@ -68,11 +68,11 @@ class AuthService {
         onError(message);
       },
       codeSent: (String verificationId, int? resendToken) {
-        debugPrint('[AuthService] OTP code sent. verificationId: $verificationId');
+        if (kDebugMode) debugPrint('[AuthService] OTP code sent. verificationId: $verificationId');
         onCodeSent(verificationId);
       },
       codeAutoRetrievalTimeout: (String verificationId) {
-        debugPrint('[AuthService] Auto-retrieval timeout for: $verificationId');
+        if (kDebugMode) debugPrint('[AuthService] Auto-retrieval timeout for: $verificationId');
       },
     );
   }
@@ -85,9 +85,7 @@ class AuthService {
       smsCode: smsCode,
     );
     final userCredential = await _firebaseAuth.signInWithCredential(credential);
-    debugPrint(
-      '[AuthService] OTP sign-in success: ${userCredential.user?.uid}',
-    );
+    if (kDebugMode) debugPrint('[AuthService] OTP sign-in success: ${userCredential.user?.uid}');
     return userCredential.user;
   }
 
@@ -102,16 +100,16 @@ class AuthService {
       return userCredential.user;
     }
 
-    debugPrint('[AuthService] Starting Google Sign-In...');
+    if (kDebugMode) debugPrint('[AuthService] Starting Google Sign-In...');
 
     final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
 
     if (googleUser == null) {
-      debugPrint('[AuthService] Sign-in cancelled by user.');
+      if (kDebugMode) debugPrint('[AuthService] Sign-in cancelled by user.');
       return null;
     }
 
-    debugPrint('[AuthService] Google account selected: ${googleUser.email}');
+    if (kDebugMode) debugPrint('[AuthService] Google account selected: ${googleUser.email}');
 
     final GoogleSignInAuthentication googleAuth =
         await googleUser.authentication;
@@ -119,8 +117,10 @@ class AuthService {
     final idToken = googleAuth.idToken;
     final accessToken = googleAuth.accessToken;
 
-    debugPrint('[AuthService] idToken present: ${idToken != null}');
-    debugPrint('[AuthService] accessToken present: ${accessToken != null}');
+    if (kDebugMode) {
+      debugPrint('[AuthService] idToken present: ${idToken != null}');
+      debugPrint('[AuthService] accessToken present: ${accessToken != null}');
+    }
 
     if (idToken == null && accessToken == null) {
       throw FirebaseAuthException(
@@ -131,7 +131,7 @@ class AuthService {
       );
     }
 
-    debugPrint('[AuthService] Signing in to Firebase...');
+    if (kDebugMode) debugPrint('[AuthService] Signing in to Firebase...');
 
     final authCredential = GoogleAuthProvider.credential(
       idToken: idToken,
@@ -141,9 +141,7 @@ class AuthService {
       authCredential,
     );
 
-    debugPrint(
-      '[AuthService] Firebase sign-in success: ${userCredential.user?.uid}',
-    );
+    if (kDebugMode) debugPrint('[AuthService] Firebase sign-in success: ${userCredential.user?.uid}');
     return userCredential.user;
   }
 
