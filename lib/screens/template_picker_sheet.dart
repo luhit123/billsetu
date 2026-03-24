@@ -54,7 +54,7 @@ const _allTemplates = <_TemplateMeta>[
 /// );
 /// ```
 class TemplatePicker extends StatefulWidget {
-  const TemplatePicker({super.key, this.current = InvoiceTemplate.classic});
+  const TemplatePicker({super.key, this.current = InvoiceTemplate.vyapar});
 
   final InvoiceTemplate current;
 

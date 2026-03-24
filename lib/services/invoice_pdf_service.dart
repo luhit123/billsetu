@@ -143,7 +143,7 @@ class InvoicePdfService {
     required Invoice invoice,
     BusinessProfile? profile,
     AppLanguage language = AppLanguage.english,
-    InvoiceTemplate template = InvoiceTemplate.classic,
+    InvoiceTemplate template = InvoiceTemplate.vyapar,
     bool includePayment = true,
   }) async {
     if (invoice.items.isEmpty) {

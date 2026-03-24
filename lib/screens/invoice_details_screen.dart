@@ -47,7 +47,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     decimalDigits: 0,
   );
 
-  InvoiceTemplate _template = InvoiceTemplate.classic;
+  InvoiceTemplate _template = InvoiceTemplate.vyapar;
 
   @override
   void initState() {

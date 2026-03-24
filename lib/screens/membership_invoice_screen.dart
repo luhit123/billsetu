@@ -59,7 +59,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   static const _kTemplatePrefsKey = 'membership_invoice_template';
   bool _isGeneratingPdf = false;
   BusinessProfile? _profile;
-  InvoiceTemplate _template = InvoiceTemplate.classic;
+  InvoiceTemplate _template = InvoiceTemplate.vyapar;
 
   Member get _member => widget.member;
   SubscriptionPlan get _plan => widget.plan;
