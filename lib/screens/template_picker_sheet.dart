@@ -24,6 +24,7 @@ const _allTemplates = <_TemplateMeta>[
   _TemplateMeta(template: InvoiceTemplate.classic,      name: 'Classic',      swatch1: Color(0xFF124185), swatch2: Color(0xFF0F7D83), swatch3: Color(0xFF2457A6)),
   _TemplateMeta(template: InvoiceTemplate.modern,       name: 'Modern',       swatch1: Color(0xFF0A2450), swatch2: Color(0xFF0F7D83), swatch3: Color(0xFFF0F4FF)),
   _TemplateMeta(template: InvoiceTemplate.compact,      name: 'Compact',      swatch1: Color(0xFFB3B3B3), swatch2: Color(0xFF1A1A1A), swatch3: Color(0xFF737373)),
+  _TemplateMeta(template: InvoiceTemplate.vyapar,       name: 'Vyapar',       swatch1: Color(0xFF1A2E4A), swatch2: Color(0xFFEEEEEE), swatch3: Color(0xFFCCCCCC)),
   _TemplateMeta(template: InvoiceTemplate.minimalist,   name: 'Minimalist',   swatch1: Color(0xFF262626), swatch2: Color(0xFF999999), swatch3: Color(0xFFF5F5F5)),
   _TemplateMeta(template: InvoiceTemplate.bold,         name: 'Bold',         swatch1: Color(0xFF1F1F1F), swatch2: Color(0xFFD93333), swatch3: Color(0xFFF2F2F2)),
   _TemplateMeta(template: InvoiceTemplate.elegant,      name: 'Elegant',      swatch1: Color(0xFF70542E), swatch2: Color(0xFFB89959), swatch3: Color(0xFFFCF5E8)),

@@ -12,7 +12,7 @@ import 'package:pdf/widgets.dart' as pw;
 
 /// Available PDF invoice templates.
 enum InvoiceTemplate {
-  classic, modern, compact,
+  classic, modern, compact, vyapar,
   minimalist, bold, elegant, professional, vibrant,
   clean, royal, stripe, grid, pastel, dark,
   retail, wholesale, services, creative, simple, gstPro,
@@ -166,6 +166,8 @@ class InvoicePdfService {
         return _buildModernPdf(invoice, profile, s, includePayment: includePayment);
       case InvoiceTemplate.compact:
         return _buildCompactPdf(invoice, profile, s, includePayment: includePayment);
+      case InvoiceTemplate.vyapar:
+        return _buildVyaparPdf(invoice, profile, s, includePayment: includePayment);
       default:
         return _buildStyledPdf(invoice, profile, s, _templateStyles[template]!, includePayment: includePayment);
     }
@@ -1005,6 +1007,609 @@ class InvoicePdfService {
         ],
       ),
     );
+  }
+
+  // ── Vyapar-style PDF ────────────────────────────────────────────────────
+
+  // #1a2e4a, #eeeeee, #cccccc, #000000, #333333, #666666
+  static const PdfColor _vyPrimary = PdfColor(0.10, 0.18, 0.29);
+  static const PdfColor _vyLabelBg = PdfColor(0.93, 0.93, 0.93);
+  static const PdfColor _vyBorder = PdfColor(0.80, 0.80, 0.80);
+  static const PdfColor _vyBlack = PdfColor(0.0, 0.0, 0.0);
+  static const PdfColor _vyBody = PdfColor(0.20, 0.20, 0.20);
+  static const PdfColor _vyMuted = PdfColor(0.40, 0.40, 0.40);
+
+  Future<Uint8List> _buildVyaparPdf(
+    Invoice invoice,
+    BusinessProfile? profile,
+    AppStrings s, {
+    bool includePayment = true,
+  }) async {
+    final document = pw.Document(
+      title: invoice.invoiceNumber,
+      author: _sellerName(profile, s),
+      subject: 'BillRaja invoice ${invoice.invoiceNumber}',
+      creator: 'BillRaja',
+    );
+
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+    final paymentWidget = (includePayment && profile != null)
+        ? await _paymentSection(profile)
+        : pw.SizedBox.shrink();
+
+    document.addPage(
+      pw.MultiPage(
+        pageTheme: pw.PageTheme(
+          theme: theme,
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
+        ),
+        footer: (ctx) => _vyFooter(ctx, s),
+        build: (ctx) => [
+          _vyTitle(),
+          pw.SizedBox(height: 14),
+          _vySellerBox(profile, s),
+          pw.SizedBox(height: 14),
+          _vyBillToInvoiceDetails(invoice, profile, s),
+          pw.SizedBox(height: 14),
+          _vyItemsTable(invoice, s),
+          pw.SizedBox(height: 0),
+          _vyTotalsBlock(invoice, s),
+          pw.SizedBox(height: 14),
+          paymentWidget,
+          pw.SizedBox(height: 14),
+          _vyTermsAndConditions(),
+          pw.SizedBox(height: 14),
+          _vySignatureBlock(profile, s),
+        ],
+      ),
+    );
+
+    return document.save();
+  }
+
+  // Section 1 — Title
+  pw.Widget _vyTitle() {
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.symmetric(vertical: 14),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: _vyBorder, width: 1),
+        ),
+      ),
+      child: pw.Center(
+        child: pw.Text(
+          'Tax\nInvoice',
+          textAlign: pw.TextAlign.center,
+          style: pw.TextStyle(
+            color: _vyPrimary,
+            fontSize: 22,
+            fontWeight: pw.FontWeight.bold,
+            lineSpacing: 4,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Section 2 — Seller Info Box
+  pw.Widget _vySellerBox(BusinessProfile? profile, AppStrings s) {
+    final sellerName = _sellerName(profile, s);
+    final phone = profile?.phoneNumber ?? '';
+
+    return pw.Container(
+      width: double.infinity,
+      padding: const pw.EdgeInsets.all(14),
+      decoration: pw.BoxDecoration(
+        color: const PdfColor(0.96, 0.96, 0.96),
+        border: pw.Border.all(color: _vyBorder, width: 1),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            sellerName,
+            style: pw.TextStyle(
+              color: _vyBlack,
+              fontSize: 16,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+          if (phone.trim().isNotEmpty) ...[
+            pw.SizedBox(height: 4),
+            pw.Text(
+              'Phone: $phone',
+              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+            ),
+          ],
+          if (profile != null && profile.gstin.isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(
+              'GSTIN: ${profile.gstin}',
+              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+            ),
+          ],
+          if (profile != null && profile.address.trim().isNotEmpty) ...[
+            pw.SizedBox(height: 2),
+            pw.Text(
+              profile.address.trim(),
+              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  // Section 3 — Bill To / Invoice Details (2-column grid)
+  pw.Widget _vyBillToInvoiceDetails(
+    Invoice invoice,
+    BusinessProfile? profile,
+    AppStrings s,
+  ) {
+    return pw.Table(
+      border: pw.TableBorder.all(color: _vyBorder, width: 1),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(1),
+        1: pw.FlexColumnWidth(1),
+      },
+      children: [
+        // Header row
+        pw.TableRow(
+          children: [
+            pw.Container(
+              color: _vyLabelBg,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: pw.Text(
+                'Bill To:',
+                style: pw.TextStyle(
+                  color: _vyBlack,
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.Container(
+              color: _vyLabelBg,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              child: pw.Text(
+                'Invoice Details:',
+                style: pw.TextStyle(
+                  color: _vyBlack,
+                  fontSize: 10,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        // Content row
+        pw.TableRow(
+          children: [
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(10),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    _customerName(invoice),
+                    style: pw.TextStyle(
+                      color: _vyBlack,
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  if (invoice.customerGstin.isNotEmpty) ...[
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      'GSTIN: ${invoice.customerGstin}',
+                      style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            pw.Padding(
+              padding: const pw.EdgeInsets.all(10),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'No: ${invoice.invoiceNumber}',
+                    style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.RichText(
+                    text: pw.TextSpan(
+                      children: [
+                        pw.TextSpan(
+                          text: 'Date: ',
+                          style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                        ),
+                        pw.TextSpan(
+                          text: _dateFormat.format(invoice.createdAt),
+                          style: pw.TextStyle(
+                            color: _vyBlack,
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (invoice.dueDate != null) ...[
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      'Due: ${_dateFormat.format(invoice.dueDate!)}',
+                      style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // Section 4 — Items Table
+  pw.Widget _vyItemsTable(Invoice invoice, AppStrings s) {
+    final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
+    final hasGst = invoice.gstEnabled;
+
+    // Build column widths
+    final colWidths = <int, pw.TableColumnWidth>{
+      0: const pw.FixedColumnWidth(28),   // #
+      1: const pw.FlexColumnWidth(3),     // Item Name
+    };
+    int colIdx = 2;
+    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // HSN/SAC
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1.2); // Quantity
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1);   // Unit
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // Price/Unit
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // Amount
+    if (hasGst) colWidths[colIdx++] = const pw.FlexColumnWidth(1); // GST%
+
+    // Header row
+    final headerCells = <pw.Widget>[
+      _vyCell('#', header: true, align: pw.TextAlign.center),
+      _vyCell('Item Name', header: true),
+    ];
+    if (hasHsn) headerCells.add(_vyCell('HSN/\nSAC', header: true, align: pw.TextAlign.center));
+    headerCells.add(_vyCell('Quantity', header: true, align: pw.TextAlign.right));
+    headerCells.add(_vyCell('Unit', header: true, align: pw.TextAlign.center));
+    headerCells.add(_vyCell('Price/\nUnit (\u20B9)', header: true, align: pw.TextAlign.right));
+    headerCells.add(_vyCell('Amount\n(\u20B9)', header: true, align: pw.TextAlign.right));
+    if (hasGst) headerCells.add(_vyCell('GST%', header: true, align: pw.TextAlign.center));
+
+    final rows = <pw.TableRow>[
+      pw.TableRow(
+        decoration: const pw.BoxDecoration(color: _vyLabelBg),
+        children: headerCells,
+      ),
+    ];
+
+    // Item rows
+    double totalQty = 0;
+    for (var i = 0; i < invoice.items.length; i++) {
+      final item = invoice.items[i];
+      totalQty += item.quantity;
+      final cells = <pw.Widget>[
+        _vyCell('${i + 1}', align: pw.TextAlign.center),
+        _vyCell(item.description, bold: true),
+      ];
+      if (hasHsn) cells.add(_vyCell(item.hsnCode.isEmpty ? '' : item.hsnCode, align: pw.TextAlign.center));
+      cells.add(_vyCell(item.quantityText, align: pw.TextAlign.right));
+      cells.add(_vyCell(item.unit.isEmpty ? '' : item.unit, align: pw.TextAlign.center));
+      cells.add(_vyCell('\u20B9\n${_vyNum(item.unitPrice)}', align: pw.TextAlign.right));
+      cells.add(_vyCell('\u20B9\n${_vyNum(item.total)}', align: pw.TextAlign.right, bold: true));
+      if (hasGst) cells.add(_vyCell('${item.gstRate.toStringAsFixed(0)}%', align: pw.TextAlign.center));
+
+      rows.add(pw.TableRow(children: cells));
+    }
+
+    // Total row
+    final totalCells = <pw.Widget>[
+      _vyCell('', bold: true),
+      _vyCell('Total', bold: true),
+    ];
+    if (hasHsn) totalCells.add(_vyCell(''));
+    totalCells.add(_vyCell(_vyQtyTotal(totalQty), bold: true, align: pw.TextAlign.right));
+    totalCells.add(_vyCell(''));
+    totalCells.add(_vyCell(''));
+    totalCells.add(_vyCell('\u20B9\n${_vyNum(invoice.subtotal)}', bold: true, align: pw.TextAlign.right));
+    if (hasGst) totalCells.add(_vyCell(''));
+
+    rows.add(pw.TableRow(children: totalCells));
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: _vyBorder, width: 1),
+      columnWidths: colWidths,
+      children: rows,
+    );
+  }
+
+  pw.Widget _vyCell(
+    String value, {
+    bool header = false,
+    bool bold = false,
+    pw.TextAlign align = pw.TextAlign.left,
+  }) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: pw.Text(
+        value,
+        textAlign: align,
+        style: pw.TextStyle(
+          color: _vyBlack,
+          fontSize: header ? 9 : 10,
+          fontWeight: (header || bold) ? pw.FontWeight.bold : pw.FontWeight.normal,
+        ),
+      ),
+    );
+  }
+
+  String _vyNum(double value) {
+    return value.toStringAsFixed(2);
+  }
+
+  String _vyQtyTotal(double value) {
+    if (value == value.truncateToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2);
+  }
+
+  // Section 5 — Totals Block
+  pw.Widget _vyTotalsBlock(Invoice invoice, AppStrings s) {
+    final received = invoice.status == InvoiceStatus.paid ? invoice.grandTotal : 0.0;
+    final balance = invoice.grandTotal - received;
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        // Left side: empty
+        pw.Expanded(child: pw.SizedBox()),
+        // Right side: totals
+        pw.Container(
+          width: 250,
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _vyBorder, width: 1),
+          ),
+          child: pw.Column(
+            children: [
+              _vyTotalRow('Sub Total', '\u20B9 ${_vyNum(invoice.subtotal)}'),
+              if (invoice.hasDiscount)
+                _vyTotalRow('Discount', '- \u20B9 ${_vyNum(invoice.discountAmount)}'),
+              if (invoice.hasGst) ...[
+                if (invoice.gstType == 'cgst_sgst') ...[
+                  _vyTotalRow('CGST', '\u20B9 ${_vyNum(invoice.cgstAmount)}'),
+                  _vyTotalRow('SGST', '\u20B9 ${_vyNum(invoice.sgstAmount)}'),
+                ] else
+                  _vyTotalRow('IGST', '\u20B9 ${_vyNum(invoice.igstAmount)}'),
+              ],
+              _vyTotalRow('Total', '\u20B9 ${_vyNum(invoice.grandTotal)}', bold: true),
+              // Amount in words
+              pw.Container(
+                width: double.infinity,
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: const pw.BoxDecoration(
+                  border: pw.Border(top: pw.BorderSide(color: _vyBorder, width: 1)),
+                ),
+                child: pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(
+                      'Invoice Amount In Words :',
+                      style: pw.TextStyle(
+                        color: _vyBlack,
+                        fontSize: 9,
+                        fontWeight: pw.FontWeight.bold,
+                      ),
+                    ),
+                    pw.SizedBox(height: 3),
+                    pw.Text(
+                      _numberToWords(invoice.grandTotal.round()),
+                      style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                    ),
+                  ],
+                ),
+              ),
+              _vyTotalRow('Received', '\u20B9 ${_vyNum(received)}'),
+              _vyTotalRow('Balance', '\u20B9 ${_vyNum(balance)}', bold: true),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _vyTotalRow(String label, String value, {bool bold = false}) {
+    return pw.Container(
+      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: const pw.BoxDecoration(
+        border: pw.Border(top: pw.BorderSide(color: _vyBorder, width: 1)),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            label,
+            style: pw.TextStyle(
+              color: _vyBlack,
+              fontSize: 10,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              color: _vyBlack,
+              fontSize: 10,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Section 6 — Terms & Conditions
+  pw.Widget _vyTermsAndConditions() {
+    return pw.Container(
+      width: double.infinity,
+      decoration: pw.BoxDecoration(
+        border: pw.Border.all(color: _vyBorder, width: 1),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Container(
+            width: double.infinity,
+            color: _vyLabelBg,
+            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: pw.Text(
+              'Terms And Conditions:',
+              style: pw.TextStyle(
+                color: _vyBlack,
+                fontSize: 10,
+                fontWeight: pw.FontWeight.bold,
+              ),
+            ),
+          ),
+          pw.Padding(
+            padding: const pw.EdgeInsets.all(10),
+            child: pw.Text(
+              'Thank you for doing business with us.',
+              style: pw.TextStyle(color: _vyBody, fontSize: 10),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Section 7 — Signature Block
+  pw.Widget _vySignatureBlock(BusinessProfile? profile, AppStrings s) {
+    final sellerName = _sellerName(profile, s);
+
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Expanded(child: pw.SizedBox()),
+        pw.Container(
+          width: 220,
+          decoration: pw.BoxDecoration(
+            border: pw.Border.all(color: _vyBorder, width: 1),
+          ),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Container(
+                width: double.infinity,
+                color: _vyLabelBg,
+                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                child: pw.Text(
+                  'For $sellerName:',
+                  style: pw.TextStyle(
+                    color: _vyBlack,
+                    fontSize: 10,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              // Signature area (empty box)
+              pw.Container(
+                width: double.infinity,
+                height: 60,
+                margin: const pw.EdgeInsets.fromLTRB(16, 10, 16, 6),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border.all(color: _vyBorder, width: 0.5),
+                ),
+              ),
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 16, bottom: 10),
+                child: pw.Text(
+                  'Authorized Signatory',
+                  style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _vyFooter(pw.Context ctx, AppStrings s) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(
+          '${s.pdfGeneratedBy} \u00b7 ${_generatedFormat.format(DateTime.now())}',
+          style: pw.TextStyle(color: _vyMuted, fontSize: 8),
+        ),
+        pw.Text(
+          '${s.pdfPage} ${ctx.pageNumber} ${s.pdfOf} ${ctx.pagesCount}',
+          style: pw.TextStyle(color: _vyMuted, fontSize: 8),
+        ),
+      ],
+    );
+  }
+
+  /// Converts a whole number to Indian English words (e.g. 600 → "Six Hundred Rupees only").
+  static String _numberToWords(int number) {
+    if (number == 0) return 'Zero Rupees only';
+    if (number < 0) return 'Minus ${_numberToWords(-number)}';
+
+    const ones = [
+      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight',
+      'Nine', 'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen',
+      'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen',
+    ];
+    const tens = [
+      '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy',
+      'Eighty', 'Ninety',
+    ];
+
+    String twoDigits(int v) {
+      if (v < 20) return ones[v];
+      final t = v ~/ 10;
+      final o = v % 10;
+      return o == 0 ? tens[t] : '${tens[t]} ${ones[o]}';
+    }
+
+    String threeDigits(int v) {
+      if (v == 0) return '';
+      final h = v ~/ 100;
+      final r = v % 100;
+      if (h == 0) return twoDigits(r);
+      if (r == 0) return '${ones[h]} Hundred';
+      return '${ones[h]} Hundred ${twoDigits(r)}';
+    }
+
+    // Indian numbering: Crore (10^7), Lakh (10^5), Thousand (10^3), Hundred
+    var rem = number;
+    final parts = <String>[];
+    if (rem >= 10000000) {
+      parts.add('${threeDigits(rem ~/ 10000000)} Crore');
+      rem %= 10000000;
+    }
+    if (rem >= 100000) {
+      parts.add('${twoDigits(rem ~/ 100000)} Lakh');
+      rem %= 100000;
+    }
+    if (rem >= 1000) {
+      parts.add('${twoDigits(rem ~/ 1000)} Thousand');
+      rem %= 1000;
+    }
+    if (rem > 0) {
+      parts.add(threeDigits(rem));
+    }
+
+    return '${parts.join(' ')} Rupees only';
   }
 
   // ── Classic PDF (original design) ─────────────────────────────────────────
