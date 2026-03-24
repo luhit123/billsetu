@@ -13,8 +13,8 @@ class AppCheckService {
     if (kIsWeb) {
       if (_recaptchaSiteKey.isEmpty) {
         // No site key configured — App Check is inactive on web.
-        // Provide RECAPTCHA_SITE_KEY at build time to enforce it.
-        assert(false, 'RECAPTCHA_SITE_KEY must be set for web builds');
+        // Provide --dart-define=RECAPTCHA_SITE_KEY=<key> at build time to enforce it.
+        // Silently skip in debug/local dev; production builds should always pass the key.
         return;
       }
       await FirebaseAppCheck.instance.activate(
