@@ -154,19 +154,67 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ---
 
-## 7. Competitive Landscape
+## 7. Market Size & Opportunity
 
-| App | Free Tier | Paid Starting At | Key Differentiator |
-|---|---|---|---|
-| **Vyapar** | Yes (limited) | ~₹799/yr mobile | Brand recognition, offline-first |
-| **myBillBook** | Yes | ~₹1,999/yr | Aggressive pricing, similar features |
-| **Khatabook** | Yes | ~₹999/yr | Ledger-focused, cheapest entry |
-| **Zoho Invoice** | Yes (5 clients) | ~₹4,999/yr | Enterprise-grade, API ecosystem |
-| **BillSetu** | TBD | TBD | Opportunity to differentiate |
+- Indian accounting software market: **USD 3.4–16.5 billion** (2024-2025), growing at **9-11% CAGR** through 2030
+- **62 million+ MSMEs** registered in India (March 2025)
+- **Only 29%** of tech-savvy MSMEs currently use accounting software — massive untapped market
+- **~35% of micro enterprises** still use manual/semi-digital bookkeeping
+- **90%+ MSMEs** accept UPI payments, but deeper billing software remains underpenetrated
+- Cloud-based solutions captured **68% of the market** in 2025
 
 ---
 
-## 8. Recommended BillSetu Pricing Strategy
+## 8. Competitive Landscape (Detailed)
+
+| App | Free Plan | Paid Plans | Key Differentiator | Downloads |
+|---|---|---|---|---|
+| **Vyapar** | Yes (mobile, basic) | Silver: ~₹3,420/yr (desktop); Gold: ~₹5,000-7,000/yr | Offline-first, brand recognition | 1 Cr+ users |
+| **myBillBook** | No (14-day trial) | Silver: ~₹399/yr; Platinum: ~₹3,000/yr | Cloud-first, multi-user, multi-platform | Growing |
+| **Khatabook** | Yes (forever-free) | Pro: ₹1,874+GST/yr; Biz Analyst: ₹3,300+GST/yr | Digital ledger, 13 languages, cheapest | 50M+ downloads |
+| **Zoho Invoice** | Yes (500 invoices/yr, 2 users) | Free (upgrades via Zoho Books ~₹1,500/mo) | Enterprise-grade, API ecosystem | Enterprise |
+| **Swipe** | Yes (forever-free) | Custom pricing | Speed-focused, WhatsApp AI billing | 15L+ SMEs |
+| **TallyPrime** | No (trial only) | ~₹18,000/yr (Silver); ~₹54,000/yr (Gold) | Full accounting, legacy trust | Established |
+| **BillSetu** | TBD | TBD | Cross-platform Flutter, Firebase sync | New entrant |
+
+### Competitive Positioning Map
+
+| Segment | Leader | Positioning |
+|---|---|---|
+| Micro businesses / Digital ledger | Khatabook | Free, simple, transaction recording |
+| Small business billing | Vyapar | Best mobile experience, offline-first |
+| SMB billing + teams | myBillBook | Cloud-first, multi-user |
+| Freelancers / Free invoicing | Zoho Invoice | Forever free, professional |
+| Fast GST invoicing | Swipe | Speed-focused, WhatsApp AI billing |
+| Established SMEs / Accounting | TallyPrime | Full accounting, compliance |
+
+### Why Users Switch Apps
+
+| From | To | Reasons |
+|---|---|---|
+| Vyapar → competitors | myBillBook, Zoho | No iOS app, single-device limits, data conflicts, expensive feature tiers |
+| myBillBook → competitors | Zoho Books, Tally | Lacks full accounting (ledgers, journal entries), no multi-branch |
+| Khatabook → competitors | Vyapar | Desktop features discontinued, primarily a ledger not full billing |
+| Any app → another | — | Poor support, app glitches, hidden price hikes at renewal, data sync problems, outgrowing the platform |
+
+### Freemium Conversion Benchmarks
+
+- Typical freemium-to-paid: **2-5%** globally
+- Indian SaaS SMB apps: **6-10%** conversion
+- Free trial with credit card: **8-12%** conversion
+- Top performers: **15-25%** trial-to-paid
+- Reality: **95-98% of free users never convert** — free tier must drive viral growth
+
+### BillSetu's Structural Advantages
+
+1. **True cross-platform from day one** — Flutter enables genuine parity (Vyapar lacks iOS)
+2. **Cloud-native with offline** — Firestore 100MB cache + sync solves Vyapar's sync problems
+3. **Price sweet spot** — Target ₹1,500-3,000/year (below Vyapar Gold, above myBillBook Silver)
+4. **No legacy baggage** — Can adopt modern UX patterns competitors are too entrenched to change
+
+---
+
+## 9. Recommended BillSetu Pricing Strategy
 
 ### Proposed Tiers: "Undercut & Overdeliver"
 
@@ -198,7 +246,7 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ---
 
-## 9. Top Features to Build for Adoption
+## 10. Top Features to Build for Adoption
 
 | Priority | Feature | Effort | Impact | Rationale |
 |---|---|---|---|---|
@@ -215,7 +263,7 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ---
 
-## 10. Customer Acquisition Playbook
+## 11. Customer Acquisition Playbook
 
 ### Phase 1: Launch (Month 1-3)
 1. **Generous free tier** — Make it genuinely useful, not crippled
@@ -244,7 +292,7 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ---
 
-## 11. Exploiting Vyapar's Weaknesses
+## 12. Exploiting Vyapar's Weaknesses
 
 | Vyapar Weakness | BillSetu Opportunity |
 |---|---|
@@ -258,7 +306,7 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ---
 
-## 12. Quick Wins for BillSetu (Immediate Implementation)
+## 13. Quick Wins for BillSetu (Immediate Implementation)
 
 | # | Change | Effort | Impact |
 |---|---|---|---|
@@ -274,13 +322,36 @@ Mobile-first freemium model. Free Android app is top-of-funnel. Users get hooked
 
 ## Sources
 
+### Vyapar-Specific
 - Vyapar Official Pricing: vyaparapp.in/pricing
 - Vyapar Free vs Paid: vyaparapp.in/blog/vyapar-free-vs-paid-mobile-app/
-- SoftwareSuggest Reviews 2026
-- Techjockey Reviews 2026
-- G2 Reviews 2026
-- Capterra India Reviews
+- SoftwareSuggest: Vyapar Pricing, Features & Integration 2026
+- Techjockey: Vyapar Billing Software Pricing & Reviews 2026
+- G2: Vyapar Reviews 2026
+- Capterra India: Vyapar Reviews
+- Software Advice: Vyapar Reviews 2026
 - Inc42: Vyapar App Profile
 - Tracxn: Vyapar Company Profile 2026
 - YourStory: Vyapar MSME Software
 - Microsoft Ads: Vyapar Case Study
+- CanvasBusinessModel: Vyapar Marketing Strategy
+
+### Market & Competitive
+- Research and Markets: India Accounting Software Market
+- Mordor Intelligence: India Accounting Software Market
+- SIDBI: Understanding Indian MSME Sector 2025
+- YourStory: Digital Transformation in MSMEs
+- First Page Sage: SaaS Freemium Conversion Rates 2026
+- Userpilot: Freemium Conversion Rate Guide
+
+### Competitor Sources
+- Techjockey: Khatabook vs myBillBook vs Vyapar comparison
+- myBillBook vs Vyapar 2026 (mybillbook.in)
+- SaaSworthy: Vyapar vs Khatabook vs myBillBook
+- Happay: 10 Best Billing Software 2026
+- Giddh: 5 Best Invoicing Software India 2026
+- ProfitBooks: 6 Best GST Billing Software India 2026
+- Zoho Invoice Pricing (zoho.com)
+- Swipe Billing (getswipe.in)
+- Khatabook on Capterra
+- myBillBook Pricing on Techjockey
