@@ -49,9 +49,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   final _discountController = TextEditingController();
   String _selectedDiscountType = 'percentage'; // 'percentage' or 'overall'
 
-  // GST state
-  bool _gstEnabled = false;
-  double _gstRate = 18.0;
+  // GST state (per-item: each item has its own gstRate chip)
+  final double _gstRate = 18.0;
   String _gstType = 'cgst_sgst'; // 'cgst_sgst' or 'igst'
 
   late List<Map<String, TextEditingController>> itemRows;
@@ -123,17 +122,17 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
 
     double cgstAmount = 0;
     double igstAmount = 0;
-    if (_gstEnabled) {
-      for (final row in itemRows) {
-        final qty = nu.parseDouble(row['qty']!.text) ?? 0;
-        final price = nu.parseDouble(row['price']!.text) ?? 0;
-        final itemRate = nu.parseDouble(row['gstRate']!.text) ?? _gstRate;
-        final itemTotal = qty * price;
-        if (_gstType == 'cgst_sgst') {
-          cgstAmount += itemTotal * discountRatio * itemRate / 200;
-        } else {
-          igstAmount += itemTotal * discountRatio * itemRate / 100;
-        }
+    // Per-item GST: each item can have its own rate (0 = no GST for that item)
+    for (final row in itemRows) {
+      final qty = nu.parseDouble(row['qty']!.text) ?? 0;
+      final price = nu.parseDouble(row['price']!.text) ?? 0;
+      final itemRate = nu.parseDouble(row['gstRate']!.text) ?? 0;
+      if (itemRate <= 0) continue;
+      final itemTotal = qty * price;
+      if (_gstType == 'cgst_sgst') {
+        cgstAmount += itemTotal * discountRatio * itemRate / 200;
+      } else {
+        igstAmount += itemTotal * discountRatio * itemRate / 100;
       }
     }
     final sgstAmount = cgstAmount;
@@ -496,7 +495,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                   decoration: _inputDecoration('HSN / SAC Code',
                       hint: 'e.g. 8471'),
                 ),
-                if (_gstEnabled) ...[
+                ...[
                   const SizedBox(height: 10),
                   const Text('GST Rate',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
@@ -727,6 +726,9 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
 
   Widget _buildGstSection(
       double taxableAmount, double cgst, double sgst, double igst) {
+    final hasAnyGst = cgst > 0 || sgst > 0 || igst > 0;
+    if (!hasAnyGst) return const SizedBox.shrink();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -737,93 +739,49 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Toggle row
+              // GST type selector
+              const Text('GST TYPE',
+                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
+                      color: kOnSurfaceVariant, letterSpacing: 0.8)),
+              const SizedBox(height: 8),
               Row(
                 children: [
-                  Container(
-                    width: 36, height: 36,
-                    decoration: BoxDecoration(
-                      color: kSurfaceContainerLow,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(Icons.receipt_long_outlined,
-                        size: 18,
-                        color: _gstEnabled ? kPrimary : kTextTertiary),
-                  ),
-                  const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Apply GST',
-                            style: TextStyle(fontSize: 14,
-                                fontWeight: FontWeight.w600, color: kOnSurface)),
-                        Text(
-                          _gstEnabled
-                              ? 'Input tax credit will be tracked'
-                              : 'Tap to add GST to this purchase',
-                          style: const TextStyle(
-                              fontSize: 12, color: kOnSurfaceVariant),
-                        ),
-                      ],
+                    child: _GstTypeChip(
+                      label: 'CGST + SGST', subtitle: 'Intrastate',
+                      selected: _gstType == 'cgst_sgst',
+                      onTap: () => setState(() => _gstType = 'cgst_sgst'),
                     ),
                   ),
-                  Switch.adaptive(
-                    value: _gstEnabled,
-                    activeThumbColor: Colors.white,
-                    activeTrackColor: kPrimary,
-                    onChanged: (v) => setState(() => _gstEnabled = v),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: _GstTypeChip(
+                      label: 'IGST', subtitle: 'Interstate',
+                      selected: _gstType == 'igst',
+                      onTap: () => setState(() => _gstType = 'igst'),
+                    ),
                   ),
                 ],
               ),
-              if (_gstEnabled) ...[
-                const SizedBox(height: 14),
-                Container(height: 1, color: kSurfaceContainerLow),
-                const SizedBox(height: 14),
-                // Type selector
-                const Text('GST TYPE',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                        color: kOnSurfaceVariant, letterSpacing: 0.8)),
-                const SizedBox(height: 8),
-                Row(
+              const SizedBox(height: 14),
+              // Tax preview
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: kSurfaceContainerLow,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
                   children: [
-                    Expanded(
-                      child: _GstTypeChip(
-                        label: 'CGST + SGST', subtitle: 'Intrastate',
-                        selected: _gstType == 'cgst_sgst',
-                        onTap: () => setState(() => _gstType = 'cgst_sgst'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _GstTypeChip(
-                        label: 'IGST', subtitle: 'Interstate',
-                        selected: _gstType == 'igst',
-                        onTap: () => setState(() => _gstType = 'igst'),
-                      ),
-                    ),
+                    if (_gstType == 'cgst_sgst') ...[
+                      _taxPreviewRow('CGST', _currencyFormat.format(cgst)),
+                      const SizedBox(height: 4),
+                      _taxPreviewRow('SGST', _currencyFormat.format(sgst)),
+                    ] else
+                      _taxPreviewRow('IGST', _currencyFormat.format(igst)),
                   ],
                 ),
-                const SizedBox(height: 14),
-                // Tax preview
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: kSurfaceContainerLow,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Column(
-                    children: [
-                      if (_gstType == 'cgst_sgst') ...[
-                        _taxPreviewRow('CGST', _currencyFormat.format(cgst)),
-                        const SizedBox(height: 4),
-                        _taxPreviewRow('SGST', _currencyFormat.format(sgst)),
-                      ] else
-                        _taxPreviewRow('IGST', _currencyFormat.format(igst)),
-                    ],
-                  ),
-                ),
-              ],
+              ),
             ],
           ),
         ),
@@ -880,7 +838,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               const SizedBox(height: 8),
               _summaryRow('Discount', '-${_currencyFormat.format(discountAmount)}'),
             ],
-            if (_gstEnabled && totalTax > 0) ...[
+            if (totalTax > 0) ...[
               const SizedBox(height: 8),
               if (_gstType == 'cgst_sgst') ...[
                 _summaryRow('CGST',
@@ -1010,10 +968,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         row['hsn']!.text = product.hsnCode;
       }
       _linkedProductIds[rowIndex] = product.id;
-      // Auto-enable GST if product has GST configured
+      // Set per-item GST rate from product
       if (product.gstApplicable) {
-        _gstEnabled = true;
-        _gstRate = product.gstRate;
         row['gstRate']!.text = product.gstRate.toStringAsFixed(0);
       }
     });
@@ -1132,7 +1088,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         notes: _notesCtrl.text.trim(),
         discountType: discountValue > 0 ? _selectedDiscountType : null,
         discountValue: discountValue > 0 ? discountValue : 0,
-        gstEnabled: _gstEnabled,
+        gstEnabled: items.any((item) => item.gstRate > 0),
         gstRate: _gstRate,
         gstType: _gstType,
       );

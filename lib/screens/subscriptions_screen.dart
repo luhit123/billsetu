@@ -39,9 +39,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   int _expiredCount = 0;
   double _totalRevenue = 0;
 
+  // Date range filter for revenue
+  late DateTimeRange _filterRange;
+  double _rangeRevenue = 0;
+  int _rangeMemberCount = 0;
+
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _filterRange = DateTimeRange(
+      start: DateTime(now.year, now.month, 1),
+      end: DateTime(now.year, now.month + 1, 0), // last day of current month
+    );
     _plansSub = _service.watchPlans().listen(
       (plans) {
         if (mounted) setState(() => _plans = plans);
@@ -68,9 +78,18 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     int expiringSoon = 0;
     int expired = 0;
     double revenue = 0;
+    double rangeRevenue = 0;
+    int rangeCount = 0;
+
+    // Include end day fully by checking before start of next day
+    final rangeEnd = DateTime(_filterRange.end.year, _filterRange.end.month, _filterRange.end.day + 1);
 
     for (final m in _members) {
       revenue += m.amountPaid + m.joiningFeePaid;
+      if (!m.startDate.isBefore(_filterRange.start) && m.startDate.isBefore(rangeEnd)) {
+        rangeRevenue += m.amountPaid + m.joiningFeePaid;
+        rangeCount++;
+      }
       if (m.status == MemberStatus.frozen) {
         // Frozen members count towards total but not active/expired
       } else if (m.endDate.isBefore(now)) {
@@ -88,6 +107,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     _expiringSoonCount = expiringSoon;
     _expiredCount = expired;
     _totalRevenue = revenue;
+    _rangeRevenue = rangeRevenue;
+    _rangeMemberCount = rangeCount;
   }
 
   Future<void> _loadTodayAttendance() async {
@@ -166,6 +187,38 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     );
   }
 
+  void _changeMonth(int delta) {
+    final s = _filterRange.start;
+    final newStart = DateTime(s.year, s.month + delta, 1);
+    final newEnd = DateTime(newStart.year, newStart.month + 1, 0);
+    setState(() {
+      _filterRange = DateTimeRange(start: newStart, end: newEnd);
+      _recomputeStats();
+    });
+  }
+
+  Future<void> _pickDateRange() async {
+    final now = DateTime.now();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: _filterRange,
+      builder: (ctx, child) => Theme(
+        data: Theme.of(ctx).copyWith(
+          colorScheme: const ColorScheme.light(primary: kPrimary, onPrimary: Colors.white),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() {
+        _filterRange = picked;
+        _recomputeStats();
+      });
+    }
+  }
+
   // ── Stats Row ───────────────────────────────────────────────────────────────
 
   Widget _buildStatsRow() {
@@ -215,6 +268,24 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   // ── Revenue Card ────────────────────────────────────────────────────────────
 
   Widget _buildRevenueCard() {
+    final now = DateTime.now();
+    final fmt = DateFormat('d MMM');
+    final fmtFull = DateFormat('d MMM yyyy');
+    final s = _filterRange.start;
+    final e = _filterRange.end;
+    // Single month: show "Mar 2026", else show "1 Mar – 15 Apr 2026"
+    final sameMonth = s.year == e.year && s.month == e.month;
+    final sameYear = s.year == e.year;
+    final rangeLabel = sameMonth
+        ? DateFormat('MMM yyyy').format(s)
+        : sameYear
+            ? '${fmt.format(s)} – ${fmtFull.format(e)}'
+            : '${fmtFull.format(s)} – ${fmtFull.format(e)}';
+
+    // Is this the current month (default range)?
+    final isCurrentMonth = s.year == now.year && s.month == now.month &&
+        e.year == now.year && e.month == now.month;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
@@ -225,64 +296,89 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
             colors: [Color(0xFF0057FF), Color(0xFF004CE1)],
           ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: kPrimary.withOpacity(0.25),
-              blurRadius: 20,
-              offset: const Offset(0, 8),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: kPrimary.withOpacity(0.25), blurRadius: 20, offset: const Offset(0, 8))],
         ),
-        padding: const EdgeInsets.all(20),
-        child: Row(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Total Revenue',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.8),
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 0.3,
+            // Range navigator row
+            Row(
+              children: [
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Icon(Icons.chevron_left_rounded, color: Colors.white.withOpacity(0.8), size: 22),
+                  onPressed: () => _changeMonth(-1),
+                ),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: _pickDateRange,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.calendar_today_rounded, size: 12, color: Colors.white.withOpacity(0.7)),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            rangeLabel,
+                            style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 13, fontWeight: FontWeight.w600),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(Icons.arrow_drop_down_rounded, size: 16, color: Colors.white.withOpacity(0.7)),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _currencyFmt.format(_totalRevenue),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 32,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
+                ),
+                IconButton(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  icon: Icon(
+                    Icons.chevron_right_rounded,
+                    color: isCurrentMonth ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.8),
+                    size: 22,
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'from $_totalMembers members',
-                    style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ],
-              ),
+                  onPressed: isCurrentMonth ? null : () => _changeMonth(1),
+                ),
+              ],
             ),
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(
-                Icons.account_balance_wallet_rounded,
-                color: Colors.white.withOpacity(0.9),
-                size: 28,
-              ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Revenue', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 6),
+                      Text(
+                        _currencyFmt.format(_rangeRevenue),
+                        style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.5),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$_rangeMemberCount member${_rangeMemberCount == 1 ? '' : 's'} joined',
+                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text('All-time', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11)),
+                    const SizedBox(height: 4),
+                    Text(_currencyFmt.format(_totalRevenue),
+                        style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text('$_totalMembers total', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                  ],
+                ),
+              ],
             ),
           ],
         ),
@@ -430,9 +526,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
+                      builder: (_) => MembersScreen(
+                        planId: plan.id,
+                        planName: plan.name,
+                      ),
+                    ),
+                  ),
+                  onEdit: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
                       builder: (_) => PlanBuilderScreen(plan: plan),
                     ),
                   ),
+                  onDelete: () => _confirmDeletePlan(plan),
                 );
               },
             ),
@@ -567,6 +673,51 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _confirmDeletePlan(SubscriptionPlan plan) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: kSurfaceLowest,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text('Delete Plan?', style: TextStyle(color: kOnSurface)),
+        content: Text(
+          'Delete "${plan.name}"? This cannot be undone. Existing members will keep their data.',
+          style: const TextStyle(color: kOnSurfaceVariant),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: kOverdue),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await _service.deletePlan(plan.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${plan.name}" deleted'),
+            backgroundColor: kOverdue,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Delete failed: $e'), behavior: SnackBarBehavior.floating),
+        );
+      }
+    }
   }
 
   Future<void> _showRenewDialog(Member member) async {
@@ -982,17 +1133,22 @@ class _PlanCard extends StatelessWidget {
     required this.plan,
     required this.currencyFmt,
     required this.onTap,
+    required this.onEdit,
+    required this.onDelete,
   });
 
   final SubscriptionPlan plan;
   final NumberFormat currencyFmt;
   final VoidCallback onTap;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
     final cardColor = _parseHexColor(plan.colorHex);
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () => _showContextMenu(context, cardColor),
       child: Container(
         width: 200,
         padding: const EdgeInsets.all(16),
@@ -1107,6 +1263,68 @@ class _PlanCard extends StatelessWidget {
                 ),
               ],
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showContextMenu(BuildContext context, Color cardColor) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        margin: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade300,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              child: Row(children: [
+                Container(
+                  width: 10, height: 10,
+                  decoration: BoxDecoration(color: cardColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 10),
+                Text(plan.name,
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
+              ]),
+            ),
+            const Divider(height: 16),
+            ListTile(
+              leading: const Icon(Icons.edit_rounded, color: kPrimary),
+              title: const Text('Modify Plan',
+                style: TextStyle(fontWeight: FontWeight.w600)),
+              subtitle: const Text('Edit name, price, duration'),
+              onTap: () {
+                Navigator.pop(context);
+                onEdit();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline_rounded, color: kOverdue),
+              title: const Text('Delete Plan',
+                style: TextStyle(color: kOverdue, fontWeight: FontWeight.w600)),
+              subtitle: const Text('Permanently remove this plan'),
+              onTap: () {
+                Navigator.pop(context);
+                onDelete();
+              },
+            ),
+            const SizedBox(height: 8),
           ],
         ),
       ),

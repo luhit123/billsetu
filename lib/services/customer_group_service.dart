@@ -85,14 +85,19 @@ class CustomerGroupService {
       return;
     }
 
-    final batch = _firestore.batch();
-    for (final doc in snapshot.docs) {
-      batch.update(doc.reference, {
-        'groupName': groupName,
-        'updatedAt': Timestamp.fromDate(updatedAt),
-      });
+    // Firestore batch limit is 500 — chunk large updates
+    final docs = snapshot.docs;
+    for (var i = 0; i < docs.length; i += 500) {
+      final batch = _firestore.batch();
+      final chunk = docs.skip(i).take(500);
+      for (final doc in chunk) {
+        batch.update(doc.reference, {
+          'groupName': groupName,
+          'updatedAt': Timestamp.fromDate(updatedAt),
+        });
+      }
+      await batch.commit();
     }
-    await batch.commit();
   }
 
   String _requireOwnerId() {

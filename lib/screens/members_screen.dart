@@ -10,7 +10,12 @@ import 'package:flutter/material.dart';
 enum _MemberFilter { all, active, expiringSoon, expired, frozen }
 
 class MembersScreen extends StatefulWidget {
-  const MembersScreen({super.key});
+  /// When [planId] is provided the screen shows only members of that plan
+  /// and the title reflects [planName].
+  const MembersScreen({super.key, this.planId, this.planName});
+
+  final String? planId;
+  final String? planName;
 
   @override
   State<MembersScreen> createState() => _MembersScreenState();
@@ -66,23 +71,28 @@ class _MembersScreenState extends State<MembersScreen> {
     final now = DateTime.now();
     List<Member> filtered;
 
+    // If opened from a plan card, restrict to that plan's members only.
+    final base = widget.planId != null
+        ? _allMembers.where((m) => m.planId == widget.planId).toList()
+        : _allMembers;
+
     switch (_activeFilter) {
       case _MemberFilter.all:
-        filtered = _allMembers;
+        filtered = base;
       case _MemberFilter.active:
-        filtered = _allMembers
+        filtered = base
             .where((m) => m.status == MemberStatus.active && m.endDate.isAfter(now))
             .toList();
       case _MemberFilter.expiringSoon:
-        filtered = _allMembers.where((m) {
+        filtered = base.where((m) {
           if (m.status != MemberStatus.active) return false;
           final daysLeft = m.endDate.difference(now).inDays;
           return daysLeft >= 0 && daysLeft <= 7;
         }).toList();
       case _MemberFilter.expired:
-        filtered = _allMembers.where((m) => m.endDate.isBefore(now)).toList();
+        filtered = base.where((m) => m.endDate.isBefore(now)).toList();
       case _MemberFilter.frozen:
-        filtered = _allMembers
+        filtered = base
             .where((m) => m.status == MemberStatus.frozen)
             .toList();
     }
@@ -99,23 +109,26 @@ class _MembersScreenState extends State<MembersScreen> {
 
   int _countForFilter(_MemberFilter filter) {
     final now = DateTime.now();
+    final base = widget.planId != null
+        ? _allMembers.where((m) => m.planId == widget.planId).toList()
+        : _allMembers;
     switch (filter) {
       case _MemberFilter.all:
-        return _allMembers.length;
+        return base.length;
       case _MemberFilter.active:
-        return _allMembers
+        return base
             .where((m) => m.status == MemberStatus.active && m.endDate.isAfter(now))
             .length;
       case _MemberFilter.expiringSoon:
-        return _allMembers.where((m) {
+        return base.where((m) {
           if (m.status != MemberStatus.active) return false;
           final daysLeft = m.endDate.difference(now).inDays;
           return daysLeft >= 0 && daysLeft <= 7;
         }).length;
       case _MemberFilter.expired:
-        return _allMembers.where((m) => m.endDate.isBefore(now)).length;
+        return base.where((m) => m.endDate.isBefore(now)).length;
       case _MemberFilter.frozen:
-        return _allMembers
+        return base
             .where((m) => m.status == MemberStatus.frozen)
             .length;
     }
@@ -203,7 +216,7 @@ class _MembersScreenState extends State<MembersScreen> {
               ],
             )
           : kBuildGradientAppBar(
-              titleText: 'Members',
+              titleText: widget.planName ?? 'Members',
               actions: [
                 IconButton(
                   onPressed: _toggleSearch,

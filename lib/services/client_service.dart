@@ -110,6 +110,9 @@ class ClientService {
   }
 
   Stream<Client?> watchClient(String clientId) {
+    if (clientId.trim().isEmpty) {
+      return Stream.value(null);
+    }
     final ownerId = _requireOwnerId();
     return _clientsCollection(ownerId).doc(clientId).snapshots().map((
       snapshot,

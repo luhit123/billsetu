@@ -30,6 +30,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
   List<TextEditingController> _benefitControllers = [];
   bool _saving = false;
   String _colorHex = '#1E3A8A';
+  bool _gstEnabled = false;
+  double _gstRate = 18.0;
+  String _gstType = 'cgst_sgst';
 
   bool get _isEditing => widget.plan != null;
 
@@ -66,6 +69,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       _planType = p.planType;
       _autoRenew = p.autoRenew;
       _colorHex = p.colorHex;
+      _gstEnabled = p.gstEnabled;
+      _gstRate = p.gstRate;
+      _gstType = p.gstType;
       _benefitControllers = p.benefits.isEmpty
           ? [TextEditingController()]
           : p.benefits.map((b) => TextEditingController(text: b)).toList();
@@ -91,13 +97,16 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
     super.dispose();
   }
 
-  double get _effectivePrice {
+  double get _baseEffectivePrice {
     final price = double.tryParse(_priceCtrl.text) ?? 0;
     final discount = double.tryParse(_discountCtrl.text) ?? 0;
-    if (discount > 0 && price > 0) {
-      return price - (price * discount / 100);
-    }
+    if (discount > 0 && price > 0) return price - (price * discount / 100);
     return price;
+  }
+
+  double get _effectivePrice {
+    if (_gstEnabled) return _baseEffectivePrice * (1 + _gstRate / 100);
+    return _baseEffectivePrice;
   }
 
   InputDecoration _inputDecoration({
@@ -216,6 +225,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       isActive: widget.plan?.isActive ?? true,
       memberCount: widget.plan?.memberCount ?? 0,
       colorHex: _colorHex,
+      gstEnabled: _gstEnabled,
+      gstRate: _gstRate,
+      gstType: _gstType,
       createdAt: widget.plan?.createdAt ?? DateTime.now(),
       updatedAt: DateTime.now(),
     );
@@ -570,22 +582,24 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                   ),
                   child: Row(
                     children: [
-                      const Text(
-                        'Effective Price',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: kOnSurfaceVariant,
-                        ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Effective Price',
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kOnSurfaceVariant),
+                          ),
+                          if (_gstEnabled)
+                            Text(
+                              'incl. ${_gstRate.toStringAsFixed(0)}% GST',
+                              style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant),
+                            ),
+                        ],
                       ),
                       const Spacer(),
                       Text(
                         '₹ ${_effectivePrice.toStringAsFixed(0)}',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: kPrimary,
-                        ),
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: kPrimary),
                       ),
                     ],
                   ),
@@ -649,6 +663,159 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                         onChanged: (v) => setState(() => _autoRenew = v),
                       ),
                     ],
+                  ),
+                ],
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // ── GST ─────────────────────────────────────────────────────
+            _sectionTitle('GST'),
+            _sectionCard(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text('Enable GST',
+                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kOnSurface)),
+                          SizedBox(height: 2),
+                          Text('Add GST to invoice/receipt',
+                              style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                    Switch.adaptive(
+                      value: _gstEnabled,
+                      activeColor: kPrimary,
+                      onChanged: (v) => setState(() => _gstEnabled = v),
+                    ),
+                  ],
+                ),
+                if (_gstEnabled) ...[
+                  const SizedBox(height: 14),
+                  // Rate selector
+                  const Text('GST Rate', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: [5.0, 12.0, 18.0, 28.0].map((rate) {
+                      final selected = _gstRate == rate;
+                      return GestureDetector(
+                        onTap: () => setState(() => _gstRate = rate),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: selected ? kPrimary : kSurfaceContainerLow,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text('${rate.toStringAsFixed(0)}%',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: selected ? kOnPrimary : kOnSurfaceVariant,
+                              )),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 14),
+                  // GST type
+                  const Text('GST Type', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _gstType = 'cgst_sgst'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _gstType == 'cgst_sgst' ? kPrimary : kSurfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(children: [
+                              Text('CGST + SGST',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _gstType == 'cgst_sgst' ? kOnPrimary : kOnSurfaceVariant,
+                                  )),
+                              Text('Intra-state',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: _gstType == 'cgst_sgst' ? kOnPrimary.withOpacity(0.7) : kTextTertiary,
+                                  )),
+                            ]),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _gstType = 'igst'),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: _gstType == 'igst' ? kPrimary : kSurfaceContainerLow,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(children: [
+                              Text('IGST',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _gstType == 'igst' ? kOnPrimary : kOnSurfaceVariant,
+                                  )),
+                              Text('Inter-state',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: _gstType == 'igst' ? kOnPrimary.withOpacity(0.7) : kTextTertiary,
+                                  )),
+                            ]),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: kPrimaryContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Base Price', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                        Text('₹ ${_baseEffectivePrice.toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurface)),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: kPrimaryContainer.withOpacity(0.3),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('GST (${_gstRate.toStringAsFixed(0)}%)',
+                            style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                        Text('₹ ${(_baseEffectivePrice * _gstRate / 100).toStringAsFixed(0)}',
+                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurface)),
+                      ],
+                    ),
                   ),
                 ],
               ],

@@ -109,6 +109,7 @@ class FirebaseService {
           .toList();
     }).handleError((Object e) {
       debugPrint('[FirebaseService] Invoice stream error: $e');
+      return <Invoice>[];
     });
   }
 
@@ -158,6 +159,7 @@ class FirebaseService {
           .toList();
     }).handleError((Object e) {
       debugPrint('[FirebaseService] Invoice stream error: $e');
+      return <Invoice>[];
     });
   }
 
@@ -190,12 +192,13 @@ class FirebaseService {
     InvoiceStatus? status,
     bool? gstEnabled,
     int pageSize = 100,
+    int maxResults = 5000,
   }) async {
     final invoices = <Invoice>[];
     QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
     var hasMore = true;
 
-    while (hasMore) {
+    while (hasMore && invoices.length < maxResults) {
       final page = await getInvoicesPage(
         searchQuery: searchQuery,
         startDate: startDate,
@@ -225,17 +228,22 @@ class FirebaseService {
       ..['id'] = docRef.id
       ..['ownerId'] = ownerId;
 
-    final clientRef = _clientsCollection(ownerId).doc(inv.clientId);
-    final clientData = <String, dynamic>{
-      'id': inv.clientId,
-      'name': inv.clientName,
-      'nameLower': inv.clientName.trim().toLowerCase(),
-      'updatedAt': Timestamp.fromDate(now),
-    };
 
     final batch = _firestore.batch();
     batch.set(docRef, data);
-    batch.set(clientRef, clientData, SetOptions(merge: true));
+
+    // Only upsert client doc if we have a valid clientId
+    if (inv.clientId.trim().isNotEmpty) {
+      final clientRef = _clientsCollection(ownerId).doc(inv.clientId);
+      final clientData = <String, dynamic>{
+        'id': inv.clientId,
+        'name': inv.clientName,
+        'nameLower': inv.clientName.trim().toLowerCase(),
+        'updatedAt': Timestamp.fromDate(now),
+      };
+      batch.set(clientRef, clientData, SetOptions(merge: true));
+    }
+
     // Don't await — Firestore queues the write locally and syncs when online.
     // Awaiting hangs the UI when offline.
     batch.commit();
@@ -243,10 +251,94 @@ class FirebaseService {
     return docRef.id;
   }
 
+  Future<void> updateInvoice(Invoice inv) async {
+    final docRef = _invoicesCollection.doc(inv.id);
+    final data = inv.toMap()
+      ..['id'] = inv.id
+      ..['ownerId'] = inv.ownerId;
+    await docRef.set(data);
+  }
+
   Future<void> updateInvoiceStatus(String id, InvoiceStatus status) async {
     final invoiceRef = await _resolveOwnedInvoiceRef(id);
     await invoiceRef.update({'status': status.name});
   }
+
+  /// Record a payment and auto-resolve status.
+  Future<void> recordPayment(String id, double paymentAmount, double newTotalReceived, double grandTotal, {String method = 'cash', String note = ''}) async {
+    final invoiceRef = await _resolveOwnedInvoiceRef(id);
+    final balanceDue = ((grandTotal - newTotalReceived) * 100).roundToDouble() / 100;
+    String status;
+    if (newTotalReceived >= grandTotal && grandTotal > 0) {
+      status = InvoiceStatus.paid.name;
+    } else if (newTotalReceived > 0) {
+      status = InvoiceStatus.partiallyPaid.name;
+    } else {
+      status = InvoiceStatus.pending.name;
+    }
+    debugPrint('[RecordPayment] id=$id payment=$paymentAmount total=$newTotalReceived grand=$grandTotal balance=$balanceDue status=$status');
+    try {
+      // 1. Log payment in subcollection
+      await invoiceRef.collection('payments').add({
+        'amount': paymentAmount,
+        'method': method,
+        'note': note,
+        'date': FieldValue.serverTimestamp(),
+        'runningTotal': newTotalReceived,
+        'balanceAfter': balanceDue,
+      });
+      // 2. Update invoice totals
+      await invoiceRef.update({
+        'amountReceived': newTotalReceived,
+        'balanceDue': balanceDue,
+        'status': status,
+      });
+      debugPrint('[RecordPayment] SUCCESS');
+    } catch (e) {
+      debugPrint('[RecordPayment] FAILED: $e');
+      rethrow;
+    }
+  }
+
+  /// Fetch payment history for an invoice, ordered by date descending.
+  Stream<List<Map<String, dynamic>>> watchPaymentHistory(String invoiceId) {
+    return _invoicesCollection.doc(invoiceId)
+        .collection('payments')
+        .orderBy('date', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((d) {
+          final data = d.data();
+          data['id'] = d.id;
+          return data;
+        }).toList());
+  }
+
+  /// Mark invoice as fully paid (sets amountReceived = grandTotal).
+  Future<void> markAsPaid(String id) async {
+    final invoiceRef = await _resolveOwnedInvoiceRef(id);
+    final doc = await invoiceRef.get();
+    final data = doc.data();
+    if (data == null) return;
+    final grandTotal = (data['grandTotal'] as num? ?? 0).toDouble();
+    final alreadyReceived = (data['amountReceived'] as num? ?? 0).toDouble();
+    final remaining = ((grandTotal - alreadyReceived) * 100).roundToDouble() / 100;
+    if (remaining > 0) {
+      await invoiceRef.collection('payments').add({
+        'amount': remaining,
+        'method': 'cash',
+        'note': 'Marked as fully paid',
+        'date': FieldValue.serverTimestamp(),
+        'runningTotal': grandTotal,
+        'balanceAfter': 0,
+      });
+    }
+    await invoiceRef.update({
+      'amountReceived': grandTotal,
+      'balanceDue': 0,
+      'status': InvoiceStatus.paid.name,
+    });
+  }
+
 
   Future<void> deleteInvoice(String id) async {
     final invoiceRef = await _resolveOwnedInvoiceRef(id);

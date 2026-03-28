@@ -1,0 +1,26 @@
+[debug] [2026-03-24T16:45:44.302Z] ----------------------------------------------------------------------
+[debug] [2026-03-24T16:45:44.303Z] Command:       /usr/bin/node /sessions/compassionate-confident-newton/.npm-global/bin/firebase projects:list
+[debug] [2026-03-24T16:45:44.303Z] CLI Version:   15.11.0
+[debug] [2026-03-24T16:45:44.303Z] Platform:      linux
+[debug] [2026-03-24T16:45:44.303Z] Node Version:  v22.22.0
+[debug] [2026-03-24T16:45:44.303Z] Time:          Tue Mar 24 2026 22:15:44 GMT+0530 (India Standard Time)
+[debug] [2026-03-24T16:45:44.303Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-03-24T16:45:44.304Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-03-24T16:45:44.391Z] Object "" in "firebase.json" has unknown property: {"additionalProperty":"flutter"}
+[debug] [2026-03-24T16:45:44.394Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-03-24T16:45:44.401Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 403
+[debug] [2026-03-24T16:45:44.401Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json "Connection blocked by network allowlist"
+[warn] ⚠  Unable to fetch the CLI MOTD and remote config. This is not a fatal error, but may indicate an issue with your network connection. 
+[debug] [2026-03-24T16:45:44.401Z] Failed to fetch MOTD FirebaseError: Unable to parse JSON: SyntaxError: Unexpected token 'C', "Connection"... is not valid JSON
+[debug] [2026-03-24T16:45:44.402Z] Error: Could not load the default credentials. Browse to https://cloud.google.com/docs/authentication/getting-started for more information.
+    at GoogleAuth.getApplicationDefaultAsync (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/node_modules/google-auth-library/build/src/auth/googleauth.js:287:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+    at async GoogleAuth._GoogleAuth_determineClient (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/node_modules/google-auth-library/build/src/auth/googleauth.js:834:32)
+    at async GoogleAuth.getClient (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/node_modules/google-auth-library/build/src/auth/googleauth.js:698:20)
+    at async GoogleAuth.getAccessToken (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/node_modules/google-auth-library/build/src/auth/googleauth.js:722:24)
+    at async autoAuth (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/lib/requireAuth.js:28:19)
+    at async Object.requireAuth [as fn] (/sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/lib/requireAuth.js:90:20)
+    at async /sessions/compassionate-confident-newton/.npm-global/lib/node_modules/firebase-tools/lib/command.js:264:17
+[error] 
+[error] Error: Failed to authenticate, have you run firebase login?

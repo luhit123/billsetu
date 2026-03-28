@@ -42,6 +42,11 @@ const kPending    = Color(0xFFF59E0B);
 const kPendingBg  = Color(0xFFFEF3C7);
 const kOverdue    = Color(0xFFEF4444);
 const kOverdueBg  = Color(0xFFFEE2E2);
+// New: Unpaid (red) & Partial (amber) for payment-derived status
+const kUnpaid     = Color(0xFFEF4444);
+const kUnpaidBg   = Color(0xFFFEE2E2);
+const kPartial    = Color(0xFFEAB308);
+const kPartialBg  = Color(0xFFFEF3C7);
 const kError      = Color(0xFF9E3F4E);
 const kErrorContainer = Color(0xFFFF8B9A);
 

@@ -3,6 +3,7 @@ import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/screens/customers_screen.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
+import 'package:billeasy/screens/reports_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
@@ -192,44 +193,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
                 ),
               ),
-            ),
-          ),
-
-          // ── Business ──
-          const SizedBox(height: 28),
-          const _SectionLabel(title: 'BUSINESS'),
-          const SizedBox(height: 8),
-          _TonalCard(
-            child: Column(
-              children: [
-                _SettingsTile(
-                  icon: Icons.people_alt_outlined,
-                  iconBg: const Color(0xFF007AFF),
-                  title: strings.drawerCustomers,
-                  onTap: _openCustomers,
-                ),
-                const _TileDivider(),
-                _SettingsTile(
-                  icon: Icons.inventory_2_outlined,
-                  iconBg: const Color(0xFFFF9500),
-                  title: strings.drawerProducts,
-                  onTap: _openProducts,
-                ),
-                const _TileDivider(),
-                _SettingsTile(
-                  icon: Icons.receipt_long_outlined,
-                  iconBg: const Color(0xFF34C759),
-                  title: strings.homeBottomInvoices,
-                  onTap: _openInvoices,
-                ),
-                const _TileDivider(),
-                _SettingsTile(
-                  icon: Icons.assessment_outlined,
-                  iconBg: const Color(0xFF5856D6),
-                  title: strings.drawerGst,
-                  onTap: _openGstReport,
-                ),
-              ],
             ),
           ),
 
@@ -448,6 +411,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   void _openGstReport() => Navigator.of(context)
       .push(MaterialPageRoute(builder: (_) => const GstReportScreen()));
+
+  void _openReports() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const ReportsScreen()));
 
   void _openSubscription() => Navigator.of(context)
       .push(MaterialPageRoute(builder: (_) => const SubscriptionScreen()));

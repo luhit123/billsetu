@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/services/signature_service.dart';
 import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/modals/invoice.dart';
@@ -16,6 +18,8 @@ enum InvoiceTemplate {
   minimalist, bold, elegant, professional, vibrant,
   clean, royal, stripe, grid, pastel, dark,
   retail, wholesale, services, creative, simple, gstPro,
+  // Structurally different layouts
+  banner, sidebarLayout, bordered, twoColumn, receipt,
 }
 
 /// Configurable style that drives the parameterized PDF builder.
@@ -63,7 +67,22 @@ class TemplateStyle {
   });
 }
 
+class _VyColors {
+  final PdfColor primary;
+  final PdfColor labelBg;
+  final PdfColor border;
+  final PdfColor black;
+  final PdfColor body;
+  final PdfColor muted;
+  const _VyColors(this.primary, this.labelBg, this.border, this.black, this.body, this.muted);
+}
+
 class InvoicePdfService {
+  // Singleton — keeps fonts cached across calls
+  static final InvoicePdfService _instance = InvoicePdfService._();
+  factory InvoicePdfService() => _instance;
+  InvoicePdfService._();
+
   // Brand palette
   static const PdfColor _navy = PdfColor(0.07, 0.24, 0.52);
   static const PdfColor _teal = PdfColor(0.06, 0.49, 0.51);
@@ -84,17 +103,31 @@ class InvoicePdfService {
   final DateFormat _generatedFormat = DateFormat('dd MMM yyyy, hh:mm a');
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
-    symbol: 'Rs. ',
+    symbol: 'Rs.',
     decimalDigits: 0,
   );
 
   pw.Font? _fontRegular;
   pw.Font? _fontBold;
 
+  // Active color scheme for current PDF build
+  _VyColors _c = _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+
+  /// Pre-load fonts at app startup so first PDF is instant.
+  Future<void> preloadFonts([AppLanguage language = AppLanguage.english]) => _loadFonts(language);
+
   static Completer<void>? _fontLoadCompleter;
 
+  AppLanguage? _loadedLanguage;
+
   Future<void> _loadFonts(AppLanguage language) async {
-    if (_fontRegular != null) return; // already loaded
+    if (_fontRegular != null && _loadedLanguage == language) return; // already loaded for this language
+    // Reset if language changed
+    if (_loadedLanguage != null && _loadedLanguage != language) {
+      _fontRegular = null;
+      _fontBold = null;
+      _fontLoadCompleter = null;
+    }
     if (_fontLoadCompleter != null) {
       await _fontLoadCompleter!.future; // wait for in-progress load
       return;
@@ -128,13 +161,26 @@ class InvoicePdfService {
           _fontBold = pw.Font.ttf(dataTa);
         case AppLanguage.english:
         default:
-          _fontRegular = pw.Font.helvetica();
-          _fontBold = pw.Font.helveticaBold();
+          // Use NotoSansDevanagari for English too — it covers Latin + ₹ symbol
+          final dataEn = await rootBundle.load(
+            'assets/fonts/NotoSansDevanagari.ttf',
+          );
+          _fontRegular = pw.Font.ttf(dataEn);
+          _fontBold = pw.Font.ttf(dataEn);
       }
+      _loadedLanguage = language;
       _fontLoadCompleter!.complete();
     } catch (e) {
-      _fontRegular = pw.Font.helvetica();
-      _fontBold = pw.Font.helveticaBold();
+      // Fallback: try NotoSansDevanagari, then Helvetica
+      try {
+        final fallback = await rootBundle.load('assets/fonts/NotoSansDevanagari.ttf');
+        _fontRegular = pw.Font.ttf(fallback);
+        _fontBold = pw.Font.ttf(fallback);
+      } catch (_) {
+        _fontRegular = pw.Font.helvetica();
+        _fontBold = pw.Font.helveticaBold();
+      }
+      _loadedLanguage = language;
       _fontLoadCompleter!.complete();
     }
   }
@@ -159,17 +205,32 @@ class InvoicePdfService {
     // every font and match standard Indian business invoice format.
     const s = AppStrings(AppLanguage.english);
 
+    final colors = _vyColorMap[template] ?? _vyColorMap[InvoiceTemplate.vyapar]!;
+
+    // Route structurally different layouts to their own builders
+    Future<Uint8List> Function() builder;
     switch (template) {
-      case InvoiceTemplate.classic:
-        return _buildClassicPdf(invoice, profile, s, includePayment: includePayment);
-      case InvoiceTemplate.modern:
-        return _buildModernPdf(invoice, profile, s, includePayment: includePayment);
-      case InvoiceTemplate.compact:
-        return _buildCompactPdf(invoice, profile, s, includePayment: includePayment);
-      case InvoiceTemplate.vyapar:
-        return _buildVyaparPdf(invoice, profile, s, includePayment: includePayment);
+      case InvoiceTemplate.banner:
+        builder = () => _buildBannerPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
+      case InvoiceTemplate.sidebarLayout:
+        builder = () => _buildSidebarPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
+      case InvoiceTemplate.bordered:
+        builder = () => _buildBorderedPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
+      case InvoiceTemplate.twoColumn:
+        builder = () => _buildTwoColumnPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
+      case InvoiceTemplate.receipt:
+        builder = () => _buildReceiptPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
       default:
-        return _buildStyledPdf(invoice, profile, s, _templateStyles[template]!, includePayment: includePayment);
+        builder = () => _buildVyaparPdf(invoice, profile, s, includePayment: includePayment, colors: colors);
+    }
+
+    try {
+      return await builder();
+    } on RangeError {
+      _fontRegular = pw.Font.helvetica();
+      _fontBold = pw.Font.helveticaBold();
+      _loadedLanguage = null;
+      return builder();
     }
   }
 
@@ -481,8 +542,8 @@ class InvoicePdfService {
           theme: theme,
           pageFormat: PdfPageFormat.a4,
           margin: style.showFullWidthHeader
-              ? const pw.EdgeInsets.fromLTRB(0, 0, 0, 32)
-              : const pw.EdgeInsets.fromLTRB(36, 0, 36, 32),
+              ? const pw.EdgeInsets.fromLTRB(0, 0, 0, 24)
+              : const pw.EdgeInsets.fromLTRB(28, 0, 28, 24),
         ),
         footer: (ctx) => _styledFooter(ctx, s, style),
         build: (ctx) {
@@ -757,7 +818,7 @@ class InvoicePdfService {
             lines: [
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.status, s)}',
+              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
             ],
             style: style,
           ),
@@ -1011,20 +1072,83 @@ class InvoicePdfService {
 
   // ── Vyapar-style PDF ────────────────────────────────────────────────────
 
-  // #1a2e4a, #eeeeee, #cccccc, #000000, #333333, #666666
-  static const PdfColor _vyPrimary = PdfColor(0.10, 0.18, 0.29);
-  static const PdfColor _vyLabelBg = PdfColor(0.93, 0.93, 0.93);
-  static const PdfColor _vyBorder = PdfColor(0.80, 0.80, 0.80);
+  // Default Vyapar colors — high contrast blue
+  static final PdfColor _vyPrimary = PdfColor.fromHex('#0B57D0');
+  static final PdfColor _vyLabelBg = PdfColor.fromHex('#D3E3FD');
+  static final PdfColor _vyBorder = PdfColor.fromHex('#7CACF8');
   static const PdfColor _vyBlack = PdfColor(0.0, 0.0, 0.0);
-  static const PdfColor _vyBody = PdfColor(0.20, 0.20, 0.20);
-  static const PdfColor _vyMuted = PdfColor(0.40, 0.40, 0.40);
+  static final PdfColor _vyBody = PdfColor.fromHex('#1D1D1F');
+  static final PdfColor _vyMuted = PdfColor.fromHex('#6B6B6B');
+
+  // Per-template color overrides — high contrast, synced with widget preview
+  static final Map<InvoiceTemplate, _VyColors> _vyColorMap = {
+    InvoiceTemplate.vyapar:       _VyColors(PdfColor.fromHex('#0B57D0'), PdfColor.fromHex('#D3E3FD'), PdfColor.fromHex('#7CACF8'), PdfColor(0,0,0), PdfColor.fromHex('#1D1D1F'), PdfColor.fromHex('#6B6B6B')),
+    InvoiceTemplate.classic:      _VyColors(PdfColor.fromHex('#1B3A5C'), PdfColor.fromHex('#D6E4F0'), PdfColor.fromHex('#8AACC8'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.modern:       _VyColors(PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#E8E8E8'), PdfColor.fromHex('#A0A0A0'), PdfColor(0,0,0), PdfColor.fromHex('#2D2D2D'), PdfColor.fromHex('#6E6E6E')),
+    InvoiceTemplate.compact:      _VyColors(PdfColor.fromHex('#1B7A3D'), PdfColor.fromHex('#CCF0D8'), PdfColor.fromHex('#6DC08A'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.minimalist:   _VyColors(PdfColor.fromHex('#3C3C3C'), PdfColor.fromHex('#ECECEC'), PdfColor.fromHex('#B0B0B0'), PdfColor.fromHex('#111111'), PdfColor.fromHex('#2A2A2A'), PdfColor.fromHex('#787878')),
+    InvoiceTemplate.bold:         _VyColors(PdfColor.fromHex('#C62828'), PdfColor.fromHex('#FFCDD2'), PdfColor.fromHex('#E57373'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.elegant:      _VyColors(PdfColor.fromHex('#5D4037'), PdfColor.fromHex('#EFEBE9'), PdfColor.fromHex('#BCAAA4'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#6D5D53')),
+    InvoiceTemplate.professional: _VyColors(PdfColor.fromHex('#0D47A1'), PdfColor.fromHex('#BBDEFB'), PdfColor.fromHex('#64B5F6'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.vibrant:      _VyColors(PdfColor.fromHex('#D50000'), PdfColor.fromHex('#FFCDD2'), PdfColor.fromHex('#EF9A9A'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.clean:        _VyColors(PdfColor.fromHex('#00838F'), PdfColor.fromHex('#B2EBF2'), PdfColor.fromHex('#4DD0E1'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.royal:        _VyColors(PdfColor.fromHex('#6A1B9A'), PdfColor.fromHex('#E1BEE7'), PdfColor.fromHex('#CE93D8'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.stripe:       _VyColors(PdfColor.fromHex('#01579B'), PdfColor.fromHex('#B3E5FC'), PdfColor.fromHex('#4FC3F7'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.grid:         _VyColors(PdfColor.fromHex('#37474F'), PdfColor.fromHex('#CFD8DC'), PdfColor.fromHex('#90A4AE'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.pastel:       _VyColors(PdfColor.fromHex('#8E24AA'), PdfColor.fromHex('#F3E5F5'), PdfColor.fromHex('#BA68C8'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.dark:         _VyColors(PdfColor.fromHex('#263238'), PdfColor.fromHex('#CFD8DC'), PdfColor.fromHex('#78909C'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.retail:       _VyColors(PdfColor.fromHex('#E65100'), PdfColor.fromHex('#FFE0B2'), PdfColor.fromHex('#FFB74D'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.wholesale:    _VyColors(PdfColor.fromHex('#00695C'), PdfColor.fromHex('#B2DFDB'), PdfColor.fromHex('#4DB6AC'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.services:     _VyColors(PdfColor.fromHex('#283593'), PdfColor.fromHex('#C5CAE9'), PdfColor.fromHex('#7986CB'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.creative:     _VyColors(PdfColor.fromHex('#C2185B'), PdfColor.fromHex('#F8BBD0'), PdfColor.fromHex('#F06292'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.simple:       _VyColors(PdfColor.fromHex('#424242'), PdfColor.fromHex('#E0E0E0'), PdfColor.fromHex('#9E9E9E'), PdfColor(0,0,0), PdfColor.fromHex('#212121'), PdfColor.fromHex('#616161')),
+    InvoiceTemplate.gstPro:       _VyColors(PdfColor.fromHex('#006064'), PdfColor.fromHex('#B2EBF2'), PdfColor.fromHex('#00ACC1'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    // Structurally different layouts
+    InvoiceTemplate.banner:       _VyColors(PdfColor.fromHex('#1565C0'), PdfColor.fromHex('#E3F2FD'), PdfColor.fromHex('#42A5F5'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.sidebarLayout:_VyColors(PdfColor.fromHex('#2E7D32'), PdfColor.fromHex('#E8F5E9'), PdfColor.fromHex('#66BB6A'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.bordered:     _VyColors(PdfColor.fromHex('#4E342E'), PdfColor.fromHex('#EFEBE9'), PdfColor.fromHex('#8D6E63'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.twoColumn:    _VyColors(PdfColor.fromHex('#AD1457'), PdfColor.fromHex('#FCE4EC'), PdfColor.fromHex('#EC407A'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+    InvoiceTemplate.receipt:      _VyColors(PdfColor.fromHex('#333333'), PdfColor.fromHex('#F5F5F5'), PdfColor.fromHex('#999999'), PdfColor(0,0,0), PdfColor.fromHex('#1A1A1A'), PdfColor.fromHex('#5C5C5C')),
+  };
+
+  // Adaptive sizing parameters — computed per-invoice to fit one page
+  double _vySectionSpacing = 10;
+  double _vyBaseFontSize = 10;
+  double _vyCellPadV = 6;
+  double _vySignatureHeight = 60;
+  double _vyTitleFontSize = 22;
+  double _vySellerNameFontSize = 16;
+
+  void _computeAdaptiveSizing(Invoice invoice, bool hasPayment) {
+    final n = invoice.items.length;
+    // Aggressive compaction — everything must fit one page
+    _vySectionSpacing = n > 4 ? (6 - (n - 4) * 0.5).clamp(1.0, 6.0) : 6;
+    _vyCellPadV = n > 4 ? (4 - (n - 4) * 0.15).clamp(1.5, 4.0) : 4;
+    _vySignatureHeight = n > 6 ? (40.0 - (n - 6) * 3.0).clamp(14.0, 40.0) : 40;
+    // Shrink fonts earlier
+    _vyBaseFontSize = n > 8 ? (9 - (n - 8) * 0.15).clamp(6.5, 9.0) : 9;
+    _vyTitleFontSize = n > 6 ? (18 - (n - 6) * 0.5).clamp(12.0, 18.0) : 18;
+    _vySellerNameFontSize = n > 6 ? (12 - (n - 6) * 0.3).clamp(8.0, 12.0) : 12;
+    // Extra compaction when payment section is present
+    if (hasPayment && n > 3) {
+      _vySectionSpacing = (_vySectionSpacing - 1.5).clamp(0.5, 6.0);
+      _vySignatureHeight = (_vySignatureHeight - 8).clamp(10.0, 40.0);
+    }
+  }
 
   Future<Uint8List> _buildVyaparPdf(
     Invoice invoice,
     BusinessProfile? profile,
     AppStrings s, {
     bool includePayment = true,
+    _VyColors? colors,
   }) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+
+    final hasPayment = includePayment && profile != null &&
+        (profile.upiId.isNotEmpty || profile.upiNumber.isNotEmpty || profile.upiQrUrl.isNotEmpty);
+    _computeAdaptiveSizing(invoice, hasPayment);
+
     final document = pw.Document(
       title: invoice.invoiceNumber,
       author: _sellerName(profile, s),
@@ -1037,31 +1161,50 @@ class InvoicePdfService {
         ? await _paymentSection(profile)
         : pw.SizedBox.shrink();
 
+    // Load saved signature
+    final signatureBytes = await SignatureService.load();
+
+    const pageFormat = PdfPageFormat.a4;
+    const marginH = 16.0, marginTop = 14.0, marginBottom = 14.0;
+    final usableWidth = pageFormat.width - marginH * 2;
+
     document.addPage(
-      pw.MultiPage(
-        pageTheme: pw.PageTheme(
-          theme: theme,
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.fromLTRB(36, 32, 36, 32),
-        ),
-        footer: (ctx) => _vyFooter(ctx, s),
-        build: (ctx) => [
-          _vyTitle(),
-          pw.SizedBox(height: 14),
-          _vySellerBox(profile, s),
-          pw.SizedBox(height: 14),
-          _vyBillToInvoiceDetails(invoice, profile, s),
-          pw.SizedBox(height: 14),
-          _vyItemsTable(invoice, s),
-          pw.SizedBox(height: 0),
-          _vyTotalsBlock(invoice, s),
-          pw.SizedBox(height: 14),
-          paymentWidget,
-          pw.SizedBox(height: 14),
-          _vyTermsAndConditions(),
-          pw.SizedBox(height: 14),
-          _vySignatureBlock(profile, s),
-        ],
+      pw.Page(
+        theme: theme,
+        pageFormat: pageFormat,
+        margin: pw.EdgeInsets.fromLTRB(marginH, marginTop, marginH, marginBottom),
+        build: (ctx) {
+          final content = pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              _vyTitle(),
+              pw.SizedBox(height: _vySectionSpacing),
+              _vySellerBox(profile, s),
+              pw.SizedBox(height: _vySectionSpacing),
+              _vyBillToInvoiceDetails(invoice, profile, s),
+              pw.SizedBox(height: _vySectionSpacing),
+              _vyItemsTable(invoice, s),
+              _vyTotalsBlock(invoice, s),
+              pw.SizedBox(height: _vySectionSpacing),
+              paymentWidget,
+              // Terms + Signature SIDE BY SIDE (like Vyapar)
+              pw.SizedBox(height: _vySectionSpacing),
+              _vyTermsAndSignatureRow(profile, s, signatureBytes),
+              pw.SizedBox(height: _vySectionSpacing),
+              _vyFooter(ctx, s),
+            ],
+          );
+          // Scale entire content to fit one page — no clipping
+          return pw.FittedBox(
+            fit: pw.BoxFit.scaleDown,
+            alignment: pw.Alignment.topLeft,
+            child: pw.SizedBox(
+              width: usableWidth,
+              child: content,
+            ),
+          );
+        },
       ),
     );
 
@@ -1072,10 +1215,10 @@ class InvoicePdfService {
   pw.Widget _vyTitle() {
     return pw.Container(
       width: double.infinity,
-      padding: const pw.EdgeInsets.symmetric(vertical: 14),
-      decoration: const pw.BoxDecoration(
+      padding: pw.EdgeInsets.symmetric(vertical: _vyCellPadV * 2),
+      decoration: pw.BoxDecoration(
         border: pw.Border(
-          bottom: pw.BorderSide(color: _vyBorder, width: 1),
+          bottom: pw.BorderSide(color: _c.border, width: 1),
         ),
       ),
       child: pw.Center(
@@ -1083,10 +1226,10 @@ class InvoicePdfService {
           'Tax\nInvoice',
           textAlign: pw.TextAlign.center,
           style: pw.TextStyle(
-            color: _vyPrimary,
-            fontSize: 22,
+            color: _c.primary,
+            fontSize: _vyTitleFontSize,
             fontWeight: pw.FontWeight.bold,
-            lineSpacing: 4,
+            lineSpacing: _vyTitleFontSize > 18 ? 4 : 2,
           ),
         ),
       ),
@@ -1097,13 +1240,14 @@ class InvoicePdfService {
   pw.Widget _vySellerBox(BusinessProfile? profile, AppStrings s) {
     final sellerName = _sellerName(profile, s);
     final phone = profile?.phoneNumber ?? '';
+    final smallFont = _vyBaseFontSize;
 
     return pw.Container(
       width: double.infinity,
-      padding: const pw.EdgeInsets.all(14),
+      padding: pw.EdgeInsets.all(_vyCellPadV * 2),
       decoration: pw.BoxDecoration(
-        color: const PdfColor(0.96, 0.96, 0.96),
-        border: pw.Border.all(color: _vyBorder, width: 1),
+        color: _c.labelBg,
+        border: pw.Border.all(color: _c.border, width: 1),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1111,30 +1255,30 @@ class InvoicePdfService {
           pw.Text(
             sellerName,
             style: pw.TextStyle(
-              color: _vyBlack,
-              fontSize: 16,
+              color: _c.black,
+              fontSize: _vySellerNameFontSize,
               fontWeight: pw.FontWeight.bold,
             ),
           ),
           if (phone.trim().isNotEmpty) ...[
-            pw.SizedBox(height: 4),
+            pw.SizedBox(height: 3),
             pw.Text(
               'Phone: $phone',
-              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
             ),
           ],
           if (profile != null && profile.gstin.isNotEmpty) ...[
             pw.SizedBox(height: 2),
             pw.Text(
               'GSTIN: ${profile.gstin}',
-              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
             ),
           ],
           if (profile != null && profile.address.trim().isNotEmpty) ...[
             pw.SizedBox(height: 2),
             pw.Text(
               profile.address.trim(),
-              style: pw.TextStyle(color: _vyMuted, fontSize: 10),
+              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
             ),
           ],
         ],
@@ -1148,8 +1292,10 @@ class InvoicePdfService {
     BusinessProfile? profile,
     AppStrings s,
   ) {
+    final fs = _vyBaseFontSize;
+    final custFs = (fs + 2).clamp(8.0, 12.0);
     return pw.Table(
-      border: pw.TableBorder.all(color: _vyBorder, width: 1),
+      border: pw.TableBorder.all(color: _c.border, width: 1),
       columnWidths: const {
         0: pw.FlexColumnWidth(1),
         1: pw.FlexColumnWidth(1),
@@ -1159,25 +1305,25 @@ class InvoicePdfService {
         pw.TableRow(
           children: [
             pw.Container(
-              color: _vyLabelBg,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              color: _c.labelBg,
+              padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
               child: pw.Text(
                 'Bill To:',
                 style: pw.TextStyle(
-                  color: _vyBlack,
-                  fontSize: 10,
+                  color: _c.black,
+                  fontSize: fs,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
             ),
             pw.Container(
-              color: _vyLabelBg,
-              padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              color: _c.labelBg,
+              padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
               child: pw.Text(
                 'Invoice Details:',
                 style: pw.TextStyle(
-                  color: _vyBlack,
-                  fontSize: 10,
+                  color: _c.black,
+                  fontSize: fs,
                   fontWeight: pw.FontWeight.bold,
                 ),
               ),
@@ -1188,50 +1334,50 @@ class InvoicePdfService {
         pw.TableRow(
           children: [
             pw.Padding(
-              padding: const pw.EdgeInsets.all(10),
+              padding: pw.EdgeInsets.all(_vyCellPadV + 2),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
                     _customerName(invoice),
                     style: pw.TextStyle(
-                      color: _vyBlack,
-                      fontSize: 12,
+                      color: _c.black,
+                      fontSize: custFs,
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
                   if (invoice.customerGstin.isNotEmpty) ...[
-                    pw.SizedBox(height: 3),
+                    pw.SizedBox(height: 2),
                     pw.Text(
                       'GSTIN: ${invoice.customerGstin}',
-                      style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                      style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
                     ),
                   ],
                 ],
               ),
             ),
             pw.Padding(
-              padding: const pw.EdgeInsets.all(10),
+              padding: pw.EdgeInsets.all(_vyCellPadV + 2),
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
                     'No: ${invoice.invoiceNumber}',
-                    style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                    style: pw.TextStyle(color: _c.body, fontSize: fs),
                   ),
-                  pw.SizedBox(height: 3),
+                  pw.SizedBox(height: 2),
                   pw.RichText(
                     text: pw.TextSpan(
                       children: [
                         pw.TextSpan(
                           text: 'Date: ',
-                          style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                          style: pw.TextStyle(color: _c.body, fontSize: fs),
                         ),
                         pw.TextSpan(
                           text: _dateFormat.format(invoice.createdAt),
                           style: pw.TextStyle(
-                            color: _vyBlack,
-                            fontSize: 10,
+                            color: _c.black,
+                            fontSize: fs,
                             fontWeight: pw.FontWeight.bold,
                           ),
                         ),
@@ -1239,10 +1385,10 @@ class InvoicePdfService {
                     ),
                   ),
                   if (invoice.dueDate != null) ...[
-                    pw.SizedBox(height: 3),
+                    pw.SizedBox(height: 2),
                     pw.Text(
                       'Due: ${_dateFormat.format(invoice.dueDate!)}',
-                      style: pw.TextStyle(color: _vyBody, fontSize: 10),
+                      style: pw.TextStyle(color: _c.body, fontSize: fs),
                     ),
                   ],
                 ],
@@ -1258,74 +1404,107 @@ class InvoicePdfService {
   pw.Widget _vyItemsTable(Invoice invoice, AppStrings s) {
     final hasHsn = invoice.items.any((i) => i.hsnCode.isNotEmpty);
     final hasGst = invoice.gstEnabled;
+    final hasDisc = invoice.items.any((i) => i.discountPercent > 0);
 
-    // Build column widths
-    final colWidths = <int, pw.TableColumnWidth>{
-      0: const pw.FixedColumnWidth(28),   // #
-      1: const pw.FlexColumnWidth(3),     // Item Name
-    };
-    int colIdx = 2;
-    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // HSN/SAC
-    colWidths[colIdx++] = const pw.FlexColumnWidth(1.2); // Quantity
-    colWidths[colIdx++] = const pw.FlexColumnWidth(1);   // Unit
-    colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // Price/Unit
-    colWidths[colIdx++] = const pw.FlexColumnWidth(1.5); // Amount
-    if (hasGst) colWidths[colIdx++] = const pw.FlexColumnWidth(1); // GST%
+    // Dynamic columns — only show what's needed
+    int colIdx = 0;
+    final colWidths = <int, pw.TableColumnWidth>{};
+    colWidths[colIdx++] = const pw.FixedColumnWidth(22);    // #
+    colWidths[colIdx++] = const pw.FlexColumnWidth(2.5);    // Item Name
+    if (hasHsn) colWidths[colIdx++] = const pw.FlexColumnWidth(1.2);
+    colWidths[colIdx++] = const pw.FlexColumnWidth(0.7);    // Qty
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1);      // Rate
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1);      // Amt (Qty×Rate)
+    if (hasDisc) {
+      colWidths[colIdx++] = const pw.FlexColumnWidth(0.7);  // Disc%
+      colWidths[colIdx++] = const pw.FlexColumnWidth(1);    // After Disc
+    }
+    if (hasGst) {
+      colWidths[colIdx++] = const pw.FlexColumnWidth(0.7);  // GST%
+      colWidths[colIdx++] = const pw.FlexColumnWidth(1);    // GST Amt
+    }
+    colWidths[colIdx++] = const pw.FlexColumnWidth(1.1);    // Total
 
-    // Header row
+    // Header
     final headerCells = <pw.Widget>[
       _vyCell('#', header: true, align: pw.TextAlign.center),
-      _vyCell('Item Name', header: true),
+      _vyCell('Item', header: true),
     ];
-    if (hasHsn) headerCells.add(_vyCell('HSN/\nSAC', header: true, align: pw.TextAlign.center));
-    headerCells.add(_vyCell('Quantity', header: true, align: pw.TextAlign.right));
-    headerCells.add(_vyCell('Unit', header: true, align: pw.TextAlign.center));
-    headerCells.add(_vyCell('Price/\nUnit (\u20B9)', header: true, align: pw.TextAlign.right));
-    headerCells.add(_vyCell('Amount\n(\u20B9)', header: true, align: pw.TextAlign.right));
-    if (hasGst) headerCells.add(_vyCell('GST%', header: true, align: pw.TextAlign.center));
+    if (hasHsn) headerCells.add(_vyCell('HSN', header: true, align: pw.TextAlign.center));
+    headerCells.add(_vyCell('Qty', header: true, align: pw.TextAlign.right));
+    headerCells.add(_vyCell('Rate', header: true, align: pw.TextAlign.right));
+    headerCells.add(_vyCell('Amt', header: true, align: pw.TextAlign.right));
+    if (hasDisc) {
+      headerCells.add(_vyCell('Disc', header: true, align: pw.TextAlign.center));
+      headerCells.add(_vyCell('After\nDisc', header: true, align: pw.TextAlign.right));
+    }
+    if (hasGst) {
+      headerCells.add(_vyCell('GST', header: true, align: pw.TextAlign.center));
+      headerCells.add(_vyCell('Tax\nAmt', header: true, align: pw.TextAlign.right));
+    }
+    headerCells.add(_vyCell('Total', header: true, align: pw.TextAlign.right));
 
     final rows = <pw.TableRow>[
       pw.TableRow(
-        decoration: const pw.BoxDecoration(color: _vyLabelBg),
+        decoration: pw.BoxDecoration(color: _c.labelBg),
         children: headerCells,
       ),
     ];
 
     // Item rows
-    double totalQty = 0;
     for (var i = 0; i < invoice.items.length; i++) {
       final item = invoice.items[i];
-      totalQty += item.quantity;
+
       final cells = <pw.Widget>[
         _vyCell('${i + 1}', align: pw.TextAlign.center),
         _vyCell(item.description, bold: true),
       ];
       if (hasHsn) cells.add(_vyCell(item.hsnCode.isEmpty ? '' : item.hsnCode, align: pw.TextAlign.center));
       cells.add(_vyCell(item.quantityText, align: pw.TextAlign.right));
-      cells.add(_vyCell(item.unit.isEmpty ? '' : item.unit, align: pw.TextAlign.center));
-      cells.add(_vyCell('\u20B9\n${_vyNum(item.unitPrice)}', align: pw.TextAlign.right));
-      cells.add(_vyCell('\u20B9\n${_vyNum(item.total)}', align: pw.TextAlign.right, bold: true));
-      if (hasGst) cells.add(_vyCell('${item.gstRate.toStringAsFixed(0)}%', align: pw.TextAlign.center));
+      cells.add(_vyCell('${_vyNum(item.unitPrice)}', align: pw.TextAlign.right));
+      cells.add(_vyCell('${_vyNum(item.rawTotal)}', align: pw.TextAlign.right));
+      if (hasDisc) {
+        cells.add(_vyCell(item.discountPercent > 0 ? '${item.discountPercent.toStringAsFixed(0)}%' : '-', align: pw.TextAlign.center));
+        cells.add(_vyCell('${_vyNum(item.total)}', align: pw.TextAlign.right));
+      }
+      if (hasGst) {
+        cells.add(_vyCell(item.gstRate > 0 ? '${item.gstRate.toStringAsFixed(0)}%' : '-', align: pw.TextAlign.center));
+        cells.add(_vyCell(item.gstRate > 0 ? '${_vyNum(item.gstAmount)}' : '-', align: pw.TextAlign.right));
+      }
+      cells.add(_vyCell('${_vyNum(item.totalWithGst)}', align: pw.TextAlign.right, bold: true));
 
       rows.add(pw.TableRow(children: cells));
     }
 
     // Total row
+    final itemCount = invoice.items.length;
+    final totalRaw = invoice.items.fold<double>(0, (s, i) => s + i.rawTotal);
+    final totalAfterDisc = invoice.items.fold<double>(0, (s, i) => s + i.total);
+    final totalGstAmt = invoice.items.fold<double>(0, (s, i) => s + i.gstAmount);
+    final totalFinal = invoice.items.fold<double>(0, (s, i) => s + i.totalWithGst);
+
     final totalCells = <pw.Widget>[
       _vyCell('', bold: true),
-      _vyCell('Total', bold: true),
+      _vyCell('Total ($itemCount items)', bold: true),
     ];
     if (hasHsn) totalCells.add(_vyCell(''));
-    totalCells.add(_vyCell(_vyQtyTotal(totalQty), bold: true, align: pw.TextAlign.right));
     totalCells.add(_vyCell(''));
     totalCells.add(_vyCell(''));
-    totalCells.add(_vyCell('\u20B9\n${_vyNum(invoice.subtotal)}', bold: true, align: pw.TextAlign.right));
-    if (hasGst) totalCells.add(_vyCell(''));
+    totalCells.add(_vyCell('${_vyNum(totalRaw)}', bold: true, align: pw.TextAlign.right));
+    if (hasDisc) {
+      totalCells.add(_vyCell(''));
+      totalCells.add(_vyCell('${_vyNum(totalAfterDisc)}', bold: true, align: pw.TextAlign.right));
+    }
+    if (hasGst) {
+      totalCells.add(_vyCell(''));
+      totalCells.add(_vyCell('${_vyNum(totalGstAmt)}', bold: true, align: pw.TextAlign.right));
+    }
+    totalCells.add(_vyCell('${_vyNum(totalFinal)}', bold: true, align: pw.TextAlign.right));
 
     rows.add(pw.TableRow(children: totalCells));
 
     return pw.Table(
-      border: pw.TableBorder.all(color: _vyBorder, width: 1),
+      border: pw.TableBorder.all(color: _c.border, width: 0.5),
       columnWidths: colWidths,
       children: rows,
     );
@@ -1337,14 +1516,16 @@ class InvoicePdfService {
     bool bold = false,
     pw.TextAlign align = pw.TextAlign.left,
   }) {
+    final headerFs = (_vyBaseFontSize - 1).clamp(6.0, 9.0);
+    final bodyFs = _vyBaseFontSize;
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      padding: pw.EdgeInsets.symmetric(horizontal: 6, vertical: _vyCellPadV),
       child: pw.Text(
         value,
         textAlign: align,
         style: pw.TextStyle(
-          color: _vyBlack,
-          fontSize: header ? 9 : 10,
+          color: _c.black,
+          fontSize: header ? headerFs : bodyFs,
           fontWeight: (header || bold) ? pw.FontWeight.bold : pw.FontWeight.normal,
         ),
       ),
@@ -1364,39 +1545,49 @@ class InvoicePdfService {
 
   // Section 5 — Totals Block
   pw.Widget _vyTotalsBlock(Invoice invoice, AppStrings s) {
-    final received = invoice.status == InvoiceStatus.paid ? invoice.grandTotal : 0.0;
+    final received = invoice.amountReceived;
     final balance = invoice.grandTotal - received;
+    final rawTotal = invoice.items.fold<double>(0, (sum, i) => sum + i.rawTotal);
+    final itemDiscTotal = invoice.items.fold<double>(0, (sum, i) => sum + i.discountAmount);
 
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         // Left side: empty
         pw.Expanded(child: pw.SizedBox()),
-        // Right side: totals
+        // Right side: totals — takes ~half the page width
         pw.Container(
-          width: 250,
+          width: 280,
           decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _vyBorder, width: 1),
+            border: pw.Border.all(color: _c.border, width: 1),
           ),
           child: pw.Column(
             children: [
-              _vyTotalRow('Sub Total', '\u20B9 ${_vyNum(invoice.subtotal)}'),
-              if (invoice.hasDiscount)
-                _vyTotalRow('Discount', '- \u20B9 ${_vyNum(invoice.discountAmount)}'),
-              if (invoice.hasGst) ...[
+              _vyTotalRow('Sub Total', 'Rs. ${_vyNum(rawTotal)}'),
+              if (itemDiscTotal > 0)
+                _vyTotalRow('Item Discounts', '- Rs. ${_vyNum(itemDiscTotal)}'),
+              if (invoice.discountAmount > 0)
+                _vyTotalRow(
+                  'Discount${invoice.discountType == InvoiceDiscountType.percentage ? ' (${invoice.discountValue.toStringAsFixed(0)}%)' : ''}',
+                  '- Rs. ${_vyNum(invoice.discountAmount)}',
+                ),
+              if (itemDiscTotal > 0 || invoice.discountAmount > 0 || invoice.totalTax > 0)
+                _vyTotalRow('Taxable Amount', 'Rs. ${_vyNum(invoice.taxableAmount)}'),
+              if (invoice.totalTax > 0) ...[
                 if (invoice.gstType == 'cgst_sgst') ...[
-                  _vyTotalRow('CGST', '\u20B9 ${_vyNum(invoice.cgstAmount)}'),
-                  _vyTotalRow('SGST', '\u20B9 ${_vyNum(invoice.sgstAmount)}'),
-                ] else
-                  _vyTotalRow('IGST', '\u20B9 ${_vyNum(invoice.igstAmount)}'),
+                  _vyTotalRow('CGST', 'Rs. ${_vyNum(invoice.cgstAmount)}'),
+                  _vyTotalRow('SGST', 'Rs. ${_vyNum(invoice.sgstAmount)}'),
+                ] else if (invoice.igstAmount > 0)
+                  _vyTotalRow('IGST', 'Rs. ${_vyNum(invoice.igstAmount)}'),
+                _vyTotalRow('Total Tax', 'Rs. ${_vyNum(invoice.totalTax)}'),
               ],
-              _vyTotalRow('Total', '\u20B9 ${_vyNum(invoice.grandTotal)}', bold: true),
+              _vyTotalRow('Grand Total', 'Rs. ${_vyNum(invoice.grandTotal)}', bold: true, highlight: true),
               // Amount in words
               pw.Container(
                 width: double.infinity,
-                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: const pw.BoxDecoration(
-                  border: pw.Border(top: pw.BorderSide(color: _vyBorder, width: 1)),
+                padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border(top: pw.BorderSide(color: _c.border, width: 1)),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1404,21 +1595,70 @@ class InvoicePdfService {
                     pw.Text(
                       'Invoice Amount In Words :',
                       style: pw.TextStyle(
-                        color: _vyBlack,
-                        fontSize: 9,
+                        color: _c.black,
+                        fontSize: _vyBaseFontSize - 1,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
-                    pw.SizedBox(height: 3),
+                    pw.SizedBox(height: 2),
                     pw.Text(
-                      _numberToWords(invoice.grandTotal.round()),
-                      style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                      _numberToWords(
+                        invoice.grandTotal.truncate(),
+                        ((invoice.grandTotal * 100).round() % 100),
+                      ),
+                      style: pw.TextStyle(color: _c.body, fontSize: _vyBaseFontSize - 1),
                     ),
                   ],
                 ),
               ),
-              _vyTotalRow('Received', '\u20B9 ${_vyNum(received)}'),
-              _vyTotalRow('Balance', '\u20B9 ${_vyNum(balance)}', bold: true),
+              _vyTotalRow('Amount Received', 'Rs. ${_vyNum(received)}'),
+              _vyTotalRow('Balance Due', 'Rs. ${_vyNum(balance)}', bold: true),
+              // PAID / UNPAID stamp
+              pw.Container(
+                width: double.infinity,
+                padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV + 2),
+                decoration: pw.BoxDecoration(
+                  color: balance <= 0
+                      ? PdfColor.fromHex('#D1FAE5')   // green tint
+                      : PdfColor.fromHex('#FEF3C7'),  // amber tint
+                  border: pw.Border(
+                    top: pw.BorderSide(
+                      color: balance <= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#D97706'),
+                      width: 1,
+                    ),
+                  ),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.center,
+                  children: [
+                    pw.Text(
+                      balance <= 0 ? '✓  PAID IN FULL' : '⚠  BALANCE PENDING',
+                      style: pw.TextStyle(
+                        fontSize: _vyBaseFontSize,
+                        fontWeight: pw.FontWeight.bold,
+                        color: balance <= 0 ? PdfColor.fromHex('#065F46') : PdfColor.fromHex('#92400E'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (invoice.notes != null && invoice.notes!.isNotEmpty)
+                pw.Container(
+                  width: double.infinity,
+                  padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV + 2),
+                  decoration: pw.BoxDecoration(
+                    color: _c.labelBg,
+                    border: pw.Border(top: pw.BorderSide(color: _c.primary, width: 1)),
+                  ),
+                  child: pw.Text(
+                    invoice.notes!,
+                    style: pw.TextStyle(
+                      fontSize: _vyBaseFontSize - 1,
+                      color: _c.primary,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -1426,11 +1666,12 @@ class InvoicePdfService {
     );
   }
 
-  pw.Widget _vyTotalRow(String label, String value, {bool bold = false}) {
+  pw.Widget _vyTotalRow(String label, String value, {bool bold = false, bool highlight = false}) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: _vyBorder, width: 1)),
+      padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
+      decoration: pw.BoxDecoration(
+        color: highlight ? _c.primary : null,
+        border: pw.Border(top: pw.BorderSide(color: _c.border, width: 1)),
       ),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
@@ -1438,16 +1679,16 @@ class InvoicePdfService {
           pw.Text(
             label,
             style: pw.TextStyle(
-              color: _vyBlack,
-              fontSize: 10,
+              color: highlight ? PdfColors.white : _c.black,
+              fontSize: highlight ? _vyBaseFontSize + 1 : _vyBaseFontSize,
               fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
             ),
           ),
           pw.Text(
             value,
             style: pw.TextStyle(
-              color: _vyBlack,
-              fontSize: 10,
+              color: highlight ? PdfColors.white : _c.black,
+              fontSize: highlight ? _vyBaseFontSize + 1 : _vyBaseFontSize,
               fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
             ),
           ),
@@ -1461,29 +1702,29 @@ class InvoicePdfService {
     return pw.Container(
       width: double.infinity,
       decoration: pw.BoxDecoration(
-        border: pw.Border.all(color: _vyBorder, width: 1),
+        border: pw.Border.all(color: _c.border, width: 1),
       ),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
           pw.Container(
             width: double.infinity,
-            color: _vyLabelBg,
-            padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            color: _c.labelBg,
+            padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
             child: pw.Text(
               'Terms And Conditions:',
               style: pw.TextStyle(
-                color: _vyBlack,
-                fontSize: 10,
+                color: _c.black,
+                fontSize: _vyBaseFontSize,
                 fontWeight: pw.FontWeight.bold,
               ),
             ),
           ),
           pw.Padding(
-            padding: const pw.EdgeInsets.all(10),
+            padding: pw.EdgeInsets.all(_vyCellPadV + 2),
             child: pw.Text(
               'Thank you for doing business with us.',
-              style: pw.TextStyle(color: _vyBody, fontSize: 10),
+              style: pw.TextStyle(color: _c.body, fontSize: _vyBaseFontSize),
             ),
           ),
         ],
@@ -1492,8 +1733,30 @@ class InvoicePdfService {
   }
 
   // Section 7 — Signature Block
-  pw.Widget _vySignatureBlock(BusinessProfile? profile, AppStrings s) {
+  pw.Widget _vySignatureBlock(BusinessProfile? profile, AppStrings s, {Uint8List? signatureImage}) {
     final sellerName = _sellerName(profile, s);
+
+    pw.Widget signatureArea;
+    if (signatureImage != null) {
+      // Embed the drawn signature
+      final img = pw.MemoryImage(signatureImage);
+      signatureArea = pw.Container(
+        width: double.infinity,
+        height: _vySignatureHeight,
+        margin: pw.EdgeInsets.fromLTRB(16, _vyCellPadV, 16, _vyCellPadV - 2),
+        child: pw.Image(img, fit: pw.BoxFit.contain),
+      );
+    } else {
+      // Empty box placeholder
+      signatureArea = pw.Container(
+        width: double.infinity,
+        height: _vySignatureHeight,
+        margin: pw.EdgeInsets.fromLTRB(16, _vyCellPadV, 16, _vyCellPadV - 2),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: _c.border, width: 0.5),
+        ),
+      );
+    }
 
     return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -1502,38 +1765,30 @@ class InvoicePdfService {
         pw.Container(
           width: 220,
           decoration: pw.BoxDecoration(
-            border: pw.Border.all(color: _vyBorder, width: 1),
+            border: pw.Border.all(color: _c.border, width: 1),
           ),
           child: pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
               pw.Container(
                 width: double.infinity,
-                color: _vyLabelBg,
-                padding: const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                color: _c.labelBg,
+                padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV),
                 child: pw.Text(
                   'For $sellerName:',
                   style: pw.TextStyle(
-                    color: _vyBlack,
-                    fontSize: 10,
+                    color: _c.black,
+                    fontSize: _vyBaseFontSize,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
               ),
-              // Signature area (empty box)
-              pw.Container(
-                width: double.infinity,
-                height: 60,
-                margin: const pw.EdgeInsets.fromLTRB(16, 10, 16, 6),
-                decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: _vyBorder, width: 0.5),
-                ),
-              ),
+              signatureArea,
               pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 16, bottom: 10),
+                padding: pw.EdgeInsets.only(left: 16, bottom: _vyCellPadV),
                 child: pw.Text(
                   'Authorized Signatory',
-                  style: pw.TextStyle(color: _vyBody, fontSize: 9),
+                  style: pw.TextStyle(color: _c.body, fontSize: _vyBaseFontSize - 1),
                 ),
               ),
             ],
@@ -1543,26 +1798,119 @@ class InvoicePdfService {
     );
   }
 
-  pw.Widget _vyFooter(pw.Context ctx, AppStrings s) {
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+  // Terms (left) + Signature (right) — side by side like Vyapar
+  pw.Widget _vyTermsAndSignatureRow(BusinessProfile? profile, AppStrings s, Uint8List? signatureImage) {
+    final sellerName = _sellerName(profile, s);
+    final fs = _vyBaseFontSize;
+
+    pw.Widget sigArea;
+    if (signatureImage != null) {
+      final img = pw.MemoryImage(signatureImage);
+      sigArea = pw.Container(
+        width: double.infinity,
+        height: _vySignatureHeight,
+        margin: pw.EdgeInsets.symmetric(horizontal: 8, vertical: _vyCellPadV - 1),
+        child: pw.Image(img, fit: pw.BoxFit.contain),
+      );
+    } else {
+      sigArea = pw.Container(
+        width: double.infinity,
+        height: _vySignatureHeight,
+        margin: pw.EdgeInsets.symmetric(horizontal: 8, vertical: _vyCellPadV - 1),
+      );
+    }
+
+    return pw.Table(
+      border: pw.TableBorder.all(color: _c.border, width: 1),
+      columnWidths: const {
+        0: pw.FlexColumnWidth(1),
+        1: pw.FixedColumnWidth(200),
+      },
       children: [
-        pw.Text(
-          '${s.pdfGeneratedBy} \u00b7 ${_generatedFormat.format(DateTime.now())}',
-          style: pw.TextStyle(color: _vyMuted, fontSize: 8),
+        // Header row
+        pw.TableRow(
+          decoration: pw.BoxDecoration(color: _c.labelBg),
+          children: [
+            pw.Padding(
+              padding: pw.EdgeInsets.symmetric(horizontal: 8, vertical: _vyCellPadV),
+              child: pw.Text('Terms and conditions',
+                style: pw.TextStyle(color: _c.black, fontSize: fs, fontWeight: pw.FontWeight.bold)),
+            ),
+            pw.Padding(
+              padding: pw.EdgeInsets.symmetric(horizontal: 8, vertical: _vyCellPadV),
+              child: pw.Text('For $sellerName:',
+                style: pw.TextStyle(color: _c.black, fontSize: fs, fontWeight: pw.FontWeight.bold)),
+            ),
+          ],
         ),
-        pw.Text(
-          '${s.pdfPage} ${ctx.pageNumber} ${s.pdfOf} ${ctx.pagesCount}',
-          style: pw.TextStyle(color: _vyMuted, fontSize: 8),
+        // Content row
+        pw.TableRow(
+          children: [
+            pw.Padding(
+              padding: pw.EdgeInsets.all(_vyCellPadV),
+              child: pw.Text('Thank you for doing business with us.',
+                style: pw.TextStyle(color: _c.body, fontSize: fs - 1)),
+            ),
+            pw.Column(
+              children: [
+                sigArea,
+                pw.Padding(
+                  padding: pw.EdgeInsets.only(bottom: _vyCellPadV),
+                  child: pw.Text('Authorized Signatory',
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(color: _c.body, fontSize: fs - 1)),
+                ),
+              ],
+            ),
+          ],
         ),
       ],
     );
   }
 
+  // Old methods kept for backward compat (unused)
+  // ignore: unused_element
+  pw.Widget _vyTermsAndConditions_unused() { return pw.SizedBox(); }
+  // ignore: unused_element
+  pw.Widget _vySignatureBlock_unused(BusinessProfile? p, AppStrings s, {Uint8List? signatureImage}) { return pw.SizedBox(); }
+
+  pw.Widget _vyFooter(pw.Context ctx, AppStrings s) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(top: 6),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            '${s.pdfGeneratedBy} \u00b7 ${_generatedFormat.format(DateTime.now())}',
+            style: pw.TextStyle(color: _c.muted, fontSize: 8),
+          ),
+          pw.Text(
+            '${s.pdfPage} ${ctx.pageNumber} ${s.pdfOf} ${ctx.pagesCount}',
+            style: pw.TextStyle(color: _c.muted, fontSize: 8),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Converts a whole number to Indian English words (e.g. 600 → "Six Hundred Rupees only").
-  static String _numberToWords(int number) {
+  static String _numberToWords(int number, [int paise = 0]) {
+    try {
+      final rupeePart = _numberToWordsInner(number);
+      if (paise > 0 && paise < 100) {
+        final paisePart = _numberToWordsInner(paise)
+            .replaceAll(' Rupees only', '');
+        return '$rupeePart and $paisePart Paise only';
+      }
+      return rupeePart;
+    } catch (_) {
+      return 'Rupees ${number.toString()} only';
+    }
+  }
+
+  static String _numberToWordsInner(int number) {
     if (number == 0) return 'Zero Rupees only';
-    if (number < 0) return 'Minus ${_numberToWords(-number)}';
+    if (number < 0) return 'Minus ${_numberToWordsInner(-number)}';
 
     const ones = [
       '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight',
@@ -1594,7 +1942,8 @@ class InvoicePdfService {
     var rem = number;
     final parts = <String>[];
     if (rem >= 10000000) {
-      parts.add('${threeDigits(rem ~/ 10000000)} Crore');
+      final croreVal = rem ~/ 10000000;
+      parts.add('${_numberToWordsInner(croreVal).replaceAll(' Rupees only', '')} Crore');
       rem %= 10000000;
     }
     if (rem >= 100000) {
@@ -1840,7 +2189,7 @@ class InvoicePdfService {
             lines: [
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.status, s)}',
+              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
             ],
           ),
         ),
@@ -2502,7 +2851,7 @@ class InvoicePdfService {
                       vertical: 10,
                     ),
                     decoration: pw.BoxDecoration(
-                      color: _statusBg(invoice.status),
+                      color: _statusBg(invoice.effectiveStatus),
                       borderRadius: const pw.BorderRadius.only(
                         topLeft: pw.Radius.circular(13),
                         topRight: pw.Radius.circular(13),
@@ -2514,16 +2863,16 @@ class InvoicePdfService {
                         pw.Text(
                           s.detailsStatus.toUpperCase(),
                           style: pw.TextStyle(
-                            color: _statusColor(invoice.status),
+                            color: _statusColor(invoice.effectiveStatus),
                             fontSize: 8,
                             fontWeight: pw.FontWeight.bold,
                             letterSpacing: 1.0,
                           ),
                         ),
                         pw.Text(
-                          _statusLabel(invoice.status, s),
+                          _statusLabel(invoice.effectiveStatus, s),
                           style: pw.TextStyle(
-                            color: _statusColor(invoice.status),
+                            color: _statusColor(invoice.effectiveStatus),
                             fontSize: 10,
                             fontWeight: pw.FontWeight.bold,
                           ),
@@ -2599,7 +2948,7 @@ class InvoicePdfService {
             lines: [
               if (invoice.clientId.trim().isNotEmpty)
                 '${s.detailsReference}: ${invoice.clientId.trim()}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.status, s)}',
+              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
             ],
@@ -2899,7 +3248,7 @@ class InvoicePdfService {
         color: const PdfColor(0.94, 0.99, 0.99),
       ),
       child: pw.Text(
-        '${_statusLabel(invoice.status, s)} · BillRaja',
+        '${_statusLabel(invoice.effectiveStatus, s)} · BillRaja',
         style: pw.TextStyle(color: _mutedText, fontSize: 10, lineSpacing: 2),
       ),
     );
@@ -3119,9 +3468,11 @@ class InvoicePdfService {
       case InvoiceStatus.paid:
         return _success;
       case InvoiceStatus.pending:
-        return _warning;
+        return const PdfColor(0.94, 0.27, 0.27); // red
       case InvoiceStatus.overdue:
         return _danger;
+      case InvoiceStatus.partiallyPaid:
+        return const PdfColor(0.92, 0.70, 0.03); // amber
     }
   }
 
@@ -3130,9 +3481,11 @@ class InvoicePdfService {
       case InvoiceStatus.paid:
         return _successBg;
       case InvoiceStatus.pending:
-        return _warningBg;
+        return const PdfColor(1.0, 0.89, 0.88); // light red
       case InvoiceStatus.overdue:
         return _dangerBg;
+      case InvoiceStatus.partiallyPaid:
+        return const PdfColor(1.0, 0.95, 0.78); // light amber
     }
   }
 
@@ -3141,9 +3494,11 @@ class InvoicePdfService {
       case InvoiceStatus.paid:
         return s.statusPaid;
       case InvoiceStatus.pending:
-        return s.statusPending;
+        return 'Unpaid';
       case InvoiceStatus.overdue:
         return s.statusOverdue;
+      case InvoiceStatus.partiallyPaid:
+        return 'Partially Paid';
     }
   }
 
@@ -3188,5 +3543,509 @@ class InvoicePdfService {
     if (normalized.isEmpty) return fallback;
     final r = normalized.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
     return r.replaceAll(RegExp(r'^-+|-+$'), '');
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // STRUCTURALLY DIFFERENT TEMPLATES
+  // ═════════════════════════════════════════════════════════════════════════
+
+  /// Template 1: BANNER — Full-width colored header banner
+  Future<Uint8List> _buildBannerPdf(
+    Invoice invoice, BusinessProfile? profile, AppStrings s,
+    {bool includePayment = true, _VyColors? colors}) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+    final hasPayment = includePayment && profile != null &&
+        (profile.upiId.isNotEmpty || profile.upiNumber.isNotEmpty || profile.upiQrUrl.isNotEmpty);
+    _computeAdaptiveSizing(invoice, hasPayment);
+
+    final document = pw.Document(title: invoice.invoiceNumber, creator: 'BillRaja');
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+    final signatureBytes = await SignatureService.load();
+    final paymentWidget = (includePayment && profile != null)
+        ? await _paymentSection(profile) : pw.SizedBox.shrink();
+
+    const pageFormat = PdfPageFormat.a4;
+
+    document.addPage(pw.Page(
+      theme: theme, pageFormat: pageFormat,
+      margin: const pw.EdgeInsets.all(0),
+      build: (ctx) {
+        final content = pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            // Full-width banner
+            pw.Container(
+              width: double.infinity,
+              padding: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              color: _c.primary,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.start,
+                    children: [
+                      pw.Text(_sellerName(profile, s),
+                        style: pw.TextStyle(color: PdfColors.white, fontSize: _vySellerNameFontSize + 2, fontWeight: pw.FontWeight.bold)),
+                      if (profile?.phoneNumber.isNotEmpty == true)
+                        pw.Text(profile!.phoneNumber, style: pw.TextStyle(color: PdfColor.fromHex('#FFFFFFCC'), fontSize: _vyBaseFontSize)),
+                      if (profile?.gstin.isNotEmpty == true)
+                        pw.Text('GSTIN: ${profile!.gstin}', style: pw.TextStyle(color: PdfColor.fromHex('#FFFFFFCC'), fontSize: _vyBaseFontSize)),
+                    ],
+                  ),
+                  pw.Column(
+                    crossAxisAlignment: pw.CrossAxisAlignment.end,
+                    children: [
+                      pw.Text('TAX INVOICE', style: pw.TextStyle(color: PdfColors.white, fontSize: _vyTitleFontSize, fontWeight: pw.FontWeight.bold)),
+                      pw.Text(invoice.invoiceNumber, style: pw.TextStyle(color: PdfColor.fromHex('#FFFFFFCC'), fontSize: _vyBaseFontSize + 1)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Invoice details bar
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              color: _c.labelBg,
+              child: pw.Row(
+                mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                children: [
+                  pw.Text('Date: ${_dateFormat.format(invoice.createdAt)}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.body)),
+                  if (invoice.dueDate != null)
+                    pw.Text('Due: ${_dateFormat.format(invoice.dueDate!)}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.body)),
+                  pw.Text('Status: ${invoice.status.name.toUpperCase()}',
+                    style: pw.TextStyle(fontSize: _vyBaseFontSize, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+                ],
+              ),
+            ),
+            // Content with padding
+            pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+                children: [
+                  // Bill To
+                  pw.Container(
+                    padding: const pw.EdgeInsets.all(10),
+                    decoration: pw.BoxDecoration(border: pw.Border.all(color: _c.border, width: 0.5), borderRadius: pw.BorderRadius.circular(4)),
+                    child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                      pw.Text('BILL TO', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+                      pw.SizedBox(height: 2),
+                      pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                      if (invoice.customerGstin?.isNotEmpty == true)
+                        pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                    ]),
+                  ),
+                  pw.SizedBox(height: _vySectionSpacing),
+                  _vyItemsTable(invoice, s),
+                  _vyTotalsBlock(invoice, s),
+                  pw.SizedBox(height: _vySectionSpacing),
+                  paymentWidget,
+                  pw.SizedBox(height: _vySectionSpacing),
+                  _vyTermsAndSignatureRow(profile, s, signatureBytes),
+                  pw.SizedBox(height: _vySectionSpacing),
+                  _vyFooter(ctx, s),
+                ],
+              ),
+            ),
+          ],
+        );
+        return pw.FittedBox(fit: pw.BoxFit.scaleDown, alignment: pw.Alignment.topLeft,
+          child: pw.SizedBox(width: pageFormat.width, child: content));
+      },
+    ));
+    return document.save();
+  }
+
+  /// Template 2: SIDEBAR — Left accent bar with content on right
+  Future<Uint8List> _buildSidebarPdf(
+    Invoice invoice, BusinessProfile? profile, AppStrings s,
+    {bool includePayment = true, _VyColors? colors}) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+    final hasPayment = includePayment && profile != null &&
+        (profile.upiId.isNotEmpty || profile.upiNumber.isNotEmpty || profile.upiQrUrl.isNotEmpty);
+    _computeAdaptiveSizing(invoice, hasPayment);
+
+    final document = pw.Document(title: invoice.invoiceNumber, creator: 'BillRaja');
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+    final signatureBytes = await SignatureService.load();
+    final paymentWidget = (includePayment && profile != null)
+        ? await _paymentSection(profile) : pw.SizedBox.shrink();
+
+    const pageFormat = PdfPageFormat.a4;
+    const sidebarWidth = 60.0;
+    final contentWidth = pageFormat.width - sidebarWidth - 32;
+
+    document.addPage(pw.Page(
+      theme: theme, pageFormat: pageFormat,
+      margin: const pw.EdgeInsets.all(0),
+      build: (ctx) {
+        final mainContent = pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            // Title row
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text('TAX INVOICE', style: pw.TextStyle(fontSize: _vyTitleFontSize, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+              pw.Text(invoice.invoiceNumber, style: pw.TextStyle(fontSize: _vyBaseFontSize + 2, fontWeight: pw.FontWeight.bold, color: _c.body)),
+            ]),
+            pw.Divider(color: _c.primary, thickness: 2),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vySellerBox(profile, s),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyBillToInvoiceDetails(invoice, profile, s),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyItemsTable(invoice, s),
+            _vyTotalsBlock(invoice, s),
+            pw.SizedBox(height: _vySectionSpacing),
+            paymentWidget,
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyTermsAndSignatureRow(profile, s, signatureBytes),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyFooter(ctx, s),
+          ],
+        );
+
+        return pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            // Sidebar accent bar
+            pw.Container(
+              width: sidebarWidth,
+              height: pageFormat.height,
+              color: _c.primary,
+              padding: const pw.EdgeInsets.symmetric(vertical: 20),
+              child: pw.Column(children: [
+                pw.Transform.rotateBox(angle: -1.5708, // -90 degrees
+                  child: pw.Text(_sellerName(profile, s),
+                    style: pw.TextStyle(color: PdfColors.white, fontSize: 14, fontWeight: pw.FontWeight.bold))),
+              ]),
+            ),
+            // Content
+            pw.Expanded(
+              child: pw.Padding(
+                padding: const pw.EdgeInsets.fromLTRB(14, 14, 14, 14),
+                child: pw.FittedBox(
+                  fit: pw.BoxFit.scaleDown,
+                  alignment: pw.Alignment.topLeft,
+                  child: pw.SizedBox(width: contentWidth, child: mainContent),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    ));
+    return document.save();
+  }
+
+  /// Template 3: BORDERED — Thick bordered boxes around every section
+  Future<Uint8List> _buildBorderedPdf(
+    Invoice invoice, BusinessProfile? profile, AppStrings s,
+    {bool includePayment = true, _VyColors? colors}) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+    final hasPayment = includePayment && profile != null &&
+        (profile.upiId.isNotEmpty || profile.upiNumber.isNotEmpty || profile.upiQrUrl.isNotEmpty);
+    _computeAdaptiveSizing(invoice, hasPayment);
+
+    final document = pw.Document(title: invoice.invoiceNumber, creator: 'BillRaja');
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+    final signatureBytes = await SignatureService.load();
+    final paymentWidget = (includePayment && profile != null)
+        ? await _paymentSection(profile) : pw.SizedBox.shrink();
+
+    const pageFormat = PdfPageFormat.a4;
+    final usableWidth = pageFormat.width - 32;
+
+    document.addPage(pw.Page(
+      theme: theme, pageFormat: pageFormat,
+      margin: const pw.EdgeInsets.all(16),
+      build: (ctx) {
+        final content = pw.Container(
+          decoration: pw.BoxDecoration(border: pw.Border.all(color: _c.primary, width: 2)),
+          child: pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              // Double-line title header
+              pw.Container(
+                padding: const pw.EdgeInsets.symmetric(vertical: 8),
+                decoration: pw.BoxDecoration(
+                  border: pw.Border(bottom: pw.BorderSide(color: _c.primary, width: 2)),
+                ),
+                child: pw.Center(child: pw.Text('TAX INVOICE',
+                  style: pw.TextStyle(fontSize: _vyTitleFontSize, fontWeight: pw.FontWeight.bold, color: _c.primary))),
+              ),
+              // Seller info box
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _c.primary, width: 1))),
+                child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    pw.Text(_sellerName(profile, s), style: pw.TextStyle(fontSize: _vySellerNameFontSize, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                    if (profile?.phoneNumber.isNotEmpty == true)
+                      pw.Text('Ph: ${profile!.phoneNumber}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.muted)),
+                    if (profile?.address.isNotEmpty == true)
+                      pw.Text(profile!.address, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  ]),
+                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
+                    if (profile?.gstin.isNotEmpty == true)
+                      pw.Text('GSTIN: ${profile!.gstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                    pw.Text('Invoice: ${invoice.invoiceNumber}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.body)),
+                    pw.Text('Date: ${_dateFormat.format(invoice.createdAt)}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.muted)),
+                    if (invoice.dueDate != null)
+                      pw.Text('Due: ${_dateFormat.format(invoice.dueDate!)}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.muted)),
+                  ]),
+                ]),
+              ),
+              // Bill To boxed
+              pw.Container(
+                padding: const pw.EdgeInsets.all(10),
+                decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _c.primary, width: 1))),
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.Text('BILL TO:', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+                  pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                  if (invoice.customerGstin?.isNotEmpty == true)
+                    pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                ]),
+              ),
+              // Items + totals
+              pw.Padding(
+                padding: const pw.EdgeInsets.all(8),
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
+                  _vyItemsTable(invoice, s),
+                  _vyTotalsBlock(invoice, s),
+                ]),
+              ),
+              // Payment
+              if (hasPayment) pw.Padding(padding: const pw.EdgeInsets.symmetric(horizontal: 8), child: paymentWidget),
+              // Terms + Signature boxed
+              pw.Container(
+                decoration: pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _c.primary, width: 2))),
+                padding: const pw.EdgeInsets.all(8),
+                child: _vyTermsAndSignatureRow(profile, s, signatureBytes),
+              ),
+              // Footer
+              pw.Container(
+                decoration: pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: _c.primary, width: 1))),
+                padding: const pw.EdgeInsets.all(4),
+                child: _vyFooter(ctx, s),
+              ),
+            ],
+          ),
+        );
+        return pw.FittedBox(fit: pw.BoxFit.scaleDown, alignment: pw.Alignment.topLeft,
+          child: pw.SizedBox(width: usableWidth, child: content));
+      },
+    ));
+    return document.save();
+  }
+
+  /// Template 4: TWO COLUMN — Seller & Bill-to side by side, compact layout
+  Future<Uint8List> _buildTwoColumnPdf(
+    Invoice invoice, BusinessProfile? profile, AppStrings s,
+    {bool includePayment = true, _VyColors? colors}) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+    final hasPayment = includePayment && profile != null &&
+        (profile.upiId.isNotEmpty || profile.upiNumber.isNotEmpty || profile.upiQrUrl.isNotEmpty);
+    _computeAdaptiveSizing(invoice, hasPayment);
+
+    final document = pw.Document(title: invoice.invoiceNumber, creator: 'BillRaja');
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+    final signatureBytes = await SignatureService.load();
+    final paymentWidget = (includePayment && profile != null)
+        ? await _paymentSection(profile) : pw.SizedBox.shrink();
+
+    const pageFormat = PdfPageFormat.a4;
+    final usableWidth = pageFormat.width - 32;
+
+    document.addPage(pw.Page(
+      theme: theme, pageFormat: pageFormat,
+      margin: const pw.EdgeInsets.all(16),
+      build: (ctx) {
+        final content = pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            // Title centered with accent lines
+            pw.Row(children: [
+              pw.Expanded(child: pw.Container(height: 2, color: _c.primary)),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(horizontal: 12),
+                child: pw.Text('TAX INVOICE', style: pw.TextStyle(fontSize: _vyTitleFontSize, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+              ),
+              pw.Expanded(child: pw.Container(height: 2, color: _c.primary)),
+            ]),
+            pw.SizedBox(height: _vySectionSpacing),
+            // Two-column: Seller | Bill-to + Invoice details
+            pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+              // Left: Seller
+              pw.Expanded(child: pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(color: _c.labelBg, borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.Text('FROM', style: pw.TextStyle(fontSize: _vyBaseFontSize - 2, fontWeight: pw.FontWeight.bold, color: _c.primary, letterSpacing: 1)),
+                  pw.SizedBox(height: 3),
+                  pw.Text(_sellerName(profile, s), style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                  if (profile?.phoneNumber.isNotEmpty == true)
+                    pw.Text(profile!.phoneNumber, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (profile?.gstin.isNotEmpty == true)
+                    pw.Text('GSTIN: ${profile!.gstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (profile?.address.isNotEmpty == true)
+                    pw.Text(profile!.address, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                ]),
+              )),
+              pw.SizedBox(width: 8),
+              // Right: Bill-to + dates
+              pw.Expanded(child: pw.Container(
+                padding: const pw.EdgeInsets.all(8),
+                decoration: pw.BoxDecoration(border: pw.Border.all(color: _c.border, width: 0.5), borderRadius: pw.BorderRadius.circular(4)),
+                child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                  pw.Text('BILL TO', style: pw.TextStyle(fontSize: _vyBaseFontSize - 2, fontWeight: pw.FontWeight.bold, color: _c.primary, letterSpacing: 1)),
+                  pw.SizedBox(height: 3),
+                  pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                  if (invoice.customerGstin?.isNotEmpty == true)
+                    pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Inv: ${invoice.invoiceNumber}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.body)),
+                  pw.Text('Date: ${_dateFormat.format(invoice.createdAt)}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (invoice.dueDate != null)
+                    pw.Text('Due: ${_dateFormat.format(invoice.dueDate!)}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                ]),
+              )),
+            ]),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyItemsTable(invoice, s),
+            _vyTotalsBlock(invoice, s),
+            pw.SizedBox(height: _vySectionSpacing),
+            paymentWidget,
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyTermsAndSignatureRow(profile, s, signatureBytes),
+            pw.SizedBox(height: _vySectionSpacing),
+            _vyFooter(ctx, s),
+          ],
+        );
+        return pw.FittedBox(fit: pw.BoxFit.scaleDown, alignment: pw.Alignment.topLeft,
+          child: pw.SizedBox(width: usableWidth, child: content));
+      },
+    ));
+    return document.save();
+  }
+
+  /// Template 5: RECEIPT — Narrow receipt/thermal printer style
+  Future<Uint8List> _buildReceiptPdf(
+    Invoice invoice, BusinessProfile? profile, AppStrings s,
+    {bool includePayment = true, _VyColors? colors}) async {
+    _c = colors ?? _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
+    _computeAdaptiveSizing(invoice, false);
+
+    final document = pw.Document(title: invoice.invoiceNumber, creator: 'BillRaja');
+    final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
+
+    // Receipt uses narrow page
+    const pageFormat = PdfPageFormat(226.77, double.infinity, marginAll: 8); // ~80mm thermal width
+    final fs = 7.0;
+
+    pw.Widget dashedLine() => pw.Container(
+      margin: const pw.EdgeInsets.symmetric(vertical: 4),
+      child: pw.Row(children: List.generate(38, (_) =>
+        pw.Expanded(child: pw.Container(height: 0.5, color: _c.muted, margin: const pw.EdgeInsets.symmetric(horizontal: 1))))),
+    );
+
+    document.addPage(pw.Page(
+      theme: theme,
+      pageFormat: pageFormat,
+      build: (ctx) {
+        return pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.center,
+          mainAxisSize: pw.MainAxisSize.min,
+          children: [
+            // Store name centered
+            pw.Text(_sellerName(profile, s),
+              style: pw.TextStyle(fontSize: fs + 4, fontWeight: pw.FontWeight.bold, color: _c.body),
+              textAlign: pw.TextAlign.center),
+            if (profile?.phoneNumber.isNotEmpty == true)
+              pw.Text(profile!.phoneNumber, style: pw.TextStyle(fontSize: fs, color: _c.muted), textAlign: pw.TextAlign.center),
+            if (profile?.address.isNotEmpty == true)
+              pw.Text(profile!.address, style: pw.TextStyle(fontSize: fs - 1, color: _c.muted), textAlign: pw.TextAlign.center),
+            if (profile?.gstin.isNotEmpty == true)
+              pw.Text('GSTIN: ${profile!.gstin}', style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.center),
+            dashedLine(),
+            pw.Text('TAX INVOICE', style: pw.TextStyle(fontSize: fs + 2, fontWeight: pw.FontWeight.bold, color: _c.primary), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 2),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text('No: ${invoice.invoiceNumber}', style: pw.TextStyle(fontSize: fs, color: _c.body)),
+              pw.Text(_dateFormat.format(invoice.createdAt), style: pw.TextStyle(fontSize: fs, color: _c.muted)),
+            ]),
+            dashedLine(),
+            // Customer
+            pw.Align(alignment: pw.Alignment.centerLeft,
+              child: pw.Text('Customer: ${invoice.clientName}', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body))),
+            if (invoice.customerGstin?.isNotEmpty == true)
+              pw.Align(alignment: pw.Alignment.centerLeft,
+                child: pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted))),
+            dashedLine(),
+            // Items header
+            pw.Row(children: [
+              pw.Expanded(flex: 4, child: pw.Text('Item', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body))),
+              pw.Expanded(flex: 1, child: pw.Text('Qty', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body), textAlign: pw.TextAlign.center)),
+              pw.Expanded(flex: 2, child: pw.Text('Rate', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body), textAlign: pw.TextAlign.right)),
+              pw.Expanded(flex: 2, child: pw.Text('Amt', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body), textAlign: pw.TextAlign.right)),
+            ]),
+            pw.SizedBox(height: 2),
+            // Items
+            ...invoice.items.map((item) => pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 1),
+              child: pw.Row(children: [
+                pw.Expanded(flex: 4, child: pw.Text(item.description, style: pw.TextStyle(fontSize: fs, color: _c.body), maxLines: 1)),
+                pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.center)),
+                pw.Expanded(flex: 2, child: pw.Text(_fmt(item.unitPrice), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 2, child: pw.Text(_fmt(item.total), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
+              ]),
+            )),
+            dashedLine(),
+            // Totals
+            _receiptTotalLine('Sub Total', _fmt(invoice.items.fold<double>(0, (sum, i) => sum + i.rawTotal)), fs),
+            if (invoice.items.any((i) => i.discountAmount > 0))
+              _receiptTotalLine('Item Discounts', '- ${_fmt(invoice.items.fold<double>(0, (sum, i) => sum + i.discountAmount))}', fs),
+            if (invoice.discountAmount > 0)
+              _receiptTotalLine('Discount', '- ${_fmt(invoice.discountAmount)}', fs),
+            if (invoice.items.any((i) => i.discountAmount > 0) || invoice.discountAmount > 0 || invoice.totalTax > 0)
+              _receiptTotalLine('Taxable Amt', _fmt(invoice.taxableAmount), fs),
+            if (invoice.gstEnabled) ...[
+              if (invoice.gstType == 'cgst_sgst') ...[
+                _receiptTotalLine('CGST', _fmt(invoice.cgstAmount), fs),
+                _receiptTotalLine('SGST', _fmt(invoice.sgstAmount), fs),
+              ] else
+                _receiptTotalLine('IGST', _fmt(invoice.igstAmount), fs),
+            ],
+            dashedLine(),
+            pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+              pw.Text('GRAND TOTAL', style: pw.TextStyle(fontSize: fs + 2, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+              pw.Text(_fmt(invoice.grandTotal), style: pw.TextStyle(fontSize: fs + 2, fontWeight: pw.FontWeight.bold, color: _c.primary)),
+            ]),
+            dashedLine(),
+            if (invoice.dueDate != null)
+              pw.Text('Due Date: ${_dateFormat.format(invoice.dueDate!)}', style: pw.TextStyle(fontSize: fs, color: _c.muted), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 6),
+            pw.Text('Thank you for your business!', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body), textAlign: pw.TextAlign.center),
+            pw.SizedBox(height: 2),
+            pw.Text('Generated by BillRaja', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted), textAlign: pw.TextAlign.center),
+          ],
+        );
+      },
+    ));
+    return document.save();
+  }
+
+  pw.Widget _receiptTotalLine(String label, String value, double fs) {
+    return pw.Padding(
+      padding: const pw.EdgeInsets.symmetric(vertical: 1),
+      child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+        pw.Text(label, style: pw.TextStyle(fontSize: fs, color: _c.muted)),
+        pw.Text(value, style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body)),
+      ]),
+    );
   }
 }

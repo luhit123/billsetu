@@ -4,7 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import 'line_item.dart';
 
-enum InvoiceStatus { paid, pending, overdue }
+enum InvoiceStatus { paid, pending, overdue, partiallyPaid }
 
 enum InvoiceDiscountType { percentage, overall }
 
@@ -34,6 +34,8 @@ class Invoice {
     this.storedIgstAmount,
     this.storedTotalTax,
     this.storedGrandTotal,
+    this.amountReceived = 0,
+    this.notes,
   });
 
   final String id;
@@ -45,6 +47,7 @@ class Invoice {
   final DateTime createdAt;
   final InvoiceStatus status;
   final DateTime? dueDate;
+  final String? notes;
   final InvoiceDiscountType? discountType;
   final double discountValue;
   // GST fields (optional, defaults to disabled)
@@ -61,6 +64,19 @@ class Invoice {
   final double? storedIgstAmount;
   final double? storedTotalTax;
   final double? storedGrandTotal;
+  final double amountReceived;
+
+  double get balanceDue => _roundCurrency(grandTotal - amountReceived);
+  bool get isFullyPaid => amountReceived >= grandTotal && grandTotal > 0;
+  bool get isPartiallyPaid => amountReceived > 0 && amountReceived < grandTotal;
+
+  /// Auto-compute status from payment. This is the ONLY source of truth for display.
+  InvoiceStatus get effectiveStatus {
+    if (isFullyPaid) return InvoiceStatus.paid;
+    if (isPartiallyPaid) return InvoiceStatus.partiallyPaid;
+    if (status == InvoiceStatus.overdue) return InvoiceStatus.overdue;
+    return InvoiceStatus.pending; // received == 0 → "Unpaid"
+  }
 
   double get subtotal {
     return storedSubtotal ??
@@ -184,10 +200,48 @@ class Invoice {
       storedIgstAmount: _nullableDoubleFromMapValue(map['igstAmount']),
       storedTotalTax: _nullableDoubleFromMapValue(map['totalTax']),
       storedGrandTotal: _nullableDoubleFromMapValue(map['grandTotal']),
+      amountReceived: _doubleFromMapValue(map['amountReceived']),
+      notes: map['notes'] as String?,
     );
   }
 
   Map<String, dynamic> toMap() {
+    // Compute all financials from a single chain to guarantee Firestore rule
+    // invariants hold exactly (no floating-point rounding drift between
+    // independently rounded getters).
+    final mapSubtotal = _roundCurrency(
+      items.fold(0.0, (acc, item) => acc + item.total),
+    );
+    final mapDiscountAmount = _computeDiscount(mapSubtotal);
+    // Do NOT round — Firestore rule checks: taxableAmount == subtotal - discountAmount
+    final mapTaxableAmount = mapSubtotal - mapDiscountAmount;
+    final discRatio = mapSubtotal > 0 ? mapTaxableAmount / mapSubtotal : 0.0;
+
+    double mapCgst = 0, mapSgst = 0, mapIgst = 0;
+    if (gstEnabled) {
+      for (final item in items) {
+        final itemTaxable = item.total * discRatio;
+        if (gstType == 'cgst_sgst') {
+          mapCgst += itemTaxable * item.gstRate / 200;
+        } else {
+          mapIgst += itemTaxable * item.gstRate / 100;
+        }
+      }
+      mapCgst = _roundCurrency(mapCgst);
+      mapSgst = mapCgst; // SGST always equals CGST for intra-state
+      mapIgst = _roundCurrency(mapIgst);
+    }
+
+    // Derive totalTax and grandTotal as EXACT sums of already-rounded parts.
+    // Do NOT re-round — Firestore rules check exact equality:
+    //   totalTax == cgstAmount + sgstAmount + igstAmount
+    //   grandTotal == taxableAmount + totalTax
+    // Re-rounding can shift by 0.01 and fail the rule.
+    final mapTotalTax = mapCgst + mapSgst + mapIgst;
+    final mapGrandTotal = mapTaxableAmount + mapTotalTax;
+    final mapHasGst = gstEnabled && mapTotalTax > 0;
+    final mapBalanceDue = _roundCurrency(mapGrandTotal - amountReceived);
+
     return {
       'id': id,
       'ownerId': ownerId,
@@ -210,15 +264,18 @@ class Invoice {
       'gstType': gstType,
       'placeOfSupply': placeOfSupply,
       'customerGstin': customerGstin,
-      'subtotal': subtotal,
-      'discountAmount': discountAmount,
-      'taxableAmount': taxableAmount,
-      'cgstAmount': cgstAmount,
-      'sgstAmount': sgstAmount,
-      'igstAmount': igstAmount,
-      'totalTax': totalTax,
-      'grandTotal': grandTotal,
-      'hasGst': hasGst,
+      'subtotal': mapSubtotal,
+      'discountAmount': mapDiscountAmount,
+      'taxableAmount': mapTaxableAmount,
+      'cgstAmount': mapCgst,
+      'sgstAmount': mapSgst,
+      'igstAmount': mapIgst,
+      'totalTax': mapTotalTax,
+      'grandTotal': mapGrandTotal,
+      'hasGst': mapHasGst,
+      'amountReceived': amountReceived,
+      'balanceDue': mapBalanceDue,
+      if (notes != null) 'notes': notes,
     };
   }
 
@@ -298,6 +355,17 @@ class Invoice {
     }
 
     return _doubleFromMapValue(value);
+  }
+
+  /// Compute discount from subtotal (used by toMap to avoid getter drift).
+  double _computeDiscount(double sub) {
+    if (discountType == null || discountValue <= 0) return 0;
+    switch (discountType!) {
+      case InvoiceDiscountType.percentage:
+        return _roundCurrency((sub * (discountValue / 100)).clamp(0, sub));
+      case InvoiceDiscountType.overall:
+        return _roundCurrency(discountValue.clamp(0, sub));
+    }
   }
 
   static double _roundCurrency(num value) {

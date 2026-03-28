@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
@@ -37,24 +38,12 @@ class WhatsAppShareSheet extends StatefulWidget {
 }
 
 class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
-  bool _isLoadingWhatsApp = false;
   bool _isLoadingSms = false;
 
   String get _formattedAmount =>
       widget.currencyFormat.format(widget.invoice.grandTotal);
 
-  String _shareMessageWithLink(String downloadUrl) {
-    final name = widget.invoice.clientName.trim().isNotEmpty
-        ? widget.invoice.clientName.trim()
-        : 'Customer';
-    return 'Hi $name!\n\n'
-        'Your invoice *#${widget.invoice.invoiceNumber}* for '
-        '*$_formattedAmount* is attached.\n\n'
-        'You can also download it anytime here:\n$downloadUrl\n\n'
-        'Thank you for your business!';
-  }
-
-  String _shareMessageWithoutLink() {
+  String _shareMessage() {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
@@ -83,12 +72,9 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   }
 
   Future<String?> _uploadAndGetLink() async {
-    final bytes = widget.pdfBytes;
-    if (bytes == null) return null;
     try {
-      return await InvoiceLinkService.uploadAndGetLink(
+      return await InvoiceLinkService.shareLink(
         invoice: widget.invoice,
-        pdfBytes: bytes,
       );
     } catch (_) {
       return null;
@@ -138,14 +124,12 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
             const SizedBox(height: 16),
             // WhatsApp
             _OptionTile(
+              iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 22),
               icon: Icons.chat_rounded,
               iconColor: const Color(0xFF25D366),
               title: 'WhatsApp',
-              subtitle: _isLoadingWhatsApp
-                  ? 'Preparing PDF…'
-                  : 'Send PDF with download link',
-              isLoading: _isLoadingWhatsApp,
-              onTap: _isLoadingWhatsApp ? null : () => _shareWhatsApp(context),
+              subtitle: 'Send invoice as PDF',
+              onTap: () => _shareWhatsApp(context),
             ),
             const Divider(height: 1, color: kSurfaceContainerLow),
             // SMS
@@ -195,23 +179,11 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
       return;
     }
 
-    setState(() => _isLoadingWhatsApp = true);
-
-    // Upload for a download link in the background — don't block if it fails.
-    final downloadUrl = await _uploadAndGetLink();
-
-    if (!mounted) return;
-    setState(() => _isLoadingWhatsApp = false);
-
-    final message = downloadUrl != null
-        ? _shareMessageWithLink(downloadUrl)
-        : _shareMessageWithoutLink();
-
     // Share the PDF file directly via the system share sheet (targets WhatsApp).
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(widget.pdfFile!.path)],
-        text: message,
+        text: _shareMessage(),
       ),
     );
 
@@ -269,6 +241,7 @@ class _OptionTile extends StatelessWidget {
     required this.subtitle,
     required this.onTap,
     this.isLoading = false,
+    this.iconWidget,
   });
 
   final IconData icon;
@@ -277,6 +250,7 @@ class _OptionTile extends StatelessWidget {
   final String subtitle;
   final VoidCallback? onTap;
   final bool isLoading;
+  final Widget? iconWidget;
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +273,7 @@ class _OptionTile extends StatelessWidget {
                       padding: EdgeInsets.all(12),
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Icon(icon, color: iconColor, size: 22),
+                  : (iconWidget ?? Icon(icon, color: iconColor, size: 22)),
             ),
             const SizedBox(width: 14),
             Expanded(

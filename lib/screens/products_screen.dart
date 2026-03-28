@@ -358,14 +358,18 @@ class _ProductCard extends StatelessWidget {
                     children: [
                       _UnitPill(unit: product.unit),
                       const SizedBox(width: 8),
-                      Text(
-                        product.unitPrice > 0
-                            ? currFmt.format(product.unitPrice)
-                            : 'Price not set',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: kPrimary,
+                      Expanded(
+                        child: Text(
+                          product.unitPrice > 0
+                              ? currFmt.format(product.unitPrice)
+                              : 'Price not set',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: kPrimary,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

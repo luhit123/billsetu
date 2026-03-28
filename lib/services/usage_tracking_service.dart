@@ -11,6 +11,21 @@ class UsageTrackingService {
 
   String get _currentPeriodKey => DateFormat('yyyy-MM').format(DateTime.now());
 
+  // ── In-memory cache (5-minute TTL) ────────────────────────────────────
+  Map<String, int>? _cachedSummary;
+  DateTime? _cacheTime;
+  static const _cacheTtl = Duration(minutes: 5);
+  bool get _isCacheValid =>
+      _cachedSummary != null &&
+      _cacheTime != null &&
+      DateTime.now().difference(_cacheTime!) < _cacheTtl;
+
+  /// Invalidate cache after writes (invoice created, customer added, etc.)
+  void invalidateCache() {
+    _cachedSummary = null;
+    _cacheTime = null;
+  }
+
   DocumentReference<Map<String, dynamic>>? get _usageRef {
     final uid = _uid;
     if (uid == null) return null;
@@ -71,28 +86,32 @@ class UsageTrackingService {
     }
   }
 
-  /// Returns all usage metrics as a map
+  /// Returns all usage metrics as a map (cached for 5 minutes)
   Future<Map<String, int>> getUsageSummary() async {
+    if (_isCacheValid) return _cachedSummary!;
+
     final results = await Future.wait([
       getInvoiceCount(),
       getWhatsAppShareCount(),
       getCustomerCount(),
       getProductCount(),
     ]);
-    return {
+    _cachedSummary = {
       'invoices': results[0],
       'whatsappShares': results[1],
       'customers': results[2],
       'products': results[3],
     };
+    _cacheTime = DateTime.now();
+    return _cachedSummary!;
   }
 
   // ── Increment counters ────────────────────────────────────────────────
 
   Future<void> incrementInvoiceCount() async {
+    invalidateCache();
     final ref = _usageRef;
     if (ref == null) return;
-    // Fire-and-forget: don't block the UI waiting for server sync.
     ref.set({
       'invoicesCreated': FieldValue.increment(1),
       'updatedAt': Timestamp.now(),
@@ -100,6 +119,7 @@ class UsageTrackingService {
   }
 
   Future<void> incrementWhatsAppShareCount() async {
+    invalidateCache();
     final ref = _usageRef;
     if (ref == null) return;
     ref.set({

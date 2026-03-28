@@ -157,18 +157,12 @@ class _ReportsScreenState extends State<ReportsScreen>
       _receivablesError = null;
     });
     _receivablesSub = _firebaseService
-        .getInvoicesStream(limit: 500)
+        .getInvoicesStream(status: InvoiceStatus.pending, limit: 100)
         .listen(
           (invoices) {
             if (!mounted) return;
             setState(() {
               _receivablesInvoices = invoices
-                  .where(
-                    (inv) =>
-                        inv.status == InvoiceStatus.pending ||
-                        inv.status == InvoiceStatus.overdue,
-                  )
-                  .toList()
                 ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
               _receivablesLoading = false;
             });
@@ -190,7 +184,7 @@ class _ReportsScreenState extends State<ReportsScreen>
       _productsError = null;
     });
     _productsSub = _firebaseService
-        .getInvoicesStream(limit: 500)
+        .getInvoicesStream(limit: 200)
         .listen(
           (invoices) {
             if (!mounted) return;
@@ -925,13 +919,13 @@ class _ReportsScreenState extends State<ReportsScreen>
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  _statPill(
+                                  Flexible(child: _statPill(
                                     '${stat.timesInvoiced}x invoiced',
-                                  ),
+                                  )),
                                   const SizedBox(width: 6),
-                                  _statPill(
+                                  Flexible(child: _statPill(
                                     'Qty: ${_formatQty(stat.totalQty)}',
-                                  ),
+                                  )),
                                 ],
                               ),
                             ],

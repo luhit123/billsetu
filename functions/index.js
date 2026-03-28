@@ -36,11 +36,33 @@ exports.setupUserTrial = onDocumentCreated('users/{uid}', async (event) => {
 
 // Keep one warm instance to eliminate cold-start latency for this
 // critical user-facing function called on every invoice creation.
+// NOTE: Enable enforceAppCheck once debug tokens are registered in Firebase Console
 exports.reserveInvoiceNumber = onCall({ minInstances: 1 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in is required to reserve invoice numbers.');
   }
+
+  // Rate limiting: max 100 invoices per hour per user
+  const rateLimitRef = db.collection('rate_limits').doc(`invoice_${uid}`);
+  const rateLimitSnap = await rateLimitRef.get();
+  const now = Date.now();
+  const oneHourAgo = now - 3600000;
+  if (rateLimitSnap.exists) {
+    const data = rateLimitSnap.data();
+    if (data.windowStart > oneHourAgo && data.count >= 100) {
+      throw new HttpsError('resource-exhausted', 'Rate limit exceeded: max 100 invoices per hour.');
+    }
+  }
+  await rateLimitRef.set({
+    windowStart: rateLimitSnap.exists && rateLimitSnap.data().windowStart > oneHourAgo
+      ? rateLimitSnap.data().windowStart
+      : now,
+    count: rateLimitSnap.exists && rateLimitSnap.data().windowStart > oneHourAgo
+      ? (rateLimitSnap.data().count || 0) + 1
+      : 1,
+    uid,
+  }, { merge: true });
 
   const requestedYear = parseYear(request.data && request.data.year);
   const counterRef = db
@@ -152,10 +174,8 @@ exports.syncInvoiceAnalytics = onDocumentWritten('invoices/{invoiceId}', async (
 
     await updateAnalyticsForWrite(before, after, event.params.invoiceId);
   } catch (err) {
-    logger.error('syncInvoiceAnalytics: unhandled error', {
-      invoiceId: event.params.invoiceId,
-      error: err && err.message,
-    });
+    console.error('syncInvoiceAnalytics CRASH:', err);
+    console.error('invoiceId:', event.params.invoiceId, 'message:', err?.message, 'stack:', err?.stack);
   }
 });
 
@@ -171,27 +191,37 @@ exports.cleanupInvoicesAfterClientDelete = onDocumentDeleted(
       clientId,
     );
 
-    const invoicesSnapshot = await db
-      .collection('invoices')
-      .where('ownerId', '==', ownerId)
-      .where('clientId', '==', clientId)
-      .get();
-
-    const writer = db.bulkWriter();
+    // Paginate: process 500 invoices at a time to avoid timeouts
+    const CLEANUP_PAGE_SIZE = 500;
+    let lastCleanupDoc = null;
     let updatedCount = 0;
 
-    invoicesSnapshot.forEach((doc) => {
-      updatedCount += 1;
-      writer.set(doc.ref, {
-        clientId: '',
-        clientDeleted: true,
-        clientDeletedAt: FieldValue.serverTimestamp(),
-        orphanedClientId: clientId,
-        orphanedClientName: deletedClientName,
-      }, { merge: true });
-    });
+    while (true) {
+      let query = db.collection('invoices')
+        .where('ownerId', '==', ownerId)
+        .where('clientId', '==', clientId)
+        .limit(CLEANUP_PAGE_SIZE);
 
-    await writer.close();
+      if (lastCleanupDoc) {
+        query = query.startAfter(lastCleanupDoc);
+      }
+
+      const pageSnapshot = await query.get();
+      if (pageSnapshot.empty) break;
+
+      const writer = db.bulkWriter();
+      pageSnapshot.forEach((doc) => {
+        updatedCount += 1;
+        writer.set(doc.ref, {
+          clientId: '',
+          clientName: `${deletedClientName} (Deleted)`,
+        }, { merge: true });
+      });
+      await writer.close();
+
+      lastCleanupDoc = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+      if (pageSnapshot.size < CLEANUP_PAGE_SIZE) break;
+    }
 
     logger.info('Cleaned invoices after client delete', {
       ownerId,
@@ -384,31 +414,47 @@ exports.markOverdueInvoices = onSchedule(
     // users. This dramatically reduces scan size as the dataset grows.
     // Requires a composite index on (status ASC, dueDate ASC).
     const today = Timestamp.fromDate(now);
-    const pendingSnapshot = await db
-      .collection('invoices')
-      .where('status', '==', 'pending')
-      .where('dueDate', '<', today)
-      .get();
-
-    const writer = db.bulkWriter();
     let overdueCount = 0;
 
-    pendingSnapshot.forEach((doc) => {
-      const data = doc.data();
-      const dueAt = resolveDueAt(data);
-      if (!dueAt || dueAt.getTime() > now.getTime()) {
-        return;
+    // Paginated overdue marking for both 'pending' and 'partiallyPaid'
+    const OVERDUE_PAGE_SIZE = 500;
+
+    for (const status of ['pending', 'partiallyPaid']) {
+      let lastOverdueDoc = null;
+
+      while (true) {
+        let query = db.collection('invoices')
+          .where('status', '==', status)
+          .where('dueDate', '<', today)
+          .limit(OVERDUE_PAGE_SIZE);
+
+        if (lastOverdueDoc) {
+          query = query.startAfter(lastOverdueDoc);
+        }
+
+        const pageSnapshot = await query.get();
+        if (pageSnapshot.empty) break;
+
+        const writer = db.bulkWriter();
+
+        pageSnapshot.forEach((doc) => {
+          const data = doc.data();
+          const dueAt = resolveDueAt(data);
+          if (!dueAt || dueAt.getTime() > now.getTime()) return;
+
+          overdueCount += 1;
+          writer.update(doc.ref, {
+            status: 'overdue',
+            overdueMarkedAt: FieldValue.serverTimestamp(),
+            overdueReason: 'scheduled_overdue_job',
+          });
+        });
+
+        await writer.close();
+        lastOverdueDoc = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+        if (pageSnapshot.size < OVERDUE_PAGE_SIZE) break;
       }
-
-      overdueCount += 1;
-      writer.update(doc.ref, {
-        status: 'overdue',
-        overdueMarkedAt: FieldValue.serverTimestamp(),
-        overdueReason: 'scheduled_overdue_job',
-      });
-    });
-
-    await writer.close();
+    }
 
     logger.info('Overdue scheduler completed', {
       overdueCount,
@@ -416,39 +462,67 @@ exports.markOverdueInvoices = onSchedule(
   },
 );
 
+// NOTE: Enable enforceAppCheck once debug tokens are registered in Firebase Console
 exports.backfillMyInvoiceData = onCall(async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in is required to backfill invoice data.');
   }
 
-  const invoicesSnapshot = await db
-    .collection('invoices')
-    .where('ownerId', '==', uid)
-    .get();
+  // Rate-limit: allow backfill at most once per hour
+  const backfillRef = db.collection('rate_limits').doc(`backfill_${uid}`);
+  const backfillSnap = await backfillRef.get();
+  if (backfillSnap.exists) {
+    const lastRun = backfillSnap.data().lastRunAt;
+    if (lastRun && Date.now() - lastRun < 3600000) {
+      throw new HttpsError('resource-exhausted', 'Backfill can only be run once per hour.');
+    }
+  }
+  await backfillRef.set({ lastRunAt: Date.now(), uid }, { merge: true });
 
-  const invoiceWriter = db.bulkWriter();
+  // Paginate: process 500 invoices at a time to avoid timeouts
+  const PAGE_SIZE = 500;
+  let lastDoc = null;
   const records = [];
   let normalizedInvoices = 0;
 
-  invoicesSnapshot.forEach((doc) => {
-    const raw = doc.data();
-    const record = buildInvoiceRecord(raw, doc.id);
-    records.push(record);
+  while (true) {
+    let query = db.collection('invoices')
+      .where('ownerId', '==', uid)
+      .orderBy('createdAt')
+      .limit(PAGE_SIZE);
 
-    if (!invoiceNeedsNormalization(raw, record.derivedPatch)) {
-      return;
+    if (lastDoc) {
+      query = query.startAfter(lastDoc);
     }
 
-    normalizedInvoices += 1;
-    invoiceWriter.set(doc.ref, {
-      ...record.derivedPatch,
-      derivedTotalsUpdatedAt: FieldValue.serverTimestamp(),
-      financialTotalsBackfilledAt: FieldValue.serverTimestamp(),
-    }, { merge: true });
-  });
+    const pageSnapshot = await query.get();
+    if (pageSnapshot.empty) break;
 
-  await invoiceWriter.close();
+    const invoiceWriter = db.bulkWriter();
+
+    pageSnapshot.forEach((doc) => {
+      const raw = doc.data();
+      const record = buildInvoiceRecord(raw, doc.id);
+      records.push(record);
+
+      if (!invoiceNeedsNormalization(raw, record.derivedPatch)) {
+        return;
+      }
+
+      normalizedInvoices += 1;
+      invoiceWriter.set(doc.ref, {
+        ...record.derivedPatch,
+        derivedTotalsUpdatedAt: FieldValue.serverTimestamp(),
+        financialTotalsBackfilledAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    });
+
+    await invoiceWriter.close();
+    lastDoc = pageSnapshot.docs[pageSnapshot.docs.length - 1];
+
+    if (pageSnapshot.size < PAGE_SIZE) break;
+  }
 
   const analyticsSnapshot = buildOwnerAnalyticsSnapshot(records);
   await replaceOwnerAnalytics(uid, analyticsSnapshot);
@@ -865,6 +939,25 @@ function isZeroPeriodDelta(delta) {
 }
 
 function invoiceNeedsNormalization(raw, derivedPatch) {
+  // If client already wrote financial totals that satisfy the invariant, skip overwriting them.
+  // This prevents the server from corrupting correct client-side calculations.
+  const clientGrand = toNumber(raw.grandTotal);
+  const clientTaxable = toNumber(raw.taxableAmount);
+  const clientTax = toNumber(raw.totalTax);
+  const clientSub = toNumber(raw.subtotal);
+  const clientDisc = toNumber(raw.discountAmount);
+  if (clientGrand > 0 &&
+      roundMoney(clientGrand) === roundMoney(clientTaxable + clientTax) &&
+      roundMoney(clientTaxable) === roundMoney(clientSub - clientDisc)) {
+    // Client totals are internally consistent — only normalize non-financial fields
+    const financialKeys = new Set([
+      'subtotal', 'discountAmount', 'taxableAmount',
+      'cgstAmount', 'sgstAmount', 'igstAmount', 'totalTax', 'grandTotal',
+    ]);
+    return Object.keys(derivedPatch)
+      .filter((key) => !financialKeys.has(key))
+      .some((key) => !valuesMatch(raw[key], derivedPatch[key]));
+  }
   return Object.keys(derivedPatch).some((key) => !valuesMatch(raw[key], derivedPatch[key]));
 }
 
@@ -930,11 +1023,25 @@ function buildInvoiceRecord(raw, invoiceId) {
   const discountAmount = roundMoney(computeDiscountAmount(subtotal, discountType, discountValue));
   const taxableAmount = roundMoney(Math.max(subtotal - discountAmount, 0));
   const gstEnabled = Boolean(raw.gstEnabled);
-  const gstRate = toNumber(raw.gstRate) > 0 ? toNumber(raw.gstRate) : 18;
+  const gstRate = toNumber(raw.gstRate) > 0 ? toNumber(raw.gstRate) : 18.0;
   const gstType = normalizeGstType(raw.gstType);
-  const cgstAmount = roundMoney(gstEnabled && gstType === 'cgst_sgst' ? taxableAmount * gstRate / 200 : 0);
+
+  // Per-item GST calculation: each item can have its own gstRate
+  let totalItemTax = 0;
+  if (gstEnabled) {
+    for (const item of items) {
+      const itemTotal = lineItemTotal(item);
+      // Apply discount proportionally to get per-item taxable amount
+      const itemTaxable = subtotal > 0 ? itemTotal * (taxableAmount / subtotal) : 0;
+      const itemGstRate = toNumber(item.gstRate || item.gstPercent || raw.gstRate || 18);
+      totalItemTax += itemTaxable * itemGstRate / 100;
+    }
+  }
+  totalItemTax = roundMoney(totalItemTax);
+
+  const cgstAmount = roundMoney(gstEnabled && gstType === 'cgst_sgst' ? totalItemTax / 2 : 0);
   const sgstAmount = roundMoney(cgstAmount);
-  const igstAmount = roundMoney(gstEnabled && gstType === 'igst' ? taxableAmount * gstRate / 100 : 0);
+  const igstAmount = roundMoney(gstEnabled && gstType === 'igst' ? totalItemTax : 0);
   const totalTax = roundMoney(cgstAmount + sgstAmount + igstAmount);
   const grandTotal = roundMoney(taxableAmount + totalTax);
   const dueAt = resolveDueAt(raw, createdAt);
@@ -1039,7 +1146,11 @@ function lineItemTotal(item) {
     return 0;
   }
 
-  return roundMoney(toNumber(item.quantity) * toNumber(item.unitPrice));
+  const qty = toNumber(item.quantity);
+  const unitPrice = toNumber(item.unitPrice);
+  const discountPercent = toNumber(item.discountPercent || item.discount);
+  const base = qty * unitPrice;
+  return roundMoney(discountPercent > 0 ? base * (1 - discountPercent / 100) : base);
 }
 
 function computeDiscountAmount(subtotal, discountType, discountValue) {
@@ -1964,11 +2075,16 @@ exports.invoicePage = onRequest(async (req, res) => {
     const igstAmount = data.igstAmount || 0;
     const status = data.status || 'pending';
 
+    // Seller details
+    const storeName = data.storeName || '';
+    const sellerPhone = data.sellerPhone || '';
+    const sellerAddress = data.sellerAddress || '';
+    const sellerGstin = data.sellerGstin || '';
+
     // UPI payment details
     const upiId = data.upiId || '';
     const upiNumber = data.upiNumber || '';
     const upiQrUrl = data.upiQrUrl || '';
-    const storeName = data.storeName || '';
     const hasPayment = upiId || upiNumber || upiQrUrl;
 
     // Client phone for bill history OTP verification
@@ -2061,201 +2177,332 @@ exports.invoicePage = onRequest(async (req, res) => {
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#eef2f7;min-height:100vh;display:flex;align-items:flex-start;justify-content:center;padding:24px 16px}
-    .card{background:#fff;border-radius:24px;box-shadow:0 8px 40px rgba(0,0,0,0.07);max-width:480px;width:100%;overflow:hidden}
-    /* Header */
-    .header{background:linear-gradient(135deg,#1e3a8a,#3b82f6);padding:32px 28px 28px;position:relative;overflow:hidden}
-    .header::after{content:'';position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,0.06)}
-    .header-top{display:flex;justify-content:space-between;align-items:flex-start}
-    .logo{font-size:24px;font-weight:800;color:#fff;letter-spacing:-0.5px}
-    .logo span{color:#fbbf24}
-    .status-badge{padding:5px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:0.3px;text-transform:uppercase;background:${sc.bg};color:${sc.text}}
-    .inv-number{color:rgba(255,255,255,0.6);font-size:13px;font-weight:600;margin-top:16px;letter-spacing:0.5px}
-    .inv-amount{color:#fff;font-size:34px;font-weight:800;margin-top:4px}
-    .inv-meta{display:flex;gap:24px;margin-top:14px}
-    .inv-meta-item{color:rgba(255,255,255,0.7);font-size:12px}
-    .inv-meta-item strong{color:#fff;display:block;font-size:14px;margin-top:2px}
-    /* Body */
-    .body{padding:24px}
-    .section-title{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px}
-    /* Items table */
-    .items-table{width:100%;border-collapse:collapse;font-size:13px}
-    .items-table thead th{text-align:left;padding:8px 6px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid #f3f4f6}
-    .items-table thead th:last-child,.items-table thead th:nth-child(4){text-align:right}
-    .items-table tbody td{padding:10px 6px;border-bottom:1px solid #f3f4f6;vertical-align:top}
-    .item-idx{color:#d1d5db;font-weight:600;width:24px}
-    .item-desc{color:#374151}
-    .item-name{font-weight:600}
-    .item-hsn{font-size:11px;color:#9ca3af;margin-top:2px}
-    .item-qty{color:#6b7280;white-space:nowrap;text-align:center}
-    .item-price{color:#6b7280;text-align:right;white-space:nowrap}
-    .item-total{color:#111827;font-weight:700;text-align:right;white-space:nowrap}
-    /* Summary */
-    .summary{background:#f9fafb;border-radius:14px;padding:16px;margin-top:20px}
-    .sum-row{display:flex;justify-content:space-between;padding:6px 0;font-size:13px;color:#6b7280}
-    .sum-row span:last-child{font-weight:600;color:#374151}
-    .sum-row.discount span:last-child{color:#ef4444}
-    .sum-row.tax span:last-child{color:#16a34a}
-    .sum-divider{height:1px;background:#e5e7eb;margin:8px 0}
-    .sum-total{display:flex;justify-content:space-between;padding:8px 0 0;font-size:18px;font-weight:800;color:#111827}
-    /* Payment */
-    .payment-section{margin-top:24px;border:1.5px solid #e5e7eb;border-radius:16px;overflow:hidden}
+    body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:#f0f0f0;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:24px 12px}
+
+    /* ── Invoice Document ── */
+    .invoice-page{background:#fff;max-width:700px;width:100%;padding:clamp(12px,3vw,28px);box-shadow:0 2px 24px rgba(0,0,0,0.08);border-radius:4px}
+    .inv-title{text-align:center;font-size:clamp(16px,3vw,22px);font-weight:800;color:#0B57D0;padding:clamp(6px,1.5vw,12px) 0;border-bottom:2px solid #7CACF8}
+    .seller-box{border:1px solid #7CACF8;padding:clamp(6px,1.5vw,12px);margin-top:clamp(6px,1vw,10px)}
+    .seller-name{font-size:clamp(12px,2vw,16px);font-weight:700;color:#000}
+    .seller-detail{font-size:clamp(9px,1.5vw,12px);color:#1D1D1F;margin-top:2px}
+    .bill-details{display:flex;border:1px solid #7CACF8;margin-top:clamp(6px,1vw,10px)}
+    .bill-left,.bill-right{flex:1}
+    .bill-right{border-left:1px solid #7CACF8}
+    .bd-header{background:#D3E3FD;padding:clamp(4px,0.8vw,8px) clamp(6px,1vw,12px);font-size:clamp(9px,1.5vw,12px);font-weight:700;color:#000}
+    .bd-content{padding:clamp(4px,1vw,10px) clamp(6px,1vw,12px)}
+    .bd-content div{font-size:clamp(9px,1.5vw,12px);color:#1D1D1F;margin-bottom:2px}
+    .bd-content .bd-name{font-size:clamp(10px,1.8vw,14px);font-weight:700;color:#000}
+    .items-table{width:100%;border-collapse:collapse;margin-top:clamp(6px,1vw,10px);font-size:clamp(9px,1.5vw,13px)}
+    .items-table th,.items-table td{border:1px solid #7CACF8;padding:clamp(3px,0.6vw,6px) clamp(4px,0.8vw,8px)}
+    .items-table thead th{background:#D3E3FD;font-weight:700;color:#000;text-align:center}
+    .items-table tbody td{color:#000;vertical-align:top}
+    .items-table .col-idx{text-align:center;width:clamp(20px,4vw,32px)}
+    .items-table .col-name{text-align:left;font-weight:600}
+    .items-table .col-num{text-align:right;white-space:nowrap}
+    .items-table .col-center{text-align:center;white-space:nowrap}
+    .items-table tfoot td{font-weight:700}
+    .totals-row{display:flex;margin-top:0}
+    .totals-left{flex:1;border:1px solid #7CACF8;border-top:none;padding:clamp(4px,1vw,10px)}
+    .totals-right{width:clamp(160px,35vw,240px);border:1px solid #7CACF8;border-top:none;border-left:none}
+    .tot-line{display:flex;justify-content:space-between;padding:clamp(2px,0.5vw,5px) clamp(6px,1vw,10px);font-size:clamp(9px,1.5vw,12px);color:#000;border-top:1px solid #7CACF8}
+    .tot-line:first-child{border-top:none}
+    .tot-line.highlight{background:#0B57D0;color:#fff}
+    .tot-line.bold{font-weight:700}
+    .words-label{font-size:clamp(8px,1.3vw,11px);font-weight:700;color:#000}
+    .words-text{font-size:clamp(8px,1.3vw,11px);color:#1D1D1F;margin-top:2px}
+    .terms-sig{display:flex;border:1px solid #7CACF8;margin-top:clamp(6px,1vw,10px)}
+    .terms-left{flex:1}
+    .sig-right{width:clamp(140px,30vw,200px);border-left:1px solid #7CACF8}
+    .ts-header{background:#D3E3FD;padding:clamp(3px,0.6vw,6px) clamp(6px,1vw,10px);font-size:clamp(9px,1.5vw,12px);font-weight:700;color:#000}
+    .ts-content{padding:clamp(4px,1vw,8px);font-size:clamp(8px,1.3vw,11px);color:#1D1D1F}
+    .sig-area{height:clamp(30px,6vw,50px);margin:4px 8px}
+    .sig-label{text-align:center;font-size:clamp(8px,1.3vw,11px);color:#1D1D1F;padding-bottom:4px}
+    .inv-footer{font-size:clamp(7px,1vw,9px);color:#6B6B6B;margin-top:clamp(6px,1vw,10px)}
+    .status-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:clamp(8px,1.3vw,11px);font-weight:700;text-transform:uppercase;letter-spacing:0.3px;background:${sc.bg};color:${sc.text}}
+
+    /* ── Action Buttons ── */
+    .actions{max-width:700px;width:100%;margin-top:16px;display:flex;gap:10px;flex-wrap:wrap}
+    .action-btn{flex:1;min-width:140px;padding:14px 20px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:transform .15s;color:#fff}
+    .action-btn:hover{transform:translateY(-1px)}
+    .action-btn.primary{background:linear-gradient(135deg,#0B57D0,#4A90E2);box-shadow:0 4px 14px rgba(11,87,208,0.3)}
+    .action-btn.green{background:linear-gradient(135deg,#15803d,#22c55e);box-shadow:0 4px 14px rgba(34,197,94,0.3)}
+
+    /* ── Payment ── */
+    .payment-section{border:1.5px solid #e5e7eb;border-radius:16px;overflow:hidden}
     .payment-header{display:flex;align-items:center;gap:8px;padding:14px 16px;background:#f0fdf4;font-size:15px;font-weight:700;color:#15803d;border-bottom:1px solid #dcfce7}
     .payment-icon{font-size:20px}
     .payment-body{padding:16px;display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
     .qr-container{text-align:center}
-    .qr-img{width:140px;height:140px;border-radius:12px;border:1px solid #e5e7eb;object-fit:contain}
-    .qr-label{font-size:11px;color:#9ca3af;margin-top:6px;font-weight:500}
+    .qr-img{width:clamp(100px,20vw,140px);height:clamp(100px,20vw,140px);border-radius:12px;border:1px solid #e5e7eb;object-fit:contain}
+    .qr-label{font-size:11px;color:#9ca3af;margin-top:6px}
     .upi-details{flex:1;min-width:140px}
     .upi-row{margin-bottom:12px}
     .upi-label{font-size:11px;color:#9ca3af;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
     .upi-value-row{display:flex;align-items:center;gap:8px;margin-top:4px}
     .upi-value{font-size:15px;font-weight:700;color:#111827;word-break:break-all}
-    .copy-btn{padding:4px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer;transition:all .15s}
-    .copy-btn:hover{background:#f3f4f6;color:#111827}
-    .pay-now-btn{display:block;text-align:center;padding:14px;margin:0 16px 16px;background:linear-gradient(135deg,#15803d,#22c55e);color:#fff;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none;transition:transform .15s;box-shadow:0 4px 14px rgba(34,197,94,0.3)}
-    .pay-now-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(34,197,94,0.4)}
-    .pay-now-btn:active{transform:translateY(0)}
-    /* Button */
-    .download-btn{display:block;width:100%;padding:16px;margin-top:24px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:transform .15s,box-shadow .15s;box-shadow:0 4px 14px rgba(59,130,246,0.3)}
-    .download-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(59,130,246,0.4)}
-    .download-btn:active{transform:translateY(0)}
-    .footer{text-align:center;padding:16px 24px 24px;color:#d1d5db;font-size:11px}
-    .footer a{color:#93c5fd;text-decoration:none}
-    /* Bill History / Customer Portal Section */
-    .history-section{margin-top:28px;border-top:2px solid #f3f4f6;padding-top:24px}
+    .copy-btn{padding:4px 12px;border:1px solid #d1d5db;border-radius:8px;background:#fff;font-size:11px;font-weight:600;color:#6b7280;cursor:pointer}
+    .pay-now-btn{display:block;text-align:center;padding:14px;margin:0 16px 16px;background:linear-gradient(135deg,#15803d,#22c55e);color:#fff;border-radius:12px;font-size:15px;font-weight:700;text-decoration:none}
+
+    /* ── History Portal ── */
+    .history-section{margin-top:20px}
     .history-title{font-size:17px;font-weight:800;color:#111827;margin-bottom:4px}
     .history-subtitle{font-size:12px;color:#9ca3af;margin-bottom:16px}
     .phone-input-group{display:flex;gap:8px;margin-bottom:12px}
     .phone-prefix{padding:12px 14px;background:#f3f4f6;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-weight:600;color:#374151;flex-shrink:0}
-    .phone-input{flex:1;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;font-weight:500;color:#111827;outline:none;transition:border-color .2s}
+    .phone-input{flex:1;padding:12px 14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:15px;outline:none}
     .phone-input:focus{border-color:#3b82f6}
-    .otp-input{width:100%;padding:14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:18px;font-weight:700;color:#111827;text-align:center;letter-spacing:8px;outline:none;transition:border-color .2s;margin-bottom:12px}
+    .otp-input{width:100%;padding:14px;border:1.5px solid #e5e7eb;border-radius:12px;font-size:18px;font-weight:700;text-align:center;letter-spacing:8px;outline:none;margin-bottom:12px}
     .otp-input:focus{border-color:#3b82f6}
-    .otp-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;transition:transform .15s,opacity .15s}
-    .otp-btn:hover{transform:translateY(-1px)}
-    .otp-btn:disabled{opacity:0.5;cursor:not-allowed;transform:none}
-    .otp-error{color:#ef4444;font-size:13px;font-weight:500;margin-top:8px;display:none}
+    .otp-btn{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer}
+    .otp-btn:disabled{opacity:0.5;cursor:not-allowed}
+    .otp-error{color:#ef4444;font-size:13px;margin-top:8px;display:none}
     .otp-step{display:none}
     .otp-step.active{display:block}
-    /* Portal Header */
     .portal-header{background:linear-gradient(135deg,#1e3a8a,#3b82f6);border-radius:16px;padding:20px;margin-bottom:16px;color:#fff}
-    .portal-welcome{font-size:11px;font-weight:500;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px}
+    .portal-welcome{font-size:11px;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.5px}
     .portal-name{font-size:20px;font-weight:800;margin-top:4px}
     .portal-store{font-size:12px;color:rgba(255,255,255,0.7);margin-top:2px}
-    /* Summary Stats Grid */
     .stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
     .stat-card{padding:14px;border-radius:12px;border:1.5px solid #f3f4f6}
     .stat-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:#9ca3af}
     .stat-value{font-size:18px;font-weight:800;margin-top:4px}
     .stat-count{font-size:11px;color:#9ca3af;margin-top:2px}
-    .stat-total{border-color:#e0e7ff;background:#f5f7ff}
-    .stat-total .stat-value{color:#1e3a8a}
-    .stat-paid{border-color:#dcfce7;background:#f0fdf4}
-    .stat-paid .stat-value{color:#15803d}
-    .stat-pending{border-color:#fef3c7;background:#fffbeb}
-    .stat-pending .stat-value{color:#b45309}
-    .stat-overdue{border-color:#fee2e2;background:#fef2f2}
-    .stat-overdue .stat-value{color:#b91c1c}
-    /* Filter Tabs */
-    .filter-tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-    .filter-tab{padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap;transition:all .2s}
+    .stat-total{border-color:#e0e7ff;background:#f5f7ff}.stat-total .stat-value{color:#1e3a8a}
+    .stat-paid{border-color:#dcfce7;background:#f0fdf4}.stat-paid .stat-value{color:#15803d}
+    .stat-pending{border-color:#fef3c7;background:#fffbeb}.stat-pending .stat-value{color:#b45309}
+    .stat-overdue{border-color:#fee2e2;background:#fef2f2}.stat-overdue .stat-value{color:#b91c1c}
+    .filter-tabs{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto}
+    .filter-tab{padding:8px 16px;border-radius:20px;font-size:12px;font-weight:600;border:1.5px solid #e5e7eb;background:#fff;color:#6b7280;cursor:pointer;white-space:nowrap}
     .filter-tab.active{background:#1e3a8a;color:#fff;border-color:#1e3a8a}
     .filter-tab .tab-count{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:700;background:rgba(0,0,0,0.08)}
     .filter-tab.active .tab-count{background:rgba(255,255,255,0.2)}
-    /* Bills List */
     .bills-list{margin-top:8px}
     .bills-empty{text-align:center;color:#9ca3af;font-size:13px;padding:32px 0}
-    .bill-card{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border:1.5px solid #f3f4f6;border-radius:12px;margin-bottom:8px;cursor:pointer;transition:border-color .2s,box-shadow .2s}
+    .bill-card{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:#fff;border:1.5px solid #f3f4f6;border-radius:12px;margin-bottom:8px;cursor:pointer}
     .bill-card:hover{border-color:#3b82f6;box-shadow:0 2px 8px rgba(59,130,246,0.1)}
-    .bill-left{flex:1}
-    .bill-inv-no{font-size:14px;font-weight:700;color:#111827}
-    .bill-date{font-size:12px;color:#9ca3af;margin-top:2px}
+    .bill-left{flex:1}.bill-inv-no{font-size:14px;font-weight:700;color:#111827}.bill-date{font-size:12px;color:#9ca3af;margin-top:2px}
     .bill-items-count{font-size:11px;color:#6b7280;margin-top:2px}
-    .bill-right{text-align:right}
-    .bill-amount{font-size:15px;font-weight:800;color:#111827}
-    .bill-status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.3px;margin-top:4px}
-    .bill-status.paid{background:#dcfce7;color:#15803d}
-    .bill-status.pending{background:#fef3c7;color:#b45309}
-    .bill-status.overdue{background:#fee2e2;color:#b91c1c}
-    .bill-chevron{color:#d1d5db;margin-left:8px;font-size:16px}
-    /* Modal Overlay */
-    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:flex-end;justify-content:center;padding:0}
+    .bill-right{text-align:right}.bill-amount{font-size:15px;font-weight:800;color:#111827}
+    .bill-status{display:inline-block;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;text-transform:uppercase;margin-top:4px}
+    .bill-status.paid{background:#dcfce7;color:#15803d}.bill-status.pending{background:#fef3c7;color:#b45309}.bill-status.overdue{background:#fee2e2;color:#b91c1c}
+    .bill-chevron{color:#d1d5db;margin-left:8px}
+    .modal-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:flex-end;justify-content:center}
     .modal-overlay.open{display:flex}
     .modal-sheet{background:#fff;border-radius:24px 24px 0 0;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;animation:slideUp .3s ease}
     @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
     .modal-handle{width:40px;height:4px;background:#d1d5db;border-radius:2px;margin:12px auto}
     .modal-header{display:flex;justify-content:space-between;align-items:flex-start;padding:0 20px 16px;border-bottom:1px solid #f3f4f6}
-    .modal-title{font-size:16px;font-weight:800;color:#111827}
-    .modal-meta{font-size:12px;color:#9ca3af;margin-top:4px}
-    .modal-close{width:32px;height:32px;border-radius:50%;border:none;background:#f3f4f6;font-size:18px;color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .modal-title{font-size:16px;font-weight:800;color:#111827}.modal-meta{font-size:12px;color:#9ca3af;margin-top:4px}
+    .modal-close{width:32px;height:32px;border-radius:50%;border:none;background:#f3f4f6;font-size:18px;color:#6b7280;cursor:pointer;display:flex;align-items:center;justify-content:center}
     .modal-body{padding:16px 20px 20px}
     .modal-status-bar{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-radius:12px;margin-bottom:16px}
-    .modal-status-bar.paid{background:#f0fdf4;border:1px solid #dcfce7}
-    .modal-status-bar.pending{background:#fffbeb;border:1px solid #fef3c7}
-    .modal-status-bar.overdue{background:#fef2f2;border:1px solid #fee2e2}
+    .modal-status-bar.paid{background:#f0fdf4;border:1px solid #dcfce7}.modal-status-bar.pending{background:#fffbeb;border:1px solid #fef3c7}.modal-status-bar.overdue{background:#fef2f2;border:1px solid #fee2e2}
     .modal-total{font-size:22px;font-weight:800;color:#111827}
-    /* Modal Items Table */
     .modal-section-title{font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px}
     .modal-items{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px}
-    .modal-items thead th{text-align:left;padding:8px 6px;color:#9ca3af;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;border-bottom:2px solid #f3f4f6}
+    .modal-items thead th{text-align:left;padding:8px 6px;color:#9ca3af;font-size:10px;font-weight:700;border-bottom:2px solid #f3f4f6}
     .modal-items thead th:last-child{text-align:right}
     .modal-items tbody td{padding:10px 6px;border-bottom:1px solid #f9fafb;vertical-align:top}
-    .modal-items .mi-desc{font-weight:600;color:#374151}
-    .modal-items .mi-hsn{font-size:10px;color:#9ca3af;margin-top:2px}
-    .modal-items .mi-qty{color:#6b7280;text-align:center}
-    .modal-items .mi-total{text-align:right;font-weight:700;color:#111827}
+    .modal-items .mi-desc{font-weight:600;color:#374151}.modal-items .mi-hsn{font-size:10px;color:#9ca3af;margin-top:2px}
+    .modal-items .mi-qty{color:#6b7280;text-align:center}.modal-items .mi-total{text-align:right;font-weight:700;color:#111827}
     .modal-summary{background:#f9fafb;border-radius:12px;padding:14px;margin-bottom:16px}
     .modal-sum-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;color:#6b7280}
     .modal-sum-row span:last-child{font-weight:600;color:#374151}
-    .modal-sum-row.discount span:last-child{color:#ef4444}
-    .modal-sum-row.tax span:last-child{color:#16a34a}
+    .modal-sum-row.discount span:last-child{color:#ef4444}.modal-sum-row.tax span:last-child{color:#16a34a}
     .modal-sum-divider{height:1px;background:#e5e7eb;margin:6px 0}
     .modal-sum-total{display:flex;justify-content:space-between;padding:6px 0 0;font-size:17px;font-weight:800;color:#111827}
-    .modal-download{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;transition:transform .15s;box-shadow:0 4px 14px rgba(59,130,246,0.3)}
-    .modal-download:hover{transform:translateY(-1px)}
-    @media(max-width:400px){
-      .inv-amount{font-size:28px}
-      .inv-meta{gap:16px}
-      .items-table{font-size:12px}
-      .item-price{display:none}
-      .items-table thead th:nth-child(4){display:none}
+    .modal-download{display:block;width:100%;padding:14px;background:linear-gradient(135deg,#1e3a8a,#3b82f6);color:#fff;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none}
+
+    /* ── Mobile ── */
+    @media(max-width:480px){
+      body{padding:8px 4px}
+      .invoice-page{padding:10px;border-radius:0}
+      .bill-details{flex-direction:column}
+      .bill-right{border-left:none;border-top:1px solid #7CACF8}
+      .totals-row{flex-direction:column}
+      .totals-right{width:100%;border-left:1px solid #7CACF8;border-top:none}
+      .terms-sig{flex-direction:column}
+      .sig-right{width:100%;border-left:none;border-top:1px solid #7CACF8}
+      .items-table .col-center:nth-child(4),.items-table thead th:nth-child(4){display:none}
+    }
+    /* ── Tablet ── */
+    @media(min-width:481px) and (max-width:768px){
+      body{padding:16px 8px}
+    }
+    /* ── Desktop ── */
+    @media(min-width:769px){
+      body{padding:32px 16px}
+      .invoice-page{border-radius:8px}
+    }
+    /* ── Print ── */
+    @media print{
+      body{background:#fff;padding:0;display:block}
+      .invoice-page{box-shadow:none;max-width:100%;border-radius:0}
+      .actions,.payment-section,.history-section,.action-btn{display:none!important}
+      .inv-title,.bd-header,.ts-header,.items-table thead th,.tot-line.highlight,.status-badge{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="header">
-      <div class="header-top">
-        <div class="logo">Bill<span>Raja</span></div>
-        <span class="status-badge">${esc(sc.label)}</span>
-      </div>
-      <div class="inv-number">${esc(invoiceNumber)}</div>
-      <div class="inv-amount">${amount}</div>
-      <div class="inv-meta">
-        <div class="inv-meta-item">Billed to<strong>${esc(clientName)}</strong></div>
-        <div class="inv-meta-item">Date<strong>${esc(date)}</strong></div>
-      </div>
+  <!-- Invoice document — matches the Flutter InvoicePreviewWidget exactly -->
+  <div class="invoice-page">
+    <div class="inv-title">Tax Invoice</div>
+
+    <!-- Seller -->
+    <div class="seller-box">
+      <div class="seller-name">${esc(storeName || 'Your Store')}</div>
+      ${sellerPhone ? `<div class="seller-detail">Phone no.: ${esc(sellerPhone)}</div>` : ''}
+      ${sellerAddress ? `<div class="seller-detail">${esc(sellerAddress)}</div>` : ''}
+      ${sellerGstin ? `<div class="seller-detail">GSTIN: ${esc(sellerGstin)}</div>` : ''}
     </div>
-    <div class="body">
-      <div class="section-title">Items (${items.length})</div>
-      <table class="items-table">
-        <thead>
-          <tr><th>#</th><th>Description</th><th>Qty</th><th>Rate</th><th>Amount</th></tr>
-        </thead>
-        <tbody>
-          ${itemRowsHtml}
-        </tbody>
-      </table>
-      <div class="summary">
-        ${summaryHtml}
-        <div class="sum-divider"></div>
-        <div class="sum-total">
-          <span>Total</span><span>${amount}</span>
+
+    <!-- Bill To + Invoice Details -->
+    <div class="bill-details">
+      <div class="bill-left">
+        <div class="bd-header">Bill To:</div>
+        <div class="bd-content">
+          <div class="bd-name">${esc(clientName)}</div>
+          ${data.customerGstin ? `<div>GSTIN: ${esc(data.customerGstin)}</div>` : ''}
         </div>
       </div>
-      ${hasPayment ? `
-      <div class="payment-section">
+      <div class="bill-right">
+        <div class="bd-header">Invoice Details:</div>
+        <div class="bd-content">
+          <div>No: ${esc(invoiceNumber)}</div>
+          <div>Date: <strong>${esc(date)}</strong></div>
+          ${data.dueDate ? `<div>Due: ${esc(data.dueDate)}</div>` : ''}
+          <div><span class="status-badge">${esc(sc.label)}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Items Table -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th class="col-idx">#</th>
+          <th>Item Name</th>
+          ${items.some(i => i.hsnCode) ? '<th class="col-center">HSN/SAC</th>' : ''}
+          <th class="col-center">Qty</th>
+          <th class="col-center">Unit</th>
+          <th class="col-num">Price/Unit</th>
+          <th class="col-num">Amount</th>
+          ${gstEnabled ? '<th class="col-center">GST%</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+        ${items.map((item, idx) => {
+          const qty = fmtQty(item.quantity || 0);
+          return `<tr>
+            <td class="col-idx">${idx + 1}</td>
+            <td class="col-name">${esc(item.description)}</td>
+            ${items.some(i => i.hsnCode) ? `<td class="col-center">${esc(item.hsnCode || '')}</td>` : ''}
+            <td class="col-center">${qty}</td>
+            <td class="col-center">${esc(item.unit || '')}</td>
+            <td class="col-num">${fmtCur(item.unitPrice || 0)}</td>
+            <td class="col-num" style="font-weight:700">${fmtCur(item.total || 0)}</td>
+            ${gstEnabled ? `<td class="col-center">${(item.gstRate || 0).toFixed(0)}%</td>` : ''}
+          </tr>`;
+        }).join('')}
+      </tbody>
+      <tfoot>
+        <tr>
+          <td class="col-idx"></td>
+          <td class="col-name">Total</td>
+          ${items.some(i => i.hsnCode) ? '<td></td>' : ''}
+          <td class="col-center">${fmtQty(items.reduce((s, i) => s + (i.quantity || 0), 0))}</td>
+          <td></td>
+          <td></td>
+          <td class="col-num">${fmtCur(subtotal)}</td>
+          ${gstEnabled ? '<td></td>' : ''}
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals-row">
+      <div class="totals-left">
+        <div class="words-label">Invoice Amount In Words:</div>
+        <div class="words-text">${amount}</div>
+      </div>
+      <div class="totals-right">
+        <div class="tot-line"><span>Sub Total</span><span>${fmtCur(subtotal)}</span></div>
+        ${discountAmount > 0 ? `
+          <div class="tot-line"><span>Discount${discountType === 'percentage' ? ` (${toNumber(data.discountValue)}%)` : ''}</span><span>- ${fmtCur(discountAmount)}</span></div>
+          <div class="tot-line"><span>Taxable Amount</span><span>${fmtCur(taxableAmount)}</span></div>` : ''}
+        ${gstEnabled && gstType === 'cgst_sgst' ? `
+          <div class="tot-line"><span>CGST</span><span>${fmtCur(cgstAmount)}</span></div>
+          <div class="tot-line"><span>SGST</span><span>${fmtCur(sgstAmount)}</span></div>` : ''}
+        ${gstEnabled && gstType !== 'cgst_sgst' ? `
+          <div class="tot-line"><span>IGST</span><span>${fmtCur(igstAmount)}</span></div>` : ''}
+        ${gstEnabled && totalTax > 0 ? `<div class="tot-line"><span>Total Tax</span><span>${fmtCur(totalTax)}</span></div>` : ''}
+        <div class="tot-line bold highlight"><span>Grand Total</span><span>${amount}</span></div>
+        <div class="tot-line"><span>Received</span><span>${fmtCur(status === 'paid' ? data.amount : 0)}</span></div>
+        <div class="tot-line bold"><span>Balance</span><span>${fmtCur(status === 'paid' ? 0 : data.amount)}</span></div>
+      </div>
+    </div>
+
+    <!-- Terms + Signature side by side -->
+    <div class="terms-sig">
+      <div class="terms-left">
+        <div class="ts-header">Terms and conditions</div>
+        <div class="ts-content">Thank you for doing business with us.</div>
+      </div>
+      <div class="sig-right">
+        <div class="ts-header">For ${esc(storeName || 'Store')}:</div>
+        <div class="sig-area"></div>
+        <div class="sig-label">Authorized Signatory</div>
+      </div>
+    </div>
+
+    <div class="inv-footer">Generated by BillRaja</div>
+  </div>
+
+  <!-- Action buttons below the invoice -->
+  <div class="actions">
+    ${downloadUrl ? `
+      <a class="action-btn primary" href="${esc(downloadUrl)}" target="_blank" rel="noopener">&#128196; Download PDF</a>` : `
+      <button class="action-btn primary" onclick="window.print()">&#128196; Download / Print</button>`}
+    <button class="action-btn primary" style="background:linear-gradient(135deg,#6B21A8,#A855F7)" id="imgDlBtn" onclick="downloadAsImage(this)">&#128247; Download Image</button>
+    ${hasPayment && upiDeepLink ? `
+      <a class="action-btn green" id="payNowBtn" href="${upiDeepLink}" onclick="return handleUpiPay(event)">&#128179; Pay Now</a>` : ''}
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script>
+    function downloadAsImage(btn){
+      var el=document.querySelector('.invoice-page');
+      if(!el)return;
+      if(!btn)btn=document.getElementById('imgDlBtn');
+      btn.textContent='Generating...';btn.disabled=true;
+      // Wait for html2canvas to load if it hasn't yet
+      if(typeof html2canvas==='undefined'){
+        var s=document.createElement('script');
+        s.src='https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+        s.onload=function(){doCapture(el,btn)};
+        s.onerror=function(){btn.innerHTML='&#128247; Download Image';btn.disabled=false;alert('Could not load image generator. Check your internet connection.')};
+        document.head.appendChild(s);
+      }else{doCapture(el,btn)}
+    }
+    function doCapture(el,btn){
+      html2canvas(el,{scale:2,useCORS:true,backgroundColor:'#ffffff',logging:false,allowTaint:true}).then(function(canvas){
+        var link=document.createElement('a');
+        link.download='Invoice_${esc(invoiceNumber)}.png';
+        link.href=canvas.toDataURL('image/png');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        btn.innerHTML='&#128247; Download Image';btn.disabled=false;
+      }).catch(function(err){
+        console.error('Image capture error:',err);
+        btn.innerHTML='&#128247; Download Image';btn.disabled=false;
+        alert('Could not generate image. Try Download PDF instead.');
+      });
+    }
+  </script>
+
+  ${hasPayment ? `
+  <div style="max-width:600px;width:100%;margin-top:12px;background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.06);overflow:hidden">
+      <div class="payment-section" style="border:none;margin:0">
         <div class="payment-header">
           <span class="payment-icon">&#128179;</span>
           <span>Pay via UPI</span>
@@ -2315,11 +2562,10 @@ exports.invoicePage = onRequest(async (req, res) => {
           return false;
         }
         </script>` : ''}
-      </div>` : ''}
-      <a class="download-btn" href="${esc(downloadUrl)}" target="_blank" rel="noopener">
-        Download PDF
-      </a>
-      ${hasClientPhone ? `
+      </div>
+  </div>` : ''}
+
+  <div style="max-width:600px;width:100%;margin-top:12px;background:#fff;border-radius:16px;box-shadow:0 2px 12px rgba(0,0,0,0.06);padding:24px">
       <div class="history-section">
         <div class="history-title">&#128203; Your Purchase History</div>
         <div class="history-subtitle">Verify your phone number to view all your bills, filter by status, and re-download anytime</div>
@@ -2690,7 +2936,7 @@ exports.invoicePage = onRequest(async (req, res) => {
 
       // Close modal on back button
       window.addEventListener('popstate', function() { closeModal(); });
-      </script>` : ''}
+      </script>
     </div>
     <div class="footer">
       Powered by <a href="https://billraja.com">BillRaja</a>
@@ -2709,8 +2955,18 @@ exports.invoicePage = onRequest(async (req, res) => {
 // ════════════════════════════════════════════════════════════════════════════
 
 exports.clientBills = onRequest(async (req, res) => {
-  // CORS headers
-  res.set('Access-Control-Allow-Origin', 'https://invoice.billraja.online');
+  // CORS headers — allow both custom domain and Firebase hosting domains
+  const allowedOrigins = [
+    'https://invoice.billraja.online',
+    'https://billeasy-3a6ad.web.app',
+    'https://billeasy-3a6ad.firebaseapp.com',
+  ];
+  const origin = req.headers.origin || '';
+  if (allowedOrigins.includes(origin)) {
+    res.set('Access-Control-Allow-Origin', origin);
+  } else {
+    res.set('Access-Control-Allow-Origin', 'https://invoice.billraja.online');
+  }
   res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
@@ -2762,25 +3018,43 @@ exports.clientBills = onRequest(async (req, res) => {
     }
 
     const invoiceData = invoiceDoc.data();
-    const storedPhone = invoiceData.clientPhone || '';
+    const ownerId = invoiceData.ownerId;
 
-    // Normalize phone numbers for comparison (strip leading +91, spaces, dashes)
-    const normalizePhone = (p) => p.replace(/[\s\-+]/g, '').replace(/^91/, '');
+    // Normalize phone for comparison
+    const normalizePhone = (p) => (p || '').replace(/[\s\-+]/g, '').replace(/^91/, '');
     const normalizedVerified = normalizePhone(verifiedPhone);
-    const normalizedStored = normalizePhone(storedPhone);
 
-    if (!normalizedStored || normalizedVerified !== normalizedStored) {
-      res.status(403).json({ error: 'Phone number does not match' });
+    if (!normalizedVerified) {
+      res.status(403).json({ error: 'Phone number not verified' });
       return;
     }
 
-    // Query all shared invoices for the same client from the same owner
-    const ownerId = invoiceData.ownerId;
-    const clientName = invoiceData.clientName;
+    // Look up the client by phone in the owner's private clients collection
+    const clientsSnap = await db.collection('users').doc(ownerId)
+      .collection('clients')
+      .where('phone', '>=', '')
+      .limit(200)
+      .get();
 
+    // Find client matching the verified phone
+    let matchedClientName = null;
+    for (const clientDoc of clientsSnap.docs) {
+      const clientPhone = normalizePhone(clientDoc.data().phone || '');
+      if (clientPhone === normalizedVerified) {
+        matchedClientName = clientDoc.data().name;
+        break;
+      }
+    }
+
+    if (!matchedClientName) {
+      res.status(403).json({ error: 'No bills found for this phone number' });
+      return;
+    }
+
+    // Query all shared invoices for the matched client from this owner
     const billsSnapshot = await db.collection('shared_invoices')
       .where('ownerId', '==', ownerId)
-      .where('clientName', '==', clientName)
+      .where('clientName', '==', matchedClientName)
       .orderBy('createdAt', 'desc')
       .limit(50)
       .get();
@@ -2871,7 +3145,8 @@ function esc(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function fmtCur(num) {

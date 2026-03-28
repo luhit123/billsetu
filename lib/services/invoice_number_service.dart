@@ -12,7 +12,7 @@ class InvoiceNumberService {
 
   final FirebaseFunctions _functions;
 
-  static const _timeout = Duration(seconds: 5);
+  static const _timeout = Duration(seconds: 10);
 
   Future<String> reserveNextInvoiceNumber({int? year}) async {
     final resolvedYear = year ?? DateTime.now().year;

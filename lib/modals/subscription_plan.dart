@@ -20,6 +20,9 @@ class SubscriptionPlan {
   final bool isActive;
   final int memberCount;
   final String colorHex; // e.g. '#1E3A8A'
+  final bool gstEnabled;
+  final double gstRate;   // 5, 12, 18, or 28
+  final String gstType;   // 'cgst_sgst' or 'igst'
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +43,9 @@ class SubscriptionPlan {
     this.isActive = true,
     this.memberCount = 0,
     this.colorHex = '#1E3A8A',
+    this.gstEnabled = false,
+    this.gstRate = 18.0,
+    this.gstType = 'cgst_sgst',
     required this.createdAt,
     required this.updatedAt,
   });
@@ -106,6 +112,9 @@ class SubscriptionPlan {
       isActive: map['isActive'] as bool? ?? true,
       memberCount: map['memberCount'] as int? ?? 0,
       colorHex: map['colorHex'] as String? ?? '#1E3A8A',
+      gstEnabled: map['gstEnabled'] as bool? ?? false,
+      gstRate: (map['gstRate'] as num?)?.toDouble() ?? 18.0,
+      gstType: map['gstType'] as String? ?? 'cgst_sgst',
       createdAt:
           (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt:
@@ -131,6 +140,9 @@ class SubscriptionPlan {
       'isActive': isActive,
       'memberCount': memberCount,
       'colorHex': colorHex,
+      'gstEnabled': gstEnabled,
+      'gstRate': gstRate,
+      'gstType': gstType,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -153,6 +165,9 @@ class SubscriptionPlan {
     bool? isActive,
     int? memberCount,
     String? colorHex,
+    bool? gstEnabled,
+    double? gstRate,
+    String? gstType,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -173,6 +188,9 @@ class SubscriptionPlan {
       isActive: isActive ?? this.isActive,
       memberCount: memberCount ?? this.memberCount,
       colorHex: colorHex ?? this.colorHex,
+      gstEnabled: gstEnabled ?? this.gstEnabled,
+      gstRate: gstRate ?? this.gstRate,
+      gstType: gstType ?? this.gstType,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

@@ -44,7 +44,9 @@ class PurchaseOrder {
   final double gstRate;
   final String gstType;
 
-  double get subtotal => items.fold(0, (s, i) => s + i.total);
+  static double _r(double v) => (v * 100).roundToDouble() / 100;
+
+  double get subtotal => _r(items.fold(0, (s, i) => s + i.total));
   int get totalItems => items.length;
   bool get isDraft => status == PurchaseOrderStatus.draft;
   bool get isReceived => status == PurchaseOrderStatus.received;
@@ -54,16 +56,16 @@ class PurchaseOrder {
   double get discountAmount {
     if (discountType == null || discountValue <= 0) return 0;
     if (discountType == 'percentage') {
-      return (subtotal * discountValue / 100).clamp(0, subtotal).toDouble();
+      return _r((subtotal * discountValue / 100).clamp(0, subtotal).toDouble());
     }
     // 'overall' — flat amount clamped to subtotal
-    return discountValue.clamp(0, subtotal).toDouble();
+    return _r(discountValue.clamp(0, subtotal).toDouble());
   }
 
   bool get hasDiscount => discountAmount > 0;
 
   // GST computed properties (per-item rates)
-  double get taxableAmount => subtotal - discountAmount;
+  double get taxableAmount => _r(subtotal - discountAmount);
 
   /// Ratio to apply discount proportionally to each item.
   double get _discountRatio =>
@@ -71,21 +73,21 @@ class PurchaseOrder {
 
   double get cgstAmount {
     if (!gstEnabled || gstType != 'cgst_sgst') return 0;
-    return items.fold(
-        0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 200);
+    return _r(items.fold(
+        0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 200));
   }
 
   double get sgstAmount => cgstAmount;
 
   double get igstAmount {
     if (!gstEnabled || gstType != 'igst') return 0;
-    return items.fold(
-        0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 100);
+    return _r(items.fold(
+        0.0, (s, i) => s + i.total * _discountRatio * i.gstRate / 100));
   }
 
-  double get totalTax => cgstAmount + sgstAmount + igstAmount;
+  double get totalTax => _r(cgstAmount + sgstAmount + igstAmount);
   bool get hasGst => gstEnabled && totalTax > 0;
-  double get grandTotal => taxableAmount + totalTax;
+  double get grandTotal => _r(taxableAmount + totalTax);
 
   PurchaseOrder copyWith({
     String? id,

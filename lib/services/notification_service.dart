@@ -1,7 +1,10 @@
+import 'dart:io' show Platform;
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class NotificationService {
   NotificationService._();
@@ -11,7 +14,15 @@ class NotificationService {
   final _localNotifications = FlutterLocalNotificationsPlugin();
 
   Future<void> initialize() async {
-    // Request permission
+    // Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
+    if (Platform.isAndroid) {
+      final androidInfo = await DeviceInfoPlugin().androidInfo;
+      if (androidInfo.version.sdkInt >= 33) {
+        await Permission.notification.request();
+      }
+    }
+
+    // Request Firebase Messaging permission (handles iOS prompt)
     await _messaging.requestPermission(
       alert: true,
       badge: true,

@@ -11,8 +11,6 @@ import 'package:billeasy/services/firebase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-enum _Filter { all, paid, pending, overdue }
-
 enum _Period { allTime, today, thisWeek, currentMonth, customRange }
 
 class InvoicesScreen extends StatefulWidget {
@@ -35,7 +33,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
 
   bool _searching = false;
   String _query = '';
-  _Filter _filter = _Filter.all;
   _Period _period = _Period.allTime;
   DateTimeRange? _customRange;
   Timer? _searchDebounce;
@@ -47,21 +44,27 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   Object? _loadError;
   StreamSubscription<List<Invoice>>? _invoiceSub;
 
-  /// Status + search applied in-memory — zero network calls.
+  /// Cached filtered list — only recomputed when data or query changes.
+  List<Invoice>? _cachedFiltered;
+  String _lastFilterQuery = '';
+  int _lastFilterCount = -1;
+
   List<Invoice> get _filtered {
-    var list = _allInvoices;
-    list = switch (_filter) {
-      _Filter.all     => list,
-      _Filter.paid    => list.where((i) => i.status == InvoiceStatus.paid).toList(),
-      _Filter.pending => list.where((i) => i.status == InvoiceStatus.pending).toList(),
-      _Filter.overdue => list.where((i) => i.status == InvoiceStatus.overdue).toList(),
-    };
     final q = _query.toLowerCase();
-    if (q.isEmpty) return list;
-    return list.where((i) =>
-      i.clientName.toLowerCase().contains(q) ||
-      i.invoiceNumber.toLowerCase().contains(q),
-    ).toList();
+    if (q == _lastFilterQuery && _allInvoices.length == _lastFilterCount && _cachedFiltered != null) {
+      return _cachedFiltered!;
+    }
+    _lastFilterQuery = q;
+    _lastFilterCount = _allInvoices.length;
+    if (q.isEmpty) {
+      _cachedFiltered = _allInvoices;
+    } else {
+      _cachedFiltered = _allInvoices.where((i) =>
+        i.clientName.toLowerCase().contains(q) ||
+        i.invoiceNumber.toLowerCase().contains(q),
+      ).toList();
+    }
+    return _cachedFiltered!;
   }
 
   @override
@@ -126,63 +129,46 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 child: _SummaryStrip(invoices: _allInvoices, currency: _currency),
               ),
               SliverToBoxAdapter(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => _showPeriodSheet(s),
-                      child: Container(
-                        margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: kSurfaceLowest,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.calendar_today_rounded,
-                              size: 15,
-                              color: kPrimary,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _periodLabel(s),
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: kOnSurface,
-                              ),
-                            ),
-                            const Spacer(),
-                            const Icon(
-                              Icons.keyboard_arrow_down_rounded,
-                              size: 18,
-                              color: kTextTertiary,
-                            ),
-                          ],
-                        ),
-                      ),
+                child: GestureDetector(
+                  onTap: () => _showPeriodSheet(s),
+                  child: Container(
+                    margin: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
                     ),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Row(
-                        children: [
-                          _chip(_Filter.all, s.homeFilterAll),
-                          const SizedBox(width: 6),
-                          _chip(_Filter.paid, s.homeFilterPaid),
-                          const SizedBox(width: 6),
-                          _chip(_Filter.pending, s.homeFilterPending),
-                          const SizedBox(width: 6),
-                          _chip(_Filter.overdue, s.homeFilterOverdue),
-                        ],
-                      ),
+                    decoration: BoxDecoration(
+                      color: kSurfaceLowest,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                  ],
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.calendar_today_rounded,
+                          size: 15,
+                          color: kPrimary,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _periodLabel(s),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: kOnSurface,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 18,
+                          color: kTextTertiary,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
               if (_loadError != null && _allInvoices.isEmpty)
@@ -237,8 +223,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                             builder: (_) => InvoiceDetailsScreen(invoice: inv),
                           ),
                         ),
-                        onStatusChange: (st) =>
-                            _firebaseService.updateInvoiceStatus(inv.id, st),
+                        onStatusChange: (st) {
+                          if (st == InvoiceStatus.paid) {
+                            _firebaseService.markAsPaid(inv.id);
+                          } else {
+                            _firebaseService.updateInvoiceStatus(inv.id, st);
+                          }
+                        },
                         onDelete: () => _firebaseService.deleteInvoice(inv.id),
                       );
                     }, childCount: filtered.length),
@@ -316,33 +307,6 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
           ),
         ),
       ],
-    );
-  }
-
-  // ─── Filter chip ──────────────────────────────────────────────────────────
-
-  Widget _chip(_Filter f, String label) {
-    final active = _filter == f;
-    return GestureDetector(
-      onTap: () {
-        // Status filter is applied in-memory on _allInvoices — no Firestore round-trip.
-        setState(() => _filter = f);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: active ? kPrimary : kSurfaceContainerLow,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: active ? Colors.white : kOnSurfaceVariant,
-          ),
-        ),
-      ),
     );
   }
 
@@ -498,14 +462,17 @@ class _SummaryStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paid = invoices
-        .where((i) => i.status == InvoiceStatus.paid)
+        .where((i) => i.effectiveStatus == InvoiceStatus.paid)
         .fold<double>(0, (s, i) => s + i.grandTotal);
     final pending = invoices
-        .where((i) => i.status == InvoiceStatus.pending)
+        .where((i) => i.effectiveStatus == InvoiceStatus.pending)
         .fold<double>(0, (s, i) => s + i.grandTotal);
     final overdue = invoices
-        .where((i) => i.status == InvoiceStatus.overdue)
+        .where((i) => i.effectiveStatus == InvoiceStatus.overdue)
         .fold<double>(0, (s, i) => s + i.grandTotal);
+    final partial = invoices
+        .where((i) => i.effectiveStatus == InvoiceStatus.partiallyPaid)
+        .fold<double>(0, (s, i) => s + i.balanceDue);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
@@ -524,15 +491,15 @@ class _SummaryStrip extends StatelessWidget {
           ),
           _Divider(),
           _SummaryCell(
-            label: 'Pending',
-            value: currency.format(pending),
-            color: kPending,
+            label: 'Partial',
+            value: currency.format(partial),
+            color: const Color(0xFFE65100),
           ),
           _Divider(),
           _SummaryCell(
-            label: 'Overdue',
-            value: currency.format(overdue),
-            color: kOverdue,
+            label: 'Pending',
+            value: currency.format(pending + overdue),
+            color: kPending,
           ),
         ],
       ),
@@ -622,18 +589,18 @@ class _InvoiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (badgeColor, badgeBg, statusLabel) = switch (invoice.status) {
+    final (badgeColor, badgeBg, statusLabel) = switch (invoice.effectiveStatus) {
       InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (kPending, kPendingBg, 'PENDING'),
+      InvoiceStatus.pending => (const Color(0xFFEF4444), const Color(0xFFFEE2E2), 'UNPAID'),
       InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
+      InvoiceStatus.partiallyPaid => (const Color(0xFFEAB308), const Color(0xFFFEF3C7), 'PARTIAL'),
     };
 
     return GestureDetector(
       onTap: onTap,
-      onLongPress: () => _showActions(context),
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
         decoration: BoxDecoration(
           color: kSurfaceLowest,
           borderRadius: BorderRadius.circular(14),
@@ -641,76 +608,112 @@ class _InvoiceTile extends StatelessWidget {
         ),
         child: Row(
           children: [
+            // Status color bar
             Container(
-              width: 42,
-              height: 42,
+              width: 4,
+              height: 48,
               decoration: BoxDecoration(
-                color: kPrimaryContainer,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.description_rounded,
-                size: 20,
-                color: kPrimary,
+                color: badgeColor,
+                borderRadius: BorderRadius.circular(4),
               ),
             ),
             const SizedBox(width: 12),
+            // Main content
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    invoice.clientName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: kOnSurface,
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          invoice.clientName,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: kOnSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        currency.format(invoice.grandTotal),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: kOnSurface,
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${invoice.invoiceNumber} · ${_timeAgo(invoice.createdAt)}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: kTextTertiary,
-                    ),
+                  const SizedBox(height: 5),
+                  Row(
+                    children: [
+                      Text(
+                        invoice.invoiceNumber,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: kTextTertiary,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 3,
+                        height: 3,
+                        decoration: const BoxDecoration(
+                          color: kTextTertiary,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        _timeAgo(invoice.createdAt),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: kTextTertiary,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeColor,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  currency.format(invoice.grandTotal),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: kOnSurface,
-                  ),
+            // Prominent 3-dot menu
+            SizedBox(
+              width: 36,
+              height: 48,
+              child: IconButton(
+                onPressed: () => _showActions(context),
+                padding: EdgeInsets.zero,
+                icon: const Icon(
+                  Icons.more_vert_rounded,
+                  color: kOnSurfaceVariant,
+                  size: 22,
                 ),
-                const SizedBox(height: 5),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeBg,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      color: badgeColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
+                splashRadius: 20,
+              ),
             ),
           ],
         ),
@@ -733,18 +736,6 @@ class _InvoiceTile extends StatelessWidget {
                 onTap: () {
                   Navigator.pop(context);
                   onStatusChange(InvoiceStatus.paid);
-                },
-              ),
-            if (invoice.status != InvoiceStatus.overdue)
-              ListTile(
-                leading: const Icon(
-                  Icons.warning_amber_rounded,
-                  color: kOverdue,
-                ),
-                title: Text(s.cardMarkOverdue),
-                onTap: () {
-                  Navigator.pop(context);
-                  onStatusChange(InvoiceStatus.overdue);
                 },
               ),
             ListTile(

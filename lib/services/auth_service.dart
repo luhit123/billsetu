@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'plan_service.dart';
 
 class AuthService {
   // Web OAuth 2.0 client ID (client_type: 3) from google-services.json.
@@ -157,6 +158,7 @@ class AuthService {
         }
       }
     } finally {
+      PlanService.instance.reset();
       await _firebaseAuth.signOut();
     }
   }

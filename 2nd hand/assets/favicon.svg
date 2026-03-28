@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="32" fill="#0b1719" />
+  <rect x="15" y="15" width="98" height="98" rx="28" fill="url(#grad)" />
+  <text
+    x="64"
+    y="76"
+    text-anchor="middle"
+    fill="#0b1719"
+    font-family="Arial, sans-serif"
+    font-size="38"
+    font-weight="700"
+  >
+    DB
+  </text>
+  <defs>
+    <linearGradient id="grad" x1="25" y1="18" x2="108" y2="110" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff6f4d" />
+      <stop offset="1" stop-color="#f6c863" />
+    </linearGradient>
+  </defs>
+</svg>

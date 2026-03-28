@@ -636,9 +636,12 @@ class _PurchaseOrderDetailsScreenState
               const Text('Grand Total',
                   style: TextStyle(fontSize: 17,
                       fontWeight: FontWeight.w800, color: kOnSurface)),
-              Text(_currencyFormat.format(_order.grandTotal),
-                  style: const TextStyle(fontSize: 17,
-                      fontWeight: FontWeight.w800, color: kPrimary)),
+              Flexible(
+                child: Text(_currencyFormat.format(_order.grandTotal),
+                    style: const TextStyle(fontSize: 17,
+                        fontWeight: FontWeight.w800, color: kPrimary),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+              ),
             ],
           ),
         ],
@@ -652,9 +655,12 @@ class _PurchaseOrderDetailsScreenState
       children: [
         Text(label,
             style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant)),
-        Text(value,
-            style: TextStyle(fontSize: 14,
-                color: color ?? kOnSurfaceVariant, fontWeight: FontWeight.w600)),
+        Flexible(
+          child: Text(value,
+              style: TextStyle(fontSize: 14,
+                  color: color ?? kOnSurfaceVariant, fontWeight: FontWeight.w600),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        ),
       ],
     );
   }

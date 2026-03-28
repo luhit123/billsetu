@@ -4,11 +4,17 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class ProfileService {
-  ProfileService({
+  ProfileService._internal({
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
   }) : _firestore = firestore ?? FirebaseFirestore.instance,
        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+
+  static final ProfileService _instance = ProfileService._internal();
+  factory ProfileService({
+    FirebaseFirestore? firestore,
+    FirebaseAuth? firebaseAuth,
+  }) => _instance;
 
   final FirebaseFirestore _firestore;
   final FirebaseAuth _firebaseAuth;

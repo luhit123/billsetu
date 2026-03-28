@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>dekhlobhai | Buy & Sell Used Cars, Bikes and SUVs</title>
+    <meta
+      name="description"
+      content="dekhlobhai is a second-hand vehicle marketplace for used cars, bikes, SUVs and utility vehicles. Upload listings, chat with buyers or sellers, and discover local resale deals faster."
+    />
+    <meta
+      name="robots"
+      content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1"
+    />
+    <meta name="author" content="dekhlobhai" />
+    <meta name="theme-color" content="#071214" />
+    <meta property="og:title" content="dekhlobhai | Buy & Sell Used Cars, Bikes and SUVs" />
+    <meta
+      property="og:description"
+      content="Explore second-hand cars, pre-owned bikes, family SUVs, and utility vehicles with direct buyer-seller chat built in."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="dekhlobhai" />
+    <meta property="og:locale" content="en_IN" />
+    <meta property="og:image" content="assets/hero-market.svg" />
+    <meta
+      property="og:image:alt"
+      content="dekhlobhai marketplace artwork showing a car, bike, and buyer-seller chat"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="dekhlobhai | Buy & Sell Used Cars, Bikes and SUVs" />
+    <meta
+      name="twitter:description"
+      content="List your vehicle, connect with buyers instantly, and discover second-hand vehicle deals in one modern marketplace."
+    />
+    <meta name="twitter:image" content="assets/hero-market.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preload" href="assets/hero-market.svg" as="image" type="image/svg+xml" />
+    <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&amp;family=Space+Grotesk:wght@400;500;700&amp;display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "How do I sell a second-hand vehicle on dekhlobhai?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Create a listing with your seller name, vehicle title, year, mileage, city, price, and a strong description. Buyers can then message you directly from the listing."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Can buyers chat with sellers before visiting a vehicle?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "Yes. Every vehicle listing includes a linked conversation area where buyers and sellers can discuss service history, inspection plans, documents, and final pricing."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "What vehicle types can I list here?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "dekhlobhai supports used cars, second-hand bikes, pre-owned SUVs, sedans, and utility vehicles for local resale discovery."
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "Why is dekhlobhai useful for local used vehicle deals?",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "The marketplace brings listing upload, visual discovery, and direct buyer-seller chat into one flow, making local used vehicle transactions faster and easier to manage."
+            }
+          }
+        ]
+      }
+    </script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="site-header">
+        <a class="brand" href="#top" aria-label="dekhlobhai home">
+          <span class="brand-mark">DB</span>
+          <span>dekhlobhai</span>
+        </a>
+        <nav class="site-nav" aria-label="Primary">
+          <a href="#marketplace">Marketplace</a>
+          <a href="#sell">Sell</a>
+          <a href="#messages">Messages</a>
+          <a href="#why">Why us</a>
+          <a href="#faq">FAQ</a>
+        </nav>
+        <a class="header-action" href="#sell">List a vehicle</a>
+      </header>
+
+      <main>
+        <section class="hero" id="top">
+          <div class="hero-copy">
+            <p class="eyebrow">Trusted second-hand vehicle exchange</p>
+            <h1>Buy, sell, and chat around every ride with confidence.</h1>
+            <p class="hero-text">
+              Discover used cars, second-hand bikes, family SUVs, and utility
+              vehicles in one vibrant marketplace. Sellers can upload listings in
+              minutes, and buyers can message directly without leaving the page.
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#marketplace">Explore vehicles</a>
+              <a class="button button-secondary" href="#messages">Open live chat</a>
+            </div>
+            <div class="hero-chips" aria-label="Popular filters">
+              <span>Verified sellers</span>
+              <span>Instant chat</span>
+              <span>Upload photos</span>
+              <span>Local discovery</span>
+            </div>
+            <div class="hero-metrics">
+              <article>
+                <strong id="listingCount">0</strong>
+                <span>active listings</span>
+              </article>
+              <article>
+                <strong id="sellerCount">0</strong>
+                <span>trusted sellers</span>
+              </article>
+              <article>
+                <strong>12 min</strong>
+                <span>average reply time</span>
+              </article>
+            </div>
+          </div>
+
+          <div class="hero-stage">
+            <div class="hero-stage-card">
+              <div class="stage-badge">Live marketplace preview</div>
+              <img
+                src="assets/hero-market.svg"
+                alt="Illustration of a car, a motorcycle, and chat cards in a modern marketplace"
+              />
+              <div class="stage-footer">
+                <div>
+                  <span class="stage-label">Top category</span>
+                  <strong>SUVs &amp; city bikes</strong>
+                </div>
+                <div>
+                  <span class="stage-label">Trending city</span>
+                  <strong>Bengaluru</strong>
+                </div>
+              </div>
+            </div>
+            <div class="floating-note floating-note-one">
+              <span class="pill">New this week</span>
+              <strong>Fresh certified rides every day</strong>
+              <p>Upload photos, set price, and start chatting right away.</p>
+            </div>
+            <div class="floating-note floating-note-two">
+              <span class="pill">Buyer signal</span>
+              <strong>Chat-led selling converts faster</strong>
+              <p>Answer questions, share service history, and close with trust.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="search-ribbon" aria-label="Popular second-hand vehicle searches">
+          <div class="search-ribbon-track">
+            <span>Used cars with service history</span>
+            <span>Second-hand bikes under low mileage</span>
+            <span>Family SUVs ready for weekend travel</span>
+            <span>Pre-owned sedans for city commutes</span>
+            <span>Utility pickups for local business use</span>
+            <span>Used cars with service history</span>
+            <span>Second-hand bikes under low mileage</span>
+            <span>Family SUVs ready for weekend travel</span>
+            <span>Pre-owned sedans for city commutes</span>
+            <span>Utility pickups for local business use</span>
+          </div>
+        </section>
+
+        <section class="section market-pulse" id="discover">
+          <div class="section-heading">
+            <p class="eyebrow">Market pulse</p>
+            <h2>High-intent used vehicle discovery that feels alive and local.</h2>
+            <p>
+              dekhlobhai is built for people searching second-hand cars, used bikes,
+              reliable SUVs, and work-ready utility vehicles with direct human
+              conversations at the center of the journey.
+            </p>
+          </div>
+          <div class="pulse-grid">
+            <article class="pulse-card pulse-card-feature">
+              <span class="pulse-kicker">Active inventory</span>
+              <strong id="pulseTotal">0</strong>
+              <p>
+                Fresh resale listings that help buyers compare condition, price, mileage,
+                and seller intent at a glance.
+              </p>
+            </article>
+            <article class="pulse-card">
+              <span class="pulse-kicker">Used SUVs</span>
+              <strong id="pulseSuv">0</strong>
+              <p>Popular with families and weekend travellers looking for extra space and trust.</p>
+            </article>
+            <article class="pulse-card">
+              <span class="pulse-kicker">City bikes</span>
+              <strong id="pulseBike">0</strong>
+              <p>Fast-moving commuter options with lower ownership costs and quicker decision cycles.</p>
+            </article>
+            <article class="pulse-card">
+              <span class="pulse-kicker">Top city</span>
+              <strong id="pulseHotCity">Bengaluru</strong>
+              <p id="pulseHotCityCopy">Local buyers are actively comparing listings and starting chats.</p>
+            </article>
+            <article class="pulse-card pulse-card-wide">
+              <span class="pulse-kicker">Seller network</span>
+              <strong id="pulseSeller">0</strong>
+              <p>
+                Owners and local resellers using detailed listings and fast replies to move
+                vehicles with more confidence.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section marketplace" id="marketplace">
+          <div class="section-heading">
+            <p class="eyebrow">Featured inventory</p>
+            <h2>Browse used cars, second-hand bikes, SUVs, and utility rides.</h2>
+            <p>
+              Filter by vehicle type, compare essentials at a glance, and jump
+              straight into a conversation when something feels right. This layout is
+              designed to make local vehicle resale discovery feel fast, visual, and clear.
+            </p>
+          </div>
+
+          <div class="toolbar">
+            <div class="filter-bar" id="filterBar" role="tablist" aria-label="Listing filters"></div>
+            <div class="toolbar-hint">
+              <strong>Tip:</strong>
+              click any card to focus the related chat thread below.
+            </div>
+          </div>
+
+          <div class="listing-grid" id="listingGrid" aria-live="polite"></div>
+        </section>
+
+        <section class="section seller-studio" id="sell">
+          <div class="studio-copy">
+            <p class="eyebrow">Seller studio</p>
+            <h2>Upload your vehicle and make it shine.</h2>
+            <p>
+              Add pricing, mileage, city, a short ownership story, and a photo.
+              If you skip the image, dekhlobhai generates a stylish preview for you.
+            </p>
+
+            <div class="studio-steps">
+              <article>
+                <span>01</span>
+                <strong>Create a standout listing</strong>
+                <p>Clear specs and strong visuals help serious buyers reach out sooner.</p>
+              </article>
+              <article>
+                <span>02</span>
+                <strong>Build trust in chat</strong>
+                <p>Talk about service history, documents, and test-drive timing in one place.</p>
+              </article>
+              <article>
+                <span>03</span>
+                <strong>Move from interest to deal</strong>
+                <p>Shorten the back-and-forth with direct conversations around each listing.</p>
+              </article>
+            </div>
+          </div>
+
+          <div class="studio-layout">
+            <form class="listing-form" id="listingForm">
+              <div class="form-row">
+                <label>
+                  Seller name
+                  <input type="text" name="seller" placeholder="Aarav Mehta" required />
+                </label>
+                <label>
+                  Vehicle title
+                  <input type="text" name="title" placeholder="2021 Hyundai Creta SX" required />
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>
+                  Vehicle type
+                  <select name="type">
+                    <option>SUV</option>
+                    <option>Sedan</option>
+                    <option>Bike</option>
+                    <option>Utility</option>
+                  </select>
+                </label>
+                <label>
+                  Model year
+                  <input type="number" name="year" min="1990" max="2035" placeholder="2021" required />
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>
+                  Price (INR)
+                  <input type="number" name="price" min="10000" step="1000" placeholder="850000" required />
+                </label>
+                <label>
+                  Mileage
+                  <input type="text" name="mileage" placeholder="42,000 km" required />
+                </label>
+              </div>
+
+              <div class="form-row">
+                <label>
+                  City
+                  <input type="text" name="location" placeholder="Pune" required />
+                </label>
+                <label>
+                  Exterior image
+                  <input type="file" name="image" accept="image/*" />
+                </label>
+              </div>
+
+              <label>
+                Why buyers will love it
+                <textarea
+                  name="description"
+                  rows="4"
+                  placeholder="Single-owner vehicle, full service history, fresh tyres, and clean papers."
+                  required
+                ></textarea>
+              </label>
+
+              <button class="button button-primary button-wide" type="submit">
+                Publish listing
+              </button>
+            </form>
+
+            <aside class="composer-preview">
+              <div class="preview-header">
+                <p>Live listing preview</p>
+                <span>Updates as you type</span>
+              </div>
+              <div class="preview-card">
+                <img
+                  id="previewImage"
+                  src="assets/hero-market.svg"
+                  alt="Vehicle preview for the listing form"
+                />
+                <div class="preview-body">
+                  <span class="preview-type" id="previewType">SUV</span>
+                  <h3 id="previewTitle">2021 Hyundai Creta SX</h3>
+                  <div class="preview-meta">
+                    <strong id="previewPrice">INR 8,50,000</strong>
+                    <span id="previewLocation">Pune</span>
+                  </div>
+                  <p id="previewDescription">
+                    Single-owner vehicle, full service history, fresh tyres, and clean papers.
+                  </p>
+                </div>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <section class="section message-hub" id="messages">
+          <div class="section-heading">
+            <p class="eyebrow">Built-in conversation flow</p>
+            <h2>Talk directly with sellers and buyers without leaving the marketplace.</h2>
+            <p>
+              Each listing comes with a linked conversation so pricing questions,
+              inspection plans, ownership history, and deal details stay organized.
+            </p>
+          </div>
+
+          <div class="message-layout">
+            <aside class="conversation-panel">
+              <div class="conversation-panel-header">
+                <h3>Inbox</h3>
+                <span id="conversationCount">0 chats</span>
+              </div>
+              <div id="conversationList" class="conversation-list" aria-label="Conversation list"></div>
+            </aside>
+
+            <div class="chat-panel">
+              <div class="chat-header">
+                <div>
+                  <span class="chat-label">Selected conversation</span>
+                  <h3 id="chatTitle">Choose a listing</h3>
+                </div>
+                <div class="chat-meta">
+                  <span id="chatSubline">Tap a listing card or conversation to start.</span>
+                </div>
+              </div>
+              <div class="message-thread" id="messageThread" aria-live="polite"></div>
+              <form class="message-form" id="messageForm">
+                <input
+                  type="text"
+                  name="message"
+                  placeholder="Ask about service history, final price, documents..."
+                  aria-label="Type a message"
+                  required
+                />
+                <button class="button button-primary" type="submit">Send</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section class="section stories" id="stories">
+          <div class="section-heading">
+            <p class="eyebrow">Momentum stories</p>
+            <h2>More confidence, fewer dead ends, and better used vehicle conversations.</h2>
+            <p>
+              A good second-hand marketplace is not only about inventory volume. It is
+              about helping the right buyer and seller trust each other sooner.
+            </p>
+          </div>
+          <div class="story-grid">
+            <article class="story-card story-card-highlight">
+              <span class="story-tag">Buyer story</span>
+              <h3>Weekend SUV shortlist built in one evening</h3>
+              <p>
+                “We compared mileage, documents, and inspection timing inside the same
+                thread, so the decision felt calmer and faster.”
+              </p>
+              <div class="story-meta">
+                <strong>Priya and Karan</strong>
+                <span>Bengaluru family buyers</span>
+              </div>
+            </article>
+            <article class="story-card">
+              <span class="story-tag">Seller story</span>
+              <h3>Bike listing attracted serious chat within hours</h3>
+              <p>
+                Strong visuals, honest copy, and direct replies filtered out low-intent
+                conversations and brought better leads quickly.
+              </p>
+              <div class="story-meta">
+                <strong>Aditi Sharma</strong>
+                <span>Jaipur commuter seller</span>
+              </div>
+            </article>
+            <article class="story-card">
+              <span class="story-tag">Marketplace value</span>
+              <h3>Local resale feels clearer when the listing tells a real story</h3>
+              <p>
+                Buyers can ask about service history, city usage, and pricing without
+                switching apps or losing track of context.
+              </p>
+              <div class="story-meta">
+                <strong>Chat-first workflow</strong>
+                <span>Made for trust-led deals</span>
+              </div>
+            </article>
+          </div>
+        </section>
+
+        <section class="section trust-grid" id="why">
+          <div class="section-heading">
+            <p class="eyebrow">Why dekhlobhai works</p>
+            <h2>A cleaner second-hand buying journey from first look to final handshake.</h2>
+          </div>
+          <div class="trust-cards">
+            <article>
+              <h3>Visual-first discovery</h3>
+              <p>Every listing starts with bold imagery, clear specs, and a story that builds confidence.</p>
+            </article>
+            <article>
+              <h3>Conversations that stay tied to the vehicle</h3>
+              <p>Buyers never lose context because the chat and listing live together inside the same flow.</p>
+            </article>
+            <article>
+              <h3>Made for local deals</h3>
+              <p>Show nearby cities, talk about inspection timing, and help both sides move faster with clarity.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section faq-section" id="faq">
+          <div class="section-heading">
+            <p class="eyebrow">Frequently asked</p>
+            <h2>Answers that help buyers and sellers navigate used vehicle deals better.</h2>
+            <p>
+              These are common questions people ask when searching for second-hand cars,
+              used bikes, and local vehicle resale platforms online.
+            </p>
+          </div>
+          <div class="faq-list">
+            <details open>
+              <summary>How do I create a strong second-hand vehicle listing?</summary>
+              <p>
+                Use a clear vehicle title, accurate mileage, honest pricing, city location,
+                ownership highlights, and a simple description that explains why the ride is worth a visit.
+              </p>
+            </details>
+            <details>
+              <summary>Can buyers talk to sellers before scheduling a test drive?</summary>
+              <p>
+                Yes. dekhlobhai is designed around buyer-seller chat, so questions about
+                service history, documents, price flexibility, and inspection timing stay attached to the listing.
+              </p>
+            </details>
+            <details>
+              <summary>Which used vehicle categories perform well here?</summary>
+              <p>
+                Family SUVs, city sedans, commuter bikes, and utility pickups all work well,
+                especially when the listing includes great visuals and practical context.
+              </p>
+            </details>
+            <details>
+              <summary>Why is local search important for used car and bike marketplaces?</summary>
+              <p>
+                Local discovery helps buyers inspect vehicles faster, reduces uncertainty around
+                logistics, and makes pricing conversations more realistic for both sides.
+              </p>
+            </details>
+          </div>
+        </section>
+      </main>
+
+      <footer class="site-footer">
+        <div>
+          <strong>dekhlobhai</strong>
+          <p>Second-hand vehicles, easier conversations, better deals.</p>
+        </div>
+        <p class="footer-keywords">
+          Used cars, second-hand bikes, pre-owned SUVs, and utility vehicles in one
+          chat-first marketplace experience.
+        </p>
+      </footer>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

@@ -39,6 +39,9 @@ class InventoryService {
     required double quantity, // positive = add, negative = remove
     required String reason,
     double unitPrice = 0,
+    StockMovementType? movementType,
+    String referenceId = '',
+    String referenceNumber = '',
   }) async {
     final ownerId = _requireOwnerId();
     final now = DateTime.now();
@@ -53,8 +56,8 @@ class InventoryService {
 
     // Log movement
     final movRef = _movCol(ownerId).doc();
-    final type =
-        quantity >= 0 ? StockMovementType.manualIn : StockMovementType.manualOut;
+    final type = movementType ??
+        (quantity >= 0 ? StockMovementType.manualIn : StockMovementType.manualOut);
     final movement = StockMovement(
       id: movRef.id,
       ownerId: ownerId,
@@ -63,6 +66,8 @@ class InventoryService {
       type: type,
       quantity: quantity.abs(),
       balanceAfter: 0,
+      referenceId: referenceId,
+      referenceNumber: referenceNumber,
       unitPrice: unitPrice,
       createdAt: now,
       notes: reason,

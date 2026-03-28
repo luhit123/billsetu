@@ -4,6 +4,7 @@ import 'package:billeasy/firebase_options.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/force_update_screen.dart';
@@ -11,6 +12,7 @@ import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/maintenance_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
+import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
@@ -23,26 +25,30 @@ import 'package:billeasy/theme/app_colors.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
-  };
-
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[PlatformError] $error\n$stack');
-    return true;
-  };
   if (Firebase.apps.isEmpty) {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
   }
 
+  // ── Crashlytics: catch all Flutter and platform errors ──────────────────
+  FlutterError.onError = (FlutterErrorDetails details) {
+    debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+  };
+
+  PlatformDispatcher.instance.onError = (error, stack) {
+    debugPrint('[PlatformError] $error\n$stack');
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
   // ── Enable Firestore offline persistence ──────────────────────────────────
   // After the first load, all data is served instantly from the on-device
   // cache. The app works offline and syncs when reconnected.
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
-    cacheSizeBytes: 104857600, // 100 MB — prevents device storage abuse
+    cacheSizeBytes: 104857600, // 100 MB — maximum allowed by Firestore SDK
   );
 
   ConnectivityService.instance.init();
@@ -53,6 +59,10 @@ Future<void> main() async {
   await RemoteConfigService.instance.init();
 
   await PlanService.instance.loadPlan();
+
+  // Pre-load PDF fonts so first invoice generation is instant
+  InvoicePdfService().preloadFonts();
+
   runApp(const BillRajaApp());
 }
 

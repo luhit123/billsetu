@@ -22,6 +22,7 @@ class DataExportService {
         .collection('invoices')
         .where('ownerId', isEqualTo: uid)
         .orderBy('createdAt', descending: true)
+        .limit(5000)
         .get();
 
     final rows = <List<dynamic>>[
@@ -60,8 +61,10 @@ class DataExportService {
     if (uid == null) return;
 
     final snap = await _db
+        .collection('users')
+        .doc(uid)
         .collection('clients')
-        .where('ownerId', isEqualTo: uid)
+        .limit(5000)
         .get();
 
     final rows = <List<dynamic>>[
@@ -88,8 +91,10 @@ class DataExportService {
     if (uid == null) return;
 
     final snap = await _db
+        .collection('users')
+        .doc(uid)
         .collection('products')
-        .where('ownerId', isEqualTo: uid)
+        .limit(5000)
         .get();
 
     final rows = <List<dynamic>>[

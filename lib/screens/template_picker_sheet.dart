@@ -42,6 +42,12 @@ const _allTemplates = <_TemplateMeta>[
   _TemplateMeta(template: InvoiceTemplate.creative,     name: 'Creative',     swatch1: Color(0xFFE06159), swatch2: Color(0xFF59C7AD), swatch3: Color(0xFFFAF0F0)),
   _TemplateMeta(template: InvoiceTemplate.simple,       name: 'Simple',       swatch1: Color(0xFF000000), swatch2: Color(0xFF666666), swatch3: Color(0xFFFFFFFF)),
   _TemplateMeta(template: InvoiceTemplate.gstPro,       name: 'GST Pro',      swatch1: Color(0xFF3D388C), swatch2: Color(0xFF6159B8), swatch3: Color(0xFFF0F0FC)),
+  // Structurally different layouts
+  _TemplateMeta(template: InvoiceTemplate.banner,       name: 'Banner',       swatch1: Color(0xFF1565C0), swatch2: Color(0xFF42A5F5), swatch3: Color(0xFFE3F2FD)),
+  _TemplateMeta(template: InvoiceTemplate.sidebarLayout,name: 'Sidebar',      swatch1: Color(0xFF2E7D32), swatch2: Color(0xFF66BB6A), swatch3: Color(0xFFE8F5E9)),
+  _TemplateMeta(template: InvoiceTemplate.bordered,     name: 'Bordered',     swatch1: Color(0xFF4E342E), swatch2: Color(0xFF8D6E63), swatch3: Color(0xFFEFEBE9)),
+  _TemplateMeta(template: InvoiceTemplate.twoColumn,    name: 'Two Column',   swatch1: Color(0xFFAD1457), swatch2: Color(0xFFEC407A), swatch3: Color(0xFFFCE4EC)),
+  _TemplateMeta(template: InvoiceTemplate.receipt,      name: 'Receipt',      swatch1: Color(0xFF333333), swatch2: Color(0xFF999999), swatch3: Color(0xFFF5F5F5)),
 ];
 
 /// Bottom sheet that lets the user pick an [InvoiceTemplate].

@@ -40,23 +40,31 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
   // ── Google sign-in state ────────────────────────────────────────────────────
   bool _isSigningInGoogle = false;
 
+  bool _hintShown = false;
+
+  Future<void> _requestPhoneHint() async {
+    try {
+      final hint = await SmsAutoFill().hint;
+      if (hint != null && hint.isNotEmpty && mounted) {
+        // Extract last 10 digits (remove country code like +91)
+        final digits = hint.replaceAll(RegExp(r'[^0-9]'), '');
+        final phone = digits.length > 10 ? digits.substring(digits.length - 10) : digits;
+        if (phone.length == 10) {
+          _phoneController.text = phone;
+          setState(() {});
+        }
+      }
+    } catch (e) {
+      debugPrint('[Login] Phone hint error: $e');
+    }
+  }
+
   @override
   void codeUpdated() {
-    // Called by CodeAutoFill when an OTP is detected from SMS
+    // Called by CodeAutoFill (sms_autofill) when an OTP is detected from SMS
     final smsCode = code ?? '';
-    if (smsCode.length >= 6 && mounted) {
-      final digits = smsCode.replaceAll(RegExp(r'\D'), '');
-      final otp = digits.length >= 6 ? digits.substring(0, 6) : digits;
-      if (otp.length == 6) {
-        for (int i = 0; i < 6; i++) {
-          _otpControllers[i].text = otp[i];
-        }
-        setState(() {});
-        // Auto-submit after a short delay for visual feedback
-        Future.delayed(const Duration(milliseconds: 300), () {
-          if (mounted) _handleVerifyOtp();
-        });
-      }
+    if (smsCode.isNotEmpty && mounted) {
+      _distributeOtp(smsCode);
     }
   }
 
@@ -107,11 +115,36 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
     }
   }
 
+  /// Distributes a 6-digit code across the individual OTP boxes and
+  /// auto-submits when all 6 digits are filled.
+  void _distributeOtp(String rawCode) {
+    final digits = rawCode.replaceAll(RegExp(r'\D'), '');
+    if (digits.isEmpty) return;
+    for (int i = 0; i < 6; i++) {
+      _otpControllers[i].text = i < digits.length ? digits[i] : '';
+    }
+    setState(() {});
+    if (digits.length >= 6) {
+      Future.delayed(const Duration(milliseconds: 150), () {
+        if (mounted) _handleVerifyOtp();
+      });
+    } else {
+      _otpFocusNodes[digits.length].requestFocus();
+    }
+  }
+
   // ── Phone auth actions ──────────────────────────────────────────────────────
 
   Future<void> _handleSendOtp() async {
     if (!_isPhoneValid) return;
     FocusScope.of(context).unfocus();
+
+    // Log app signature so you can verify it matches Firebase Console.
+    // Remove this after confirming OTP auto-fill works.
+    if (!kIsWeb) {
+      final sig = await SmsAutoFill().getAppSignature;
+      debugPrint('[Login] SMS Retriever app signature: $sig');
+    }
 
     setState(() => _isSendingOtp = true);
 
@@ -182,11 +215,17 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
+      _clearOtpFields();
+      setState(() {});
+      _otpFocusNodes[0].requestFocus();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Verification failed. Please try again.')),
       );
+      _clearOtpFields();
+      setState(() {});
+      _otpFocusNodes[0].requestFocus();
     } finally {
       if (mounted) setState(() => _isVerifyingOtp = false);
     }
@@ -408,6 +447,12 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
                   controller: _phoneController,
                   keyboardType: TextInputType.phone,
                   maxLength: 10,
+                  onTap: () {
+                    if (!kIsWeb && !_hintShown && _phoneController.text.isEmpty) {
+                      _hintShown = true;
+                      _requestPhoneHint();
+                    }
+                  },
                   inputFormatters: [
                     FilteringTextInputFormatter.digitsOnly,
                     LengthLimitingTextInputFormatter(10),
@@ -477,54 +522,77 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
         const SizedBox(height: 16),
 
         // 6-digit OTP boxes
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: List.generate(6, (i) {
-            return SizedBox(
-              width: 46,
-              height: 54,
-              child: TextField(
-                controller: _otpControllers[i],
-                focusNode: _otpFocusNodes[i],
-                keyboardType: TextInputType.number,
-                textAlign: TextAlign.center,
-                maxLength: 1,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(1),
-                ],
-                style: const TextStyle(
-                  color: kOnSurface,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w700,
-                ),
-                decoration: InputDecoration(
-                  counterText: '',
-                  contentPadding: EdgeInsets.zero,
-                  filled: true,
-                  fillColor: kSurface,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+        // Wrapped in AutofillGroup so the OS keyboard can suggest the OTP
+        // from the arriving SMS notification.
+        AutofillGroup(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: List.generate(6, (i) {
+              return SizedBox(
+                width: 46,
+                height: 54,
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is KeyDownEvent &&
+                        event.logicalKey == LogicalKeyboardKey.backspace &&
+                        _otpControllers[i].text.isEmpty &&
+                        i > 0) {
+                      _otpControllers[i - 1].clear();
+                      _otpFocusNodes[i - 1].requestFocus();
+                      setState(() {});
+                      return KeyEventResult.handled;
+                    }
+                    return KeyEventResult.ignored;
+                  },
+                  child: TextField(
+                  controller: _otpControllers[i],
+                  focusNode: _otpFocusNodes[i],
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  // autofillHints on the first box lets Android/iOS surface
+                  // the OTP from the SMS notification via the keyboard chip.
+                  autofillHints:
+                      i == 0 ? const [AutofillHints.oneTimeCode] : null,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  style: const TextStyle(
+                    color: kOnSurface,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
                   ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                  decoration: InputDecoration(
+                    counterText: '',
+                    contentPadding: EdgeInsets.zero,
+                    filled: true,
+                    fillColor: kSurface,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                    ),
                   ),
+                  onChanged: (value) {
+                    if (value.length > 1) {
+                      // Paste or autofill — distribute across all boxes
+                      _distributeOtp(value);
+                      return;
+                    }
+                    if (value.isNotEmpty && i < 5) {
+                      _otpFocusNodes[i + 1].requestFocus();
+                    }
+                    // Auto-submit when all 6 digits entered
+                    if (i == 5 && value.isNotEmpty && _otpCode.length == 6) {
+                      _handleVerifyOtp();
+                    }
+                    setState(() {});
+                  },
                 ),
-                onChanged: (value) {
-                  if (value.isNotEmpty && i < 5) {
-                    _otpFocusNodes[i + 1].requestFocus();
-                  }
-                  // Auto-submit when all 6 digits entered
-                  if (i == 5 && value.isNotEmpty && _otpCode.length == 6) {
-                    _handleVerifyOtp();
-                  }
-                  setState(() {});
-                },
-              ),
-            );
-          }),
+                ),
+              );
+            }),
+          ),
         ),
         const SizedBox(height: 16),
 

@@ -86,6 +86,33 @@ class ProductService {
 
   Future<void> deleteProduct(String productId) async {
     final ownerId = _requireOwnerId();
+
+    // Clear productId references in invoices that used this product
+    final invoiceSnap = await _firestore
+        .collection('invoices')
+        .where('ownerId', isEqualTo: ownerId)
+        .where('items', arrayContains: {'productId': productId})
+        .limit(500)
+        .get();
+
+    // Firestore array queries are limited, so also do a broader cleanup
+    // by querying invoices and clearing productId in their items
+    if (invoiceSnap.docs.isNotEmpty) {
+      final batch = _firestore.batch();
+      for (final doc in invoiceSnap.docs) {
+        final data = doc.data();
+        final items = (data['items'] as List<dynamic>? ?? []).map((item) {
+          final map = Map<String, dynamic>.from(item as Map);
+          if (map['productId'] == productId) {
+            map['productId'] = '';
+          }
+          return map;
+        }).toList();
+        batch.update(doc.reference, {'items': items});
+      }
+      await batch.commit();
+    }
+
     await _col(ownerId).doc(productId).delete();
   }
 

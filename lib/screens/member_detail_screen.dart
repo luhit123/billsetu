@@ -1,13 +1,21 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/modals/line_item.dart';
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/screens/member_form_screen.dart';
-import 'package:billeasy/screens/membership_invoice_screen.dart';
+import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 BoxDecoration _cardDeco() => const BoxDecoration(
       color: kSurfaceLowest,
@@ -38,6 +46,8 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   List<AttendanceLog> _attendanceLogs = const [];
   bool _isLoadingAttendance = true;
   bool _checkingIn = false;
+  bool _isSharingReceipt = false;
+  bool _isSendingReminder = false;
 
   @override
   void initState() {
@@ -236,13 +246,30 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                             status: MemberStatus.active,
                             endDate: newEnd,
                           ));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Membership renewed'),
-                          backgroundColor: kPaid,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
+                      // Offer to send renewal receipt via WhatsApp.
+                      final phone = _member.phone.replaceAll(RegExp(r'[^0-9]'), '');
+                      if (phone.isNotEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text('Membership renewed'),
+                            backgroundColor: kPaid,
+                            behavior: SnackBarBehavior.floating,
+                            action: SnackBarAction(
+                              label: 'Share Receipt',
+                              textColor: Colors.white,
+                              onPressed: () => _handleShareReceipt(isRenewal: true),
+                            ),
+                          ),
+                        );
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Membership renewed'),
+                            backgroundColor: kPaid,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
                     }
                   } catch (e) {
                     if (mounted) {
@@ -291,33 +318,187 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     );
   }
 
-  Future<void> _handleInvoice() async {
+  Future<void> _handleShareReceipt({bool isRenewal = false}) async {
+    final phone = _member.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number saved for this member.')),
+      );
+      return;
+    }
+
+    setState(() => _isSharingReceipt = true);
     try {
-      // Fetch the plan for this member
-      SubscriptionPlan? plan = await _service.getPlanById(_member.planId);
-      plan ??= SubscriptionPlan(
-        id: _member.planId,
+      // Build a minimal Invoice so we can reuse InvoicePdfService.
+      final plan = await _service.getPlanById(_member.planId);
+      final profile = await ProfileService().getCurrentProfile();
+
+      final gstEnabled = plan?.gstEnabled ?? false;
+      final gstRate = plan?.gstRate ?? 18.0;
+      final gstType = plan?.gstType ?? 'cgst_sgst';
+
+      // amountPaid is GST-inclusive; back-calculate the pre-GST base price
+      // so that grandTotal = taxableAmount + tax = amountPaid exactly.
+      final membershipBase = gstEnabled
+          ? _member.amountPaid / (1 + gstRate / 100)
+          : _member.amountPaid;
+
+      final totalReceived = _member.amountPaid +
+          (!isRenewal ? _member.joiningFeePaid : 0);
+
+      final invoice = Invoice(
+        id: 'MEM-${_member.id}',
         ownerId: _member.ownerId,
-        name: _member.planName,
-        price: _member.amountPaid,
-        createdAt: _member.createdAt,
-        updatedAt: _member.updatedAt,
-      );
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MembershipInvoiceScreen(
-            member: _member,
-            plan: plan!,
+        invoiceNumber: 'MEM-${_member.id.substring(0, 6).toUpperCase()}',
+        clientId: _member.id,
+        clientName: _member.name,
+        items: [
+          LineItem(
+            description: '${_member.planName} Membership',
+            quantity: 1,
+            unitPrice: membershipBase,
+            gstRate: gstEnabled ? gstRate : 0,
           ),
-        ),
+          if (!isRenewal && _member.joiningFeePaid > 0)
+            LineItem(
+              description: 'Joining Fee',
+              quantity: 1,
+              unitPrice: _member.joiningFeePaid,
+              // Joining fee is a one-time admin charge — no GST applied
+            ),
+        ],
+        createdAt: _member.startDate,
+        status: InvoiceStatus.paid,
+        dueDate: _member.endDate,
+        gstEnabled: gstEnabled,
+        gstRate: gstRate,
+        gstType: gstType,
+        amountReceived: totalReceived,
+        notes: 'Next Renewal Due: ${_dateFmt.format(_member.endDate)}',
       );
+
+      final pdfBytes = await InvoicePdfService().buildInvoicePdf(
+        invoice: invoice,
+        profile: profile,
+        includePayment: false,
+      );
+
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/Receipt_${_member.name.replaceAll(' ', '_')}.pdf');
+      await file.writeAsBytes(pdfBytes);
+
+      final message =
+          'Hi ${_member.name}! 🙏\n\n'
+          'Here is your *${_member.planName}* membership receipt.\n'
+          '📅 Valid: ${_dateFmt.format(_member.startDate)} → ${_dateFmt.format(_member.endDate)}\n'
+          '💰 Amount Paid: ₹${_member.amountPaid.toStringAsFixed(0)}\n\n'
+          'Thank you for being a valued member! ⭐\n'
+          '_Powered by BillRaja_';
+
+      // Build the WhatsApp number — add +91 country code if 10-digit Indian number.
+      final waPhone = phone.length == 10 ? '91$phone' : phone;
+
+      if (Platform.isAndroid) {
+        try {
+          const channel = MethodChannel('com.luhit.billeasy/share');
+          await channel.invokeMethod('whatsapp', {
+            'phone': waPhone,
+            'filePath': file.path,
+            'text': message,
+          });
+          return;
+        } on PlatformException catch (e) {
+          if (e.code != 'NO_WA') return; // unexpected error — stop
+          // NO_WA: WhatsApp not installed, fall through to wa.me link.
+        }
+      }
+
+      // Fallback (iOS or WhatsApp not installed): open wa.me URL.
+      // wa.me works even if the number is not saved in contacts.
+      final uri = Uri.parse(
+        'https://wa.me/$waPhone?text=${Uri.encodeComponent(message)}',
+      );
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load plan: $e')),
+        SnackBar(content: Text('Could not share receipt: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _isSharingReceipt = false);
+    }
+  }
+
+  Future<void> _handleSendReminder() async {
+    final phone = _member.phone.replaceAll(RegExp(r'[^0-9]'), '');
+    if (phone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number saved for this member.')),
+      );
+      return;
+    }
+
+    setState(() => _isSendingReminder = true);
+    try {
+      final now = DateTime.now();
+      final daysLeft = _member.endDate.difference(now).inDays;
+      final dateFmt = DateFormat('dd MMM yyyy');
+      final endStr = dateFmt.format(_member.endDate);
+
+      String message;
+      if (_member.status == MemberStatus.frozen) {
+        message =
+            'Hi ${_member.name}! 👋\n\n'
+            'Just a reminder that your *${_member.planName}* membership is currently *frozen*.\n\n'
+            'Please reach out when you\'re ready to resume and we\'ll get you back on track! 💪\n\n'
+            '_Powered by BillRaja_';
+      } else if (_member.endDate.isBefore(now)) {
+        final expiredDays = now.difference(_member.endDate).inDays;
+        message =
+            'Hi ${_member.name}! 👋\n\n'
+            'Your *${_member.planName}* membership expired *$expiredDays day${expiredDays == 1 ? '' : 's'} ago* (on $endStr).\n\n'
+            'We\'d love to have you back! 🙏 Renew today to continue enjoying all the benefits.\n\n'
+            '_Powered by BillRaja_';
+      } else if (daysLeft <= 7) {
+        message =
+            'Hi ${_member.name}! 👋\n\n'
+            '⚠️ Your *${_member.planName}* membership is expiring in *$daysLeft day${daysLeft == 1 ? '' : 's'}* (on $endStr).\n\n'
+            'Renew now to avoid any interruption to your membership benefits! 💪\n\n'
+            '_Powered by BillRaja_';
+      } else {
+        message =
+            'Hi ${_member.name}! 👋\n\n'
+            'Just a friendly reminder that your *${_member.planName}* membership is active and valid till *$endStr* ($daysLeft days remaining).\n\n'
+            'Thank you for being a valued member! ⭐\n\n'
+            '_Powered by BillRaja_';
+      }
+
+      final waPhone = phone.length == 10 ? '91$phone' : phone;
+
+      if (Platform.isAndroid) {
+        try {
+          const channel = MethodChannel('com.luhit.billeasy/share');
+          await channel.invokeMethod('whatsapp', {
+            'phone': waPhone,
+            'text': message,
+          });
+          return;
+        } on PlatformException {
+          // Fall through to wa.me on any native error.
+        }
+      }
+
+      final uri = Uri.parse(
+        'https://wa.me/$waPhone?text=${Uri.encodeComponent(message)}',
+      );
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not send reminder: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSendingReminder = false);
     }
   }
 
@@ -677,7 +858,9 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   Widget _buildQuickActions() {
     final isFrozen = _member.isFrozen;
 
-    return Row(
+    return Column(
+      children: [
+      Row(
       children: [
         Expanded(
           child: _actionButton(
@@ -712,19 +895,33 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
         const SizedBox(width: 10),
         Expanded(
           child: _actionButton(
-            icon: Icons.receipt_long_rounded,
-            label: 'Invoice',
-            color: const Color(0xFF7C3AED),
-            bgColor: const Color(0xFFEDE9FE),
-            onTap: _handleInvoice,
+            iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 24),
+            label: 'Share Receipt',
+            color: const Color(0xFF25D366),
+            bgColor: const Color(0xFFDCF8C6),
+            isLoading: _isSharingReceipt,
+            onTap: _handleShareReceipt,
           ),
         ),
+      ],
+      ),
+      const SizedBox(height: 10),
+      // Send Reminder — full width
+      _actionButton(
+        iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF128C7E), size: 22),
+        label: 'Send Renewal Reminder',
+        color: const Color(0xFF128C7E),
+        bgColor: const Color(0xFFE2F5F1),
+        isLoading: _isSendingReminder,
+        onTap: _handleSendReminder,
+      ),
       ],
     );
   }
 
   Widget _actionButton({
-    required IconData icon,
+    IconData? icon,
+    Widget? iconWidget,
     required String label,
     required Color color,
     required Color bgColor,
@@ -752,7 +949,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                 ),
               )
             else
-              Icon(icon, color: color, size: 24),
+              iconWidget ?? Icon(icon, color: color, size: 24),
             const SizedBox(height: 6),
             Text(
               label,

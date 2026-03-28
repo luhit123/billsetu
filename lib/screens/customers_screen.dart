@@ -895,22 +895,28 @@ class _CustomerCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 // Group badge + trailing
                 if (groupName.isNotEmpty && !isSelected)
-                  Container(
-                    margin: const EdgeInsets.only(right: 8),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: kPrimaryContainer,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      groupName,
-                      style: const TextStyle(
-                        color: kPrimary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                  Flexible(
+                    flex: 0,
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      constraints: const BoxConstraints(maxWidth: 100),
+                      decoration: BoxDecoration(
+                        color: kPrimaryContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        groupName,
+                        style: const TextStyle(
+                          color: kPrimary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ),

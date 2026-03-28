@@ -843,6 +843,8 @@ class _ContactRow extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: kOnSurface,
                   ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -883,10 +885,11 @@ class _HistoryInvoiceTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (badgeColor, badgeBg, label) = switch (invoice.status) {
+    final (badgeColor, badgeBg, label) = switch (invoice.effectiveStatus) {
       InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (kPending, kPendingBg, 'PENDING'),
+      InvoiceStatus.pending => (const Color(0xFFEF4444), const Color(0xFFFEE2E2), 'UNPAID'),
       InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
+      InvoiceStatus.partiallyPaid => (const Color(0xFFEAB308), const Color(0xFFFEF3C7), 'PARTIAL'),
     };
     final s = AppStrings.of(context);
 

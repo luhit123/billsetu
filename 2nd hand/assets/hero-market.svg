@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 720" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="91" y1="48" x2="802" y2="641" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#11272b" />
+      <stop offset="1" stop-color="#071214" />
+    </linearGradient>
+    <linearGradient id="car" x1="173" y1="271" x2="568" y2="463" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff754f" />
+      <stop offset="1" stop-color="#ffd2a1" />
+    </linearGradient>
+    <linearGradient id="bike" x1="478" y1="355" x2="740" y2="495" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#82efb3" />
+      <stop offset="1" stop-color="#d4ffe3" />
+    </linearGradient>
+    <linearGradient id="bubble" x1="638" y1="135" x2="798" y2="237" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#68d8ff" stop-opacity=".22" />
+      <stop offset="1" stop-color="#68d8ff" stop-opacity=".06" />
+    </linearGradient>
+  </defs>
+  <rect width="920" height="720" rx="42" fill="url(#bg)" />
+  <circle cx="734" cy="124" r="120" fill="#68d8ff" fill-opacity=".16" />
+  <circle cx="155" cy="107" r="145" fill="#f6c863" fill-opacity=".15" />
+  <path d="M0 498c128-54 291-82 472-82 189 0 334 28 448 78V720H0V498z" fill="#0d1e21" />
+  <path d="M74 510c127-31 244-44 408-44 150 0 274 18 370 52" stroke="rgba(255,255,255,0.12)" stroke-width="4" stroke-linecap="round" />
+
+  <g filter="url(#none)">
+    <rect x="612" y="132" width="188" height="106" rx="26" fill="url(#bubble)" stroke="rgba(255,255,255,0.1)" />
+    <rect x="646" y="166" width="88" height="10" rx="5" fill="#effaff" fill-opacity=".85" />
+    <rect x="646" y="186" width="118" height="10" rx="5" fill="#effaff" fill-opacity=".55" />
+    <path d="M680 238l-12 28 36-24" stroke="rgba(239,250,255,0.55)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+
+  <g>
+    <path d="M138 406c28-8 58-70 100-101 29-22 63-33 111-33h171c48 0 82 15 111 46 23 26 39 51 55 88h53c23 0 42 19 42 42v21H117v-24c0-21 9-34 21-39z" fill="url(#car)" />
+    <path d="M300 287h214c35 0 64 10 84 26 20 15 38 42 51 76H237c24-38 43-67 63-82z" fill="rgba(255,255,255,0.46)" />
+    <circle cx="270" cy="471" r="64" fill="#0d1b1d" />
+    <circle cx="619" cy="471" r="64" fill="#0d1b1d" />
+    <circle cx="270" cy="471" r="26" fill="#f2f1e8" />
+    <circle cx="619" cy="471" r="26" fill="#f2f1e8" />
+  </g>
+
+  <g>
+    <circle cx="595" cy="528" r="56" fill="#102123" />
+    <circle cx="784" cy="528" r="56" fill="#102123" />
+    <circle cx="595" cy="528" r="27" fill="#e5f7ed" />
+    <circle cx="784" cy="528" r="27" fill="#e5f7ed" />
+    <path d="M645 466h71l51-53 34 16-45 42 46 0c20 0 37 8 49 24l-19 17c-8-9-16-13-27-13h-43l-28-33h-50l-44 63h-28l41-60-27-38-39 0-25 35h-29l34-56c8-13 21-20 38-20z" fill="url(#bike)" />
+    <rect x="727" y="393" width="64" height="16" rx="8" fill="#f7efe1" transform="rotate(9 727 393)" />
+  </g>
+
+  <g>
+    <rect x="82" y="116" width="164" height="96" rx="24" fill="rgba(255,255,255,0.08)" stroke="rgba(255,255,255,0.09)" />
+    <text x="100" y="156" fill="#8af2bc" font-family="Arial, sans-serif" font-size="21" font-weight="700">dekhlobhai</text>
+    <text x="112" y="188" fill="#f5f4eb" font-family="Arial, sans-serif" font-size="34" font-weight="700">Local Deals</text>
+  </g>
+</svg>

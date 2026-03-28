@@ -1,34 +1,38 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
-import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
-import 'package:billeasy/screens/customer_details_screen.dart';
 import 'package:billeasy/screens/eway_bill_screen.dart';
 import 'package:billeasy/screens/template_picker_sheet.dart';
+import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/services/client_service.dart';
+import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/invoice_link_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/services/signature_service.dart';
+import 'package:billeasy/widgets/signature_pad.dart';
+import 'package:billeasy/screens/create_invoice_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/invoice_preview_widget.dart';
 import 'package:billeasy/widgets/whatsapp_share_sheet.dart';
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 const _kTemplatePrefsKey = 'invoice_template';
-
-BoxDecoration _cardDeco() => const BoxDecoration(
-      color: kSurfaceLowest,
-      borderRadius: BorderRadius.all(Radius.circular(20)),
-      boxShadow: [kWhisperShadow],
-    );
-
-// ────────────────────────────────────────────────────────────────────────────
 
 class InvoiceDetailsScreen extends StatefulWidget {
   const InvoiceDetailsScreen({super.key, required this.invoice});
@@ -40,234 +44,493 @@ class InvoiceDetailsScreen extends StatefulWidget {
 }
 
 class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
-  final DateFormat _dateFormat = DateFormat('dd MMM yyyy');
-  final NumberFormat _currencyFormat = NumberFormat.currency(
+  final NumberFormat _currency = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
     decimalDigits: 0,
   );
 
   InvoiceTemplate _template = InvoiceTemplate.vyapar;
+  BusinessProfile? _profile;
+  Uint8List? _signatureImage;
+  Uint8List? _cachedPdfBytes;
+  Uint8List? _previewImage; // Rasterized preview for structural templates
+  String _termsText = 'Thank you for doing business with us.';
+  bool _loading = true;
+
+  /// Templates with structurally different layouts (not just color variants).
+  static const _structuralTemplates = {
+    InvoiceTemplate.banner,
+    InvoiceTemplate.sidebarLayout,
+    InvoiceTemplate.bordered,
+    InvoiceTemplate.twoColumn,
+    InvoiceTemplate.receipt,
+  };
+
+  bool get _isStructuralTemplate => _structuralTemplates.contains(_template);
+
+  /// Live invoice — starts with the widget prop and updates from Firestore stream.
+  late Invoice _liveInvoice;
+  StreamSubscription? _invoiceSub;
 
   @override
   void initState() {
     super.initState();
-    _loadTemplate();
+    _liveInvoice = widget.invoice;
+    _listenToInvoice();
+    _init();
   }
 
-  Future<void> _loadTemplate() async {
-    final prefs = await SharedPreferences.getInstance();
-    final saved = prefs.getString(_kTemplatePrefsKey);
-    if (saved != null) {
-      final match = InvoiceTemplate.values.where((t) => t.name == saved);
-      if (match.isNotEmpty && mounted) {
-        setState(() => _template = match.first);
+  void _listenToInvoice() {
+    _invoiceSub = FirebaseFirestore.instance
+        .collection('invoices')
+        .doc(_liveInvoice.id)
+        .snapshots()
+        .listen((snap) {
+      if (snap.exists && snap.data() != null && mounted) {
+        setState(() {
+          _liveInvoice = Invoice.fromMap(snap.data()!, docId: snap.id);
+          _cachedPdfBytes = null; // Invalidate cached PDF
+        });
       }
+    });
+  }
+
+  @override
+  void dispose() {
+    _invoiceSub?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _init() async {
+    // Show preview immediately — don't wait for anything
+    if (mounted) setState(() => _loading = false);
+
+    // Load prefs, profile & signature all in parallel
+    try {
+      final results = await Future.wait([
+        SharedPreferences.getInstance(),
+        ProfileService().getCurrentProfile(),
+        SignatureService.load(),
+      ]).timeout(const Duration(seconds: 5), onTimeout: () => [null, null, null]);
+
+      final prefs = results[0] as SharedPreferences?;
+      if (prefs != null) {
+        final saved = prefs.getString(_kTemplatePrefsKey);
+        if (saved != null) {
+          final match = InvoiceTemplate.values.where((t) => t.name == saved);
+          if (match.isNotEmpty) _template = match.first;
+        }
+        _termsText = prefs.getString('invoice_terms') ?? 'Thank you for doing business with us.';
+      }
+      if (mounted) {
+        setState(() {
+          _profile = results[1] as BusinessProfile?;
+          _signatureImage = results[2] as Uint8List?;
+        });
+      }
+    } catch (e) {
+      debugPrint('[InvoiceDetails] Failed to load profile/signature: $e');
     }
   }
 
-  Future<void> _saveTemplate(InvoiceTemplate template) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_kTemplatePrefsKey, template.name);
+  void _invalidatePdf() {
+    _cachedPdfBytes = null;
+    _previewImage = null;
+  }
+
+  Future<Uint8List> _ensurePdfBytes() async {
+    if (_cachedPdfBytes != null) return _cachedPdfBytes!;
+    _profile ??= await ProfileService().getCurrentProfile();
+    final bytes = await InvoicePdfService().buildInvoicePdf(
+      invoice: _liveInvoice,
+      profile: _profile,
+      language: AppStrings.of(context).language,
+      template: _template,
+    );
+    _cachedPdfBytes = bytes;
+    return bytes;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
-    final invoice = widget.invoice;
-    final customerName = invoice.clientName;
-    final Stream<BusinessProfile?> profileStream =
-        ProfileService().watchCurrentProfile();
+    final invoice = _liveInvoice;
+    final s = AppStrings.of(context);
 
-    return StreamBuilder<BusinessProfile?>(
-      stream: profileStream,
-      builder: (context, snapshot) {
-        final profile = snapshot.data;
-        final s = AppStrings.of(context);
-        final sellerName = _sellerName(profile, s);
+    final (statusColor, statusBg, statusLabel) = switch (invoice.effectiveStatus) {
+      InvoiceStatus.paid => (kPaid, kPaidBg, s.statusPaid),
+      InvoiceStatus.pending => (const Color(0xFFEF4444), const Color(0xFFFEE2E2), 'Unpaid'),
+      InvoiceStatus.overdue => (kOverdue, kOverdueBg, s.statusOverdue),
+      InvoiceStatus.partiallyPaid => (const Color(0xFFEAB308), const Color(0xFFFEF3C7), 'Partial'),
+    };
 
-        return Scaffold(
-          backgroundColor: kSurface,
-          appBar: AppBar(
-            backgroundColor: kSurface,
-            foregroundColor: kOnSurface,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            surfaceTintColor: Colors.transparent,
-            title: Text(
-              s.detailsTitle,
-              style: const TextStyle(
-                color: kOnSurface,
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3F3F3),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: kOnSurface,
+        elevation: 0,
+        scrolledUnderElevation: 1,
+        surfaceTintColor: Colors.transparent,
+        title: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    invoice.invoiceNumber,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: kOnSurface,
+                    ),
+                  ),
+                  Text(
+                    '${invoice.clientName} · ${_currency.format(invoice.grandTotal)}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: kTextTertiary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
             ),
-            actions: [
-              // Change template icon button
-              IconButton(
-                tooltip: 'Change Template',
-                icon: const Icon(Icons.style_rounded, color: kOnSurfaceVariant),
-                onPressed: () => _changeTemplate(context, profile, s),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusBg,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                statusLabel.toUpperCase(),
+                style: TextStyle(
+                  color: statusColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          // Edit — opens create screen with this invoice's data
+          IconButton(
+            tooltip: 'Edit Invoice',
+            icon: const Icon(Icons.edit_rounded, size: 20),
+            onPressed: () async {
+              final result = await Navigator.push<Invoice>(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => CreateInvoiceScreen(editingInvoice: _liveInvoice),
+                ),
+              );
+              if (result != null && mounted) {
+                // Refresh with updated invoice
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InvoiceDetailsScreen(invoice: result),
+                  ),
+                );
+              }
+            },
+          ),
+          IconButton(
+            tooltip: 'Change Template',
+            icon: const Icon(Icons.style_rounded, size: 22),
+            onPressed: () => _changeTemplate(context),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded, size: 22),
+            onSelected: (v) => _handleMenuAction(v, context),
+            itemBuilder: (_) => _buildMenuItems(invoice),
+          ),
+        ],
+      ),
+
+      // ── Bottom bar — instant share icons ────────────────────────────────
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              // WhatsApp — shows Image/PDF choice
+              _ShareIcon(
+                icon: Icons.chat,
+                iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 24),
+                label: 'WhatsApp',
+                color: const Color(0xFF25D366),
+                onTap: () => _shareViaWhatsApp(context),
+              ),
+              // SMS — opens SMS directly
+              _ShareIcon(
+                icon: Icons.sms_outlined,
+                label: 'SMS',
+                color: const Color(0xFF1565C0),
+                onTap: () => _shareViaSms(context),
+              ),
+              // Print
+              _ShareIcon(
+                icon: Icons.print_outlined,
+                label: 'Print',
+                color: kOnSurfaceVariant,
+                onTap: () => _printPdf(context),
               ),
             ],
           ),
+        ),
+      ),
 
-          // ── Bottom action bar ────────────────────────────────────────────
-          bottomNavigationBar: Container(
-            decoration: const BoxDecoration(
-              color: kSurfaceLowest,
-              boxShadow: [kWhisperShadow],
-            ),
-            child: SafeArea(
-              minimum: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      // ── Body ──────────────────────────────────────────────────────────
+      body: Column(
+        children: [
+          // ── Payment info strip ──
+          if (invoice.amountReceived > 0 || invoice.effectiveStatus == InvoiceStatus.partiallyPaid)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: invoice.isFullyPaid ? const Color(0xFFE8F5E9) : const Color(0xFFFFF3E0),
+                border: Border(bottom: BorderSide(color: invoice.isFullyPaid ? const Color(0xFFA5D6A7) : const Color(0xFFFFCC80))),
+              ),
               child: Row(
                 children: [
                   Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () =>
-                          _previewInvoicePdf(context, profile),
-                      icon: const Icon(Icons.print_outlined, size: 18),
-                      label: Text(s.detailsPreviewPrint),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: kOnSurface,
-                        side: const BorderSide(color: kOutlineVariant),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Received: ${_currency.format(invoice.amountReceived)}',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32)),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                        if (invoice.balanceDue > 0)
+                          Text('Balance: ${_currency.format(invoice.balanceDue)}',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFE65100)),
+                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  // Share button → opens WhatsAppShareSheet
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () =>
-                          _openShareSheet(context, profile),
-                      icon: const Icon(Icons.share_outlined, size: 18),
-                      label: Text(s.detailsSharePdf),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: kPrimary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: invoice.isFullyPaid ? const Color(0xFF4CAF50) : const Color(0xFFFF9800),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      invoice.isFullyPaid ? 'PAID' : 'PARTIAL',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],
               ),
             ),
-          ),
-
-          // ── Body ─────────────────────────────────────────────────────────
-          body: SafeArea(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 16, vertical: 20),
+          // ── Invoice preview with template arrows ──
+          Expanded(
+            child: _loading
+          ? const Center(child: CircularProgressIndicator(color: kPrimary))
+          : Stack(
               children: [
-                // ── Hero card ───────────────────────────────────────────
-                _buildHeroCard(context, s, customerName, sellerName),
-                const SizedBox(height: 16),
-
-                // ── Seller ──────────────────────────────────────────────
-                _SectionCard(
-                  title: s.detailsSeller,
-                  children: [
-                    _InfoRow(
-                        label: s.detailsStore, value: sellerName),
-                    _InfoRow(
-                      label: s.detailsAddress,
-                      value: _profileValueOrFallback(
-                        profile?.address,
-                        s.detailsNotAddedYet,
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return InteractiveViewer(
+                      constrained: false,
+                      minScale: 0.5,
+                      maxScale: 4.0,
+                      boundaryMargin: EdgeInsets.symmetric(
+                        horizontal: constraints.maxWidth * 0.3,
+                        vertical: constraints.maxHeight * 0.3,
                       ),
-                    ),
-                    _InfoRow(
-                      label: s.detailsPhone,
-                      value: _profileValueOrFallback(
-                        profile?.phoneNumber,
-                        s.detailsNotAddedYet,
+                      child: Container(
+                        width: constraints.maxWidth - 16,
+                        margin: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.08),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        padding: const EdgeInsets.all(14),
+                        child: InvoicePreviewWidget(
+                          invoice: invoice,
+                          profile: _profile,
+                          template: _template,
+                          signatureImage: _signatureImage,
+                          termsText: _termsText,
+                          onSignatureTap: () => _openSignaturePad(context),
+                          onTermsTap: () => _editTerms(context),
+                        ),
                       ),
-                      isLast: true,
-                    ),
-                  ],
+                    );
+                  },
                 ),
-                const SizedBox(height: 16),
-
-                // ── Customer ─────────────────────────────────────────────
-                _buildCustomerCard(context, s, customerName),
-                const SizedBox(height: 16),
-
-                // ── Items ─────────────────────────────────────────────────
-                _buildItemsCard(context, s),
-                const SizedBox(height: 16),
-
-                // ── Summary ───────────────────────────────────────────────
-                _buildSummaryCard(context, s),
-                const SizedBox(height: 8),
-
-                // ── E-Way Bill button ─────────────────────────────────────
-                if (widget.invoice.grandTotal > 50000 &&
-                    widget.invoice.gstEnabled)
-                  _buildEWayBillButton(context),
+                // Template name label at top
+                Positioned(
+                  top: 12,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _template.name[0].toUpperCase() + _template.name.substring(1),
+                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                  ),
+                ),
+                // Left arrow
+                Positioned(
+                  left: 4,
+                  top: 0,
+                  bottom: 80,
+                  child: Center(
+                    child: _TemplateArrowButton(
+                      icon: Icons.chevron_left_rounded,
+                      onTap: () => _cycleTemplate(-1),
+                    ),
+                  ),
+                ),
+                // Right arrow
+                Positioned(
+                  right: 4,
+                  top: 0,
+                  bottom: 80,
+                  child: Center(
+                    child: _TemplateArrowButton(
+                      icon: Icons.chevron_right_rounded,
+                      onTap: () => _cycleTemplate(1),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-        );
-      },
-    );
-  }
-
-  // ── E-Way Bill ─────────────────────────────────────────────────────────────
-
-  Widget _buildEWayBillButton(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 8),
-      child: SizedBox(
-        width: double.infinity,
-        child: OutlinedButton.icon(
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EWayBillScreen(invoice: widget.invoice),
-              ),
-            );
-          },
-          icon: const Icon(Icons.local_shipping_outlined, size: 18, color: kPrimary),
-          label: const Text(
-            'Generate E-Way Bill',
-            style: TextStyle(
-              color: kPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: kPrimary,
-            side: const BorderSide(color: kPrimary, width: 1.4),
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        ),
+        ],
       ),
     );
   }
 
-  // ── Change Template ────────────────────────────────────────────────────────
+  // ── Signature & Terms ───────────────────────────────────────────────────
 
-  Future<void> _changeTemplate(
-    BuildContext context,
-    BusinessProfile? profile,
-    AppStrings s,
-  ) async {
+  Future<void> _openSignaturePad(BuildContext context) async {
+    final result = await SignaturePadSheet.show(
+      context,
+      existingSignature: _signatureImage,
+    );
+    if (result != null) {
+      await SignatureService.save(result);
+      _invalidatePdf();
+      setState(() => _signatureImage = result);
+    }
+  }
+
+  Future<void> _editTerms(BuildContext context) async {
+    final controller = TextEditingController(text: _termsText);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Terms & Conditions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Enter your terms and conditions...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('invoice_terms', result);
+      _invalidatePdf();
+      setState(() => _termsText = result);
+    }
+  }
+
+  // ── Actions ─────────────────────────────────────────────────────────────
+
+  Future<Uint8List?> _ensurePreviewImage() async {
+    if (_previewImage != null) return _previewImage;
+    try {
+      final pdfBytes = await _ensurePdfBytes();
+      final pages = await Printing.raster(pdfBytes, pages: [0], dpi: 150).toList();
+      if (pages.isNotEmpty) {
+        final rasterPage = pages.first;
+        final rawImage = await rasterPage.toImage();
+        // Draw white background
+        final recorder = ui.PictureRecorder();
+        final canvas = Canvas(recorder);
+        canvas.drawRect(
+          Rect.fromLTWH(0, 0, rawImage.width.toDouble(), rawImage.height.toDouble()),
+          Paint()..color = Colors.white,
+        );
+        canvas.drawImage(rawImage, Offset.zero, Paint());
+        final picture = recorder.endRecording();
+        final composited = await picture.toImage(rawImage.width, rawImage.height);
+        final byteData = await composited.toByteData(format: ui.ImageByteFormat.png);
+        rawImage.dispose();
+        composited.dispose();
+        if (byteData != null) {
+          _previewImage = byteData.buffer.asUint8List();
+        }
+      }
+    } catch (e) {
+      debugPrint('[InvoiceDetails] Preview raster error: $e');
+    }
+    return _previewImage;
+  }
+
+  void _cycleTemplate(int direction) async {
+    // Arrows cycle only through the 5 structural layouts, not colour variants.
+    final templates = _structuralTemplates.toList();
+    final currentIdx = templates.indexOf(_template);
+    // If the current template isn't structural, start from index 0.
+    final safeIdx = currentIdx == -1 ? 0 : currentIdx;
+    final nextIdx = (safeIdx + direction) % templates.length;
+    final next = templates[nextIdx];
+    if (next != _template) {
+      _invalidatePdf();
+      setState(() => _template = next);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kTemplatePrefsKey, next.name);
+    }
+  }
+
+  Future<void> _changeTemplate(BuildContext context) async {
     final result = await showModalBottomSheet<InvoiceTemplate>(
       context: context,
       isScrollControlled: true,
@@ -275,450 +538,49 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       builder: (_) => TemplatePicker(current: _template),
     );
     if (result != null && result != _template) {
+      _invalidatePdf();
       setState(() => _template = result);
-      await _saveTemplate(result);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_kTemplatePrefsKey, result.name);
     }
   }
 
-  // ── Hero card ─────────────────────────────────────────────────────────────
-
-  Widget _buildHeroCard(
-    BuildContext context,
-    AppStrings s,
-    String customerName,
-    String sellerName,
-  ) {
-    final invoice = widget.invoice;
-    final initials = customerName.trim().isEmpty
-        ? '?'
-        : customerName
-            .trim()
-            .split(' ')
-            .where((w) => w.isNotEmpty)
-            .take(2)
-            .map((w) => w[0].toUpperCase())
-            .join();
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: avatar + info + status badge
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: const BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: kSignatureGradient,
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      invoice.invoiceNumber,
-                      style: const TextStyle(
-                        color: kOnSurface,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      customerName,
-                      style: const TextStyle(
-                        color: kOnSurfaceVariant,
-                        fontSize: 14,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      s.detailsIssuedBy(sellerName),
-                      style: const TextStyle(
-                        color: kOnSurfaceVariant,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _StatusBadge(status: invoice.status),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(height: 1, color: kSurfaceContainer),
-          const SizedBox(height: 16),
-          // Bottom row: date + grand total
-          Row(
-            children: [
-              Expanded(
-                child: _MetaTile(
-                  icon: Icons.calendar_today_outlined,
-                  label: s.createInvoiceDate,
-                  value: _dateFormat.format(invoice.createdAt),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _MetaTile(
-                  icon: Icons.currency_rupee_rounded,
-                  label: s.createSummaryGrandTotal,
-                  value: _currencyFormat.format(invoice.grandTotal),
-                  valueColor: kPrimary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Customer card ─────────────────────────────────────────────────────────
-
-  Widget _buildCustomerCard(
-      BuildContext context, AppStrings s, String customerName) {
-    return StreamBuilder<Client?>(
-      stream: ClientService().watchClient(widget.invoice.clientId),
-      builder: (context, clientSnapshot) {
-        final client = clientSnapshot.data;
-        return _SectionCard(
-          title: s.detailsCustomer,
-          children: [
-            _InfoRow(label: s.detailsName, value: customerName),
-            _InfoRow(
-                label: s.detailsReference, value: widget.invoice.clientId),
-            if (client != null && client.phone.trim().isNotEmpty)
-              _InfoRow(
-                  label: s.detailsPhone,
-                  value: client.phone.trim()),
-            if (client != null && client.email.trim().isNotEmpty)
-              _InfoRow(
-                  label: s.detailsEmail,
-                  value: client.email.trim()),
-            if (client != null && client.address.trim().isNotEmpty)
-              _InfoRow(
-                label: s.detailsAddress,
-                value: client.address.trim(),
-                isLast: false,
-              ),
-            if (client != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: TextButton.icon(
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            CustomerDetailsScreen(client: client),
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.person_search_outlined,
-                      size: 16, color: kPrimary),
-                  label: Text(
-                    s.detailsOpenProfile,
-                    style: const TextStyle(
-                        color: kPrimary,
-                        fontWeight: FontWeight.w600),
-                  ),
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ── Items card ─────────────────────────────────────────────────────────────
-
-  Widget _buildItemsCard(BuildContext context, AppStrings s) {
-    final invoice = widget.invoice;
-    return Container(
-      decoration: _cardDeco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Row(
-              children: [
-                const Text(
-                  '',
-                  // section title placeholder — text below
-                ),
-                Text(
-                  s.detailsItems,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: kOnSurface,
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: kSurfaceContainerLow,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${invoice.items.length} ${invoice.items.length == 1 ? "item" : "items"}',
-                    style: const TextStyle(
-                      color: kPrimary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Container(height: 1, color: kSurfaceContainerLow),
-          // Item rows
-          ...invoice.items.asMap().entries.map((entry) {
-            final i = entry.key;
-            final item = entry.value;
-            final isLast = i == invoice.items.length - 1;
-            return Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: kSurfaceContainerLow,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                '${i + 1}',
-                                style: const TextStyle(
-                                  color: kPrimary,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              item.description,
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w700,
-                                color: kOnSurface,
-                              ),
-                            ),
-                          ),
-                          Text(
-                            _currencyFormat.format(item.total),
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: kOnSurface,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          const SizedBox(width: 34),
-                          _ItemPill(
-                              label:
-                                  'Qty: ${item.quantityLabel}'),
-                          const SizedBox(width: 8),
-                          _ItemPill(
-                            label:
-                                '@ ${_currencyFormat.format(item.unitPrice)}',
-                          ),
-                          if (widget.invoice.gstEnabled && item.gstRate > 0) ...[
-                            const SizedBox(width: 8),
-                            _ItemPill(label: 'GST: ${item.gstRate.toStringAsFixed(0)}%'),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                if (!isLast)
-                  Container(
-                      height: 1,
-                      color: kSurfaceContainerLow,
-                      margin: const EdgeInsets.symmetric(
-                          horizontal: 16)),
-              ],
-            );
-          }),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  // ── Summary card ──────────────────────────────────────────────────────────
-
-  Widget _buildSummaryCard(BuildContext context, AppStrings s) {
-    final invoice = widget.invoice;
-    final hasDiscount = invoice.hasDiscount;
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
-      child: Column(
-        children: [
-          _SummaryLine(
-            label: s.detailsSubtotal,
-            value: _currencyFormat.format(invoice.subtotal),
-          ),
-          if (hasDiscount) ...[
-            const SizedBox(height: 8),
-            _SummaryLine(
-              label: s.detailsDiscount,
-              value:
-                  '${_discountLabel(invoice, s)} (-${_currencyFormat.format(invoice.discountAmount)})',
-              valueColor: const Color(0xFFEF4444),
-            ),
-          ],
-          if (invoice.hasGst) ...[
-            const SizedBox(height: 8),
-            if (invoice.gstType == 'cgst_sgst') ...[
-              _SummaryLine(
-                label: 'CGST',
-                value: '+${_currencyFormat.format(invoice.cgstAmount)}',
-                valueColor: const Color(0xFF059669),
-              ),
-              const SizedBox(height: 4),
-              _SummaryLine(
-                label: 'SGST',
-                value: '+${_currencyFormat.format(invoice.sgstAmount)}',
-                valueColor: const Color(0xFF059669),
-              ),
-            ] else
-              _SummaryLine(
-                label: 'IGST',
-                value: '+${_currencyFormat.format(invoice.igstAmount)}',
-                valueColor: const Color(0xFF059669),
-              ),
-          ],
-          const SizedBox(height: 8),
-          _SummaryLine(
-            label: s.detailsItemsCount,
-            value: invoice.items.length.toString(),
-          ),
-          const SizedBox(height: 8),
-          _SummaryLine(
-            label: s.detailsStatus,
-            value: _statusLabel(invoice.status, s),
-            valueColor: _statusTextColor(invoice.status),
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: kOutlineVariant, height: 1),
-          ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                s.createSummaryGrandTotal,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: kOnSurface,
-                ),
-              ),
-              Text(
-                _currencyFormat.format(invoice.grandTotal),
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: kPrimary,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Logic ─────────────────────────────────────────────────────────────────
-
-  Future<void> _previewInvoicePdf(
-    BuildContext context,
-    BusinessProfile? profile,
-  ) async {
-    final language = AppStrings.of(context).language;
+  Future<void> _printPdf(BuildContext context) async {
     try {
-      final bytes = await _buildPdfBytes(profile, language, includePayment: false);
+      final bytes = await _ensurePdfBytes();
       await Printing.layoutPdf(
-        name: InvoicePdfService().fileNameForInvoice(widget.invoice),
+        name: InvoicePdfService().fileNameForInvoice(_liveInvoice),
         onLayout: (_) async => bytes,
       );
-    } catch (error) {
-      if (!context.mounted) return;
-      _showExportError(context, error);
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
     }
   }
 
-  /// Generates the PDF, saves it to a temp file, then opens [WhatsAppShareSheet].
-  Future<void> _openShareSheet(
-    BuildContext context,
-    BusinessProfile? profile,
-  ) async {
-    final language = AppStrings.of(context).language;
+  Future<void> _openShareSheet(BuildContext context) async {
     File? pdfFile;
     Uint8List? pdfBytes;
     String? clientPhone;
 
     try {
-      pdfBytes = await _buildPdfBytes(profile, language, includePayment: false);
+      pdfBytes = await _ensurePdfBytes();
       final dir = await getTemporaryDirectory();
-      final fileName = InvoicePdfService().fileNameForInvoice(widget.invoice);
+      final fileName = InvoicePdfService().fileNameForInvoice(_liveInvoice);
       pdfFile = File('${dir.path}/$fileName');
       await pdfFile.writeAsBytes(pdfBytes);
-    } catch (_) {
-      // PDF generation failed — we'll still open the sheet without a file
+    } catch (e) {
+      debugPrint('[InvoiceDetails] PDF write error: $e');
     }
 
-    // Try fetching client phone
     try {
-      final client = await ClientService().getClient(widget.invoice.clientId);
+      final client = await ClientService().getClient(_liveInvoice.clientId);
       clientPhone = client?.phone;
-    } catch (_) {
-      // ignore — sheet handles missing phone
+    } catch (e) {
+      debugPrint('[InvoiceDetails] Client fetch error: $e');
     }
 
     if (!context.mounted) return;
@@ -728,353 +590,619 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (_) => WhatsAppShareSheet(
-        invoice: widget.invoice,
+        invoice: _liveInvoice,
         pdfFile: pdfFile,
         pdfBytes: pdfBytes,
-        currencyFormat: _currencyFormat,
+        currencyFormat: _currency,
         clientPhone: clientPhone,
       ),
     );
   }
 
-  Future<Uint8List> _buildPdfBytes(
-    BusinessProfile? profile,
-    AppLanguage language, {
-    bool includePayment = true,
-  }) async {
-    final resolvedProfile = await _resolveProfile(profile);
-    return InvoicePdfService().buildInvoicePdf(
-      invoice: widget.invoice,
-      profile: resolvedProfile,
-      language: language,
-      template: _template,
-      includePayment: includePayment,
-    );
-  }
-
-  Future<BusinessProfile?> _resolveProfile(
-      BusinessProfile? profile) async {
-    if (profile != null) return profile;
+  /// WhatsApp — show quick "Image or PDF?" choice, then share
+  Future<void> _shareViaWhatsApp(BuildContext context) async {
+    // Fetch client phone
+    String? clientPhone;
+    String? clientName;
     try {
-      return await ProfileService().getCurrentProfile();
-    } catch (_) {
-      return profile;
-    }
-  }
+      final client = await ClientService().getClient(_liveInvoice.clientId);
+      clientPhone = client?.phone;
+      clientName = client?.name;
+    } catch (_) {}
 
-  void _showExportError(BuildContext context, Object error) {
-    final s = AppStrings.of(context);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-            content: Text(s.detailsPdfError(error.toString()))),
+    if (!mounted) return;
+
+    final rawPhone = (clientPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    if (rawPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No phone number for this customer')),
       );
-  }
-
-  String _sellerName(BusinessProfile? profile, AppStrings s) {
-    final storeName = profile?.storeName.trim() ?? '';
-    return storeName.isNotEmpty ? storeName : s.detailsYourStore;
-  }
-
-  String _profileValueOrFallback(String? value, String fallback) {
-    final normalized = value?.trim() ?? '';
-    return normalized.isNotEmpty ? normalized : fallback;
-  }
-
-  String _statusLabel(InvoiceStatus status, AppStrings s) {
-    switch (status) {
-      case InvoiceStatus.paid:
-        return s.statusPaid;
-      case InvoiceStatus.pending:
-        return s.statusPending;
-      case InvoiceStatus.overdue:
-        return s.statusOverdue;
+      return;
     }
-  }
+    final whatsAppPhone = rawPhone.length == 10 ? '91$rawPhone' : rawPhone;
 
-  String _discountLabel(Invoice invoice, AppStrings s) {
-    if (invoice.discountType == null || invoice.discountValue <= 0) {
-      return s.detailsNoDiscount;
-    }
-    switch (invoice.discountType!) {
-      case InvoiceDiscountType.percentage:
-        final value = invoice.discountValue;
-        final formattedValue = value.truncateToDouble() == value
-            ? value.toStringAsFixed(0)
-            : value.toStringAsFixed(2);
-        return s.detailsPctOff(formattedValue);
-      case InvoiceDiscountType.overall:
-        return s.detailsOverallDiscount;
-    }
-  }
-
-  Color _statusTextColor(InvoiceStatus status) {
-    switch (status) {
-      case InvoiceStatus.paid:
-        return const Color(0xFF15803D);
-      case InvoiceStatus.pending:
-        return const Color(0xFFB45309);
-      case InvoiceStatus.overdue:
-        return const Color(0xFFB91C1C);
-    }
-  }
-}
-
-// ── Reusable widgets ──────────────────────────────────────────────────────────
-
-/// White card section with a title and a list of rows separated by dividers.
-class _SectionCard extends StatelessWidget {
-  const _SectionCard({
-    required this.title,
-    required this.children,
-  });
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: _cardDeco(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: kOnSurface,
-              ),
-            ),
-          ),
-          Container(height: 1, color: kSurfaceContainer),
-          ...children,
-        ],
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-    );
-  }
-}
-
-/// Label + value row inside a _SectionCard, with an optional divider below.
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
-    required this.label,
-    required this.value,
-    this.isLast = false,
-  });
-
-  final String label;
-  final String value;
-  final bool isLast;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 16, vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 110,
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    color: kOnSurfaceVariant,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+              Container(
+                width: 36, height: 4, margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
               ),
-              Expanded(
-                child: Text(
-                  value,
-                  style: const TextStyle(
-                    color: kOnSurface,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
+              const Text('Share via WhatsApp', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _ShareChoiceButton(
+                    icon: Icons.image_outlined,
+                    label: 'Image',
+                    color: const Color(0xFF7C3AED),
+                    onTap: () => Navigator.pop(ctx, 'image'),
                   ),
-                  textAlign: TextAlign.end,
-                ),
+                  _ShareChoiceButton(
+                    icon: Icons.picture_as_pdf_outlined,
+                    label: 'PDF',
+                    color: const Color(0xFFE53935),
+                    onTap: () => Navigator.pop(ctx, 'pdf'),
+                  ),
+                ],
               ),
+              const SizedBox(height: 12),
             ],
           ),
         ),
-        if (!isLast) Container(height: 1, color: kSurfaceContainerLow),
+      ),
+    );
+
+    if (choice == null || !mounted) return;
+
+    // Fetch store name for the message
+    String? storeName;
+    try {
+      final profile = await ProfileService().getCurrentProfile();
+      storeName = profile?.storeName;
+    } catch (_) {}
+
+    // Prepare the file
+    String? filePath;
+    try {
+      final pdfBytes = await _ensurePdfBytes();
+      final dir = await getTemporaryDirectory();
+
+      if (choice == 'pdf') {
+        final fileName = InvoicePdfService().fileNameForInvoice(_liveInvoice);
+        final pdfFile = File('${dir.path}/$fileName');
+        await pdfFile.writeAsBytes(pdfBytes);
+        filePath = pdfFile.path;
+      } else {
+        // Render PDF page to image with white background
+        final pages = await Printing.raster(pdfBytes, pages: [0], dpi: 200).toList();
+        if (pages.isNotEmpty) {
+          final rasterPage = pages.first;
+          final rawImage = await rasterPage.toImage();
+
+          // Draw white background + invoice on top
+          final recorder = ui.PictureRecorder();
+          final canvas = Canvas(recorder);
+          canvas.drawRect(
+            Rect.fromLTWH(0, 0, rawImage.width.toDouble(), rawImage.height.toDouble()),
+            Paint()..color = Colors.white,
+          );
+          canvas.drawImage(rawImage, Offset.zero, Paint());
+          final picture = recorder.endRecording();
+          final composited = await picture.toImage(rawImage.width, rawImage.height);
+          final byteData = await composited.toByteData(format: ui.ImageByteFormat.png);
+          rawImage.dispose();
+          composited.dispose();
+
+          if (byteData != null) {
+            final imgFile = File('${dir.path}/Invoice_${_liveInvoice.invoiceNumber}.png');
+            await imgFile.writeAsBytes(byteData.buffer.asUint8List());
+            filePath = imgFile.path;
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+      return;
+    }
+
+    if (filePath == null || !mounted) return;
+
+    // Build the WhatsApp message
+    final inv = _liveInvoice;
+    final dueDate = inv.dueDate != null
+        ? DateFormat('dd MMM yyyy').format(inv.dueDate!)
+        : null;
+    final name = clientName ?? inv.clientName;
+    final shop = (storeName != null && storeName.isNotEmpty) ? storeName : 'BillRaja';
+
+    final msgLines = <String>[
+      '📄 *Invoice ${inv.invoiceNumber}*',
+      'From: *$shop*',
+      '',
+      'Dear *$name*,',
+      '',
+      '💰 Amount: *${_currency.format(inv.grandTotal)}*',
+      if (dueDate != null) '📅 Due Date: $dueDate',
+      if (inv.status == 'paid') '✅ Status: *Paid*'
+      else if (inv.status == 'overdue') '⏳ Status: *Overdue*'
+      else '⏳ Status: *Pending*',
+      '',
+      'Thank you for your business! 🙏',
+      '',
+      '—',
+      '_Powered by *BillRaja* — helping small & medium businesses grow digitally._',
+      '_Start your digital billing journey today!_',
+      '🌐 www.billraja.com',
+    ];
+    final message = msgLines.join('\n');
+
+    // Send file + pre-filled text via WhatsApp native intent
+    if (Platform.isAndroid) {
+      try {
+        const channel = MethodChannel('com.luhit.billeasy/share');
+        await channel.invokeMethod('whatsapp', {
+          'phone': whatsAppPhone,
+          'filePath': filePath,
+          'text': message,
+        });
+        return;
+      } on PlatformException catch (e) {
+        if (e.code != 'NO_WA') return;
+      }
+    }
+
+    if (!mounted) return;
+
+    // Fallback (iOS / no WhatsApp): open wa.me with message only
+    final waUri = Uri.parse('https://wa.me/$whatsAppPhone?text=${Uri.encodeComponent(message)}');
+    await launchUrl(waUri, mode: LaunchMode.externalApplication);
+  }
+
+  /// SMS — open SMS app directly with invoice link
+  Future<void> _shareViaSms(BuildContext context) async {
+    String? clientPhone;
+    String? shareLink;
+    try {
+      final results = await Future.wait([
+        ClientService().getClient(_liveInvoice.clientId),
+        InvoiceLinkService.shareLink(invoice: _liveInvoice),
+      ]).timeout(const Duration(seconds: 8), onTimeout: () => [null, null]);
+      clientPhone = (results[0] as Client?)?.phone;
+      shareLink = results[1] as String?;
+    } catch (_) {}
+
+    final phone = (clientPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    final linkText = shareLink != null ? ' View: $shareLink' : '';
+    final message = 'Invoice ${_liveInvoice.invoiceNumber} for ${_currency.format(_liveInvoice.grandTotal)}.$linkText';
+
+    final smsUri = Uri(scheme: 'sms', path: phone, queryParameters: {'body': message});
+    try {
+      await launchUrl(smsUri);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not open SMS: $e')));
+      }
+    }
+  }
+
+  void _handleMenuAction(String value, BuildContext context) {
+    final invoice = _liveInvoice;
+    switch (value) {
+      case 'mark_paid':
+        HapticFeedback.lightImpact();
+        FirebaseService().markAsPaid(invoice.id);
+        Navigator.pop(context);
+      case 'record_payment':
+        _showRecordPaymentSheet(context, invoice);
+      case 'payment_history':
+        _showPaymentHistory(context, invoice);
+      case 'eway':
+        Navigator.push(context, MaterialPageRoute(
+          builder: (_) => EWayBillScreen(invoice: invoice),
+        ));
+      case 'delete':
+        _confirmDelete(context);
+    }
+  }
+
+  void _showRecordPaymentSheet(BuildContext context, Invoice invoice) {
+    final amountCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+    final balance = invoice.balanceDue;
+    String selectedMethod = 'Cash';
+    final methods = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Other'];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Record Payment', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 4),
+            Text('Balance due: \u20b9${balance.toStringAsFixed(2)}',
+                style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant)),
+            const SizedBox(height: 16),
+            // Amount field
+            TextField(
+              controller: amountCtrl,
+              autofocus: true,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: InputDecoration(
+                prefixText: '\u20b9 ',
+                hintText: 'Enter amount received',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                suffixIcon: TextButton(
+                  onPressed: () => amountCtrl.text = balance.toStringAsFixed(2),
+                  child: const Text('Full', style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Payment method chips
+            Wrap(
+              spacing: 8,
+              children: methods.map((m) => ChoiceChip(
+                label: Text(m, style: const TextStyle(fontSize: 12)),
+                selected: selectedMethod == m,
+                selectedColor: kPrimary.withValues(alpha: 0.15),
+                onSelected: (_) => setSheetState(() => selectedMethod = m),
+              )).toList(),
+            ),
+            const SizedBox(height: 12),
+            // Note field
+            TextField(
+              controller: noteCtrl,
+              decoration: InputDecoration(
+                hintText: 'Note (optional)',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                isDense: true,
+              ),
+              maxLines: 1,
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                onPressed: () async {
+                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                  if (amount <= 0) return;
+                  final newTotalReceived = ((invoice.amountReceived + amount) * 100).roundToDouble() / 100;
+                  final capped = newTotalReceived > invoice.grandTotal ? invoice.grandTotal : newTotalReceived;
+                  Navigator.pop(ctx);
+                  try {
+                    await FirebaseService().recordPayment(
+                      invoice.id, amount, capped, invoice.grandTotal,
+                      method: selectedMethod.toLowerCase(),
+                      note: noteCtrl.text.trim(),
+                    );
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Payment of \u20b9${_currency.format(amount)} recorded'),
+                          backgroundColor: Colors.green,
+                        ),
+                      );
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Failed to record payment: $e'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: const Text('Save Payment', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      )),
+    );
+  }
+
+  void _showPaymentHistory(BuildContext context, Invoice invoice) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.85,
+        expand: false,
+        builder: (_, scrollController) => Column(
+          children: [
+            // Handle
+            Container(
+              margin: const EdgeInsets.only(top: 10, bottom: 6),
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.history, size: 20, color: kPrimary),
+                  const SizedBox(width: 8),
+                  const Text('Payment History', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+                  const Spacer(),
+                  Text('Total: \u20b9${invoice.amountReceived.toStringAsFixed(2)}',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32))),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            Expanded(
+              child: StreamBuilder<List<Map<String, dynamic>>>(
+                stream: FirebaseService().watchPaymentHistory(invoice.id),
+                builder: (context, snap) {
+                  if (snap.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  final payments = snap.data ?? [];
+                  if (payments.isEmpty) {
+                    return const Center(child: Padding(
+                      padding: EdgeInsets.all(32),
+                      child: Text('No payments recorded yet', style: TextStyle(color: kOnSurfaceVariant)),
+                    ));
+                  }
+                  return ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    itemCount: payments.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final p = payments[i];
+                      final amount = (p['amount'] as num? ?? 0).toDouble();
+                      final method = (p['method'] as String? ?? 'cash');
+                      final note = (p['note'] as String? ?? '');
+                      final date = (p['date'] as Timestamp?)?.toDate();
+                      final balanceAfter = (p['balanceAfter'] as num? ?? 0).toDouble();
+
+                      final methodIcon = switch (method) {
+                        'upi' => Icons.account_balance_wallet,
+                        'bank transfer' => Icons.account_balance,
+                        'cheque' => Icons.receipt_long,
+                        _ => Icons.payments_outlined,
+                      };
+
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 36, height: 36,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFE8F5E9),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Icon(methodIcon, size: 18, color: const Color(0xFF2E7D32)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '\u20b9${amount.toStringAsFixed(2)}',
+                                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF2E7D32)),
+                                  ),
+                                  Text(
+                                    '${method[0].toUpperCase()}${method.substring(1)}${note.isNotEmpty ? ' \u2022 $note' : ''}',
+                                    style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                                    maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (date != null)
+                                  Text(DateFormat('dd MMM, hh:mm a').format(date),
+                                      style: const TextStyle(fontSize: 11, color: kOnSurfaceVariant)),
+                                Text('Bal: \u20b9${balanceAfter.toStringAsFixed(2)}',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
+                                        color: balanceAfter > 0 ? const Color(0xFFE65100) : const Color(0xFF2E7D32))),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<PopupMenuEntry<String>> _buildMenuItems(Invoice invoice) {
+    return [
+      if (invoice.effectiveStatus != InvoiceStatus.paid) ...[
+        const PopupMenuItem(value: 'record_payment', child: Row(children: [
+          Icon(Icons.currency_rupee, size: 18, color: kPrimary),
+          SizedBox(width: 10), Text('Record Payment'),
+        ])),
+        const PopupMenuItem(value: 'mark_paid', child: Row(children: [
+          Icon(Icons.check_circle_outline, size: 18, color: kPaid),
+          SizedBox(width: 10), Text('Mark as Paid'),
+        ])),
       ],
+      const PopupMenuItem(value: 'payment_history', child: Row(children: [
+        Icon(Icons.history, size: 18, color: Color(0xFF546E7A)),
+        SizedBox(width: 10), Text('Payment History'),
+      ])),
+      if (invoice.grandTotal > 50000 && invoice.gstEnabled)
+        const PopupMenuItem(value: 'eway', child: Row(children: [
+          Icon(Icons.local_shipping_outlined, size: 18, color: kPrimary),
+          SizedBox(width: 10), Text('E-Way Bill'),
+        ])),
+      const PopupMenuDivider(),
+      const PopupMenuItem(value: 'delete', child: Row(children: [
+        Icon(Icons.delete_outline, size: 18, color: kOverdue),
+        SizedBox(width: 10), Text('Delete', style: TextStyle(color: kOverdue)),
+      ])),
+    ];
+  }
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Invoice'),
+        content: const Text('This will permanently delete this invoice. This action cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(foregroundColor: kOverdue),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
     );
+    if (confirmed == true && context.mounted) {
+      HapticFeedback.heavyImpact();
+      await FirebaseService().deleteInvoice(_liveInvoice.id);
+      if (context.mounted) Navigator.pop(context);
+    }
   }
 }
 
-/// Small pill badge for status (Paid / Pending / Overdue).
-class _StatusBadge extends StatelessWidget {
-  const _StatusBadge({required this.status});
-
-  final InvoiceStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    final (bg, text, label) = switch (status) {
-      InvoiceStatus.paid => (
-          const Color(0xFFDCFCE7),
-          const Color(0xFF15803D),
-          'Paid',
-        ),
-      InvoiceStatus.pending => (
-          const Color(0xFFFEF3C7),
-          const Color(0xFFB45309),
-          'Pending',
-        ),
-      InvoiceStatus.overdue => (
-          const Color(0xFFFEE2E2),
-          const Color(0xFFB91C1C),
-          'Overdue',
-        ),
-    };
-
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: text,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-/// Two-line tile showing an icon, label, and value — used in the hero card.
-class _MetaTile extends StatelessWidget {
-  const _MetaTile({
+class _ShareIcon extends StatelessWidget {
+  const _ShareIcon({
     required this.icon,
     required this.label,
-    required this.value,
-    this.valueColor = kOnSurface,
+    required this.color,
+    required this.onTap,
+    this.iconWidget,
   });
 
   final IconData icon;
   final String label;
-  final String value;
-  final Color valueColor;
+  final Color color;
+  final VoidCallback onTap;
+  final Widget? iconWidget;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 18, color: kOnSurfaceVariant),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: kOnSurfaceVariant,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  value,
-                  style: TextStyle(
-                    color: valueColor,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
             ),
+            child: Center(child: iconWidget ?? Icon(icon, color: color, size: 24)),
           ),
+          const SizedBox(height: 4),
+          Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
         ],
       ),
     );
   }
 }
 
-/// Small gray pill used inside item rows (qty, unit price).
-class _ItemPill extends StatelessWidget {
-  const _ItemPill({required this.label});
-
-  final String label;
+class _TemplateArrowButton extends StatelessWidget {
+  const _TemplateArrowButton({required this.icon, required this.onTap});
+  final IconData icon;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: kOnSurfaceVariant,
-          fontSize: 12,
-          fontWeight: FontWeight.w500,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.92),
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.18), blurRadius: 8),
+          ],
         ),
+        child: Icon(icon, size: 26, color: Colors.black87),
       ),
     );
   }
 }
 
-/// Label + value in a horizontal row for the summary section.
-class _SummaryLine extends StatelessWidget {
-  const _SummaryLine({
+class _ShareChoiceButton extends StatelessWidget {
+  const _ShareChoiceButton({
+    required this.icon,
     required this.label,
-    required this.value,
-    this.valueColor = kOnSurface,
+    required this.color,
+    required this.onTap,
   });
 
+  final IconData icon;
   final String label;
-  final String value;
-  final Color valueColor;
+  final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: kOnSurfaceVariant,
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 120,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
-            color: valueColor,
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(label, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: color)),
+          ],
         ),
-      ],
+      ),
     );
   }
 }

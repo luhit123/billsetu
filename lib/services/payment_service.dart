@@ -8,12 +8,10 @@ import 'package:flutter/foundation.dart';
 import '../modals/payment.dart';
 import 'razorpay_checkout.dart';
 
-/// Razorpay key — use test key for debug, live key for release.
-/// Override at build time: --dart-define=RAZORPAY_KEY=rzp_live_XXXXXXX
-const _razorpayKey = String.fromEnvironment(
-  'RAZORPAY_KEY',
-  defaultValue: 'rzp_test_STaoGCEVgretD0',
-);
+/// Razorpay key — MUST be set at build time: --dart-define=RAZORPAY_KEY=rzp_live_XXXXXXX
+/// No default value to prevent test key shipping to production.
+const _razorpayKey = String.fromEnvironment('RAZORPAY_KEY');
+const _isRazorpayConfigured = _razorpayKey.length > 0;
 
 class PaymentService {
   PaymentService._() {
@@ -37,6 +35,13 @@ class PaymentService {
     required String planId,
     required String billingCycle,
   }) async {
+    if (!_isRazorpayConfigured) {
+      return const PaymentResult(
+        success: false,
+        message: 'Payment gateway not configured. Please contact support.',
+      );
+    }
+
     if (_isProcessing) {
       return const PaymentResult(
         success: false,

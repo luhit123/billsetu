@@ -277,6 +277,12 @@ class PlanService {
     } catch (_) {}
   }
 
+  /// Call on sign-out to stop listening to the old user's plan data.
+  void reset() {
+    _planListener?.cancel();
+    _planListener = null;
+  }
+
   void dispose() {
     _planListener?.cancel();
     _planController.close();

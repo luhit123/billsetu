@@ -33,6 +33,9 @@ class InvoiceCard extends StatelessWidget {
         color: kSurfaceLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kSubtleShadow],
+        border: Border(
+          left: BorderSide(color: _statusColor(invoice.effectiveStatus), width: 3),
+        ),
       ),
       child: Material(
         color: Colors.transparent,
@@ -90,20 +93,51 @@ class InvoiceCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      if (invoice.isPartiallyPaid) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Bal: ${_currencyFormat.format(invoice.balanceDue)}  |  Rcvd: ${_currencyFormat.format(invoice.amountReceived)}',
+                          style: const TextStyle(color: Color(0xFFE65100), fontSize: 12, fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 12),
-                Chip(
-                  label: Text(_statusLabel(context, invoice.status)),
-                  backgroundColor: _statusColor(invoice.status),
-                  labelStyle: TextStyle(
-                    color: _statusTextColor(invoice.status),
-                    fontWeight: FontWeight.w700,
-                  ),
-                  side: BorderSide.none,
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Chip(
+                      label: Text(_statusLabel(context, invoice.effectiveStatus)),
+                      backgroundColor: _statusColor(invoice.effectiveStatus),
+                      labelStyle: TextStyle(
+                        color: _statusTextColor(invoice.effectiveStatus),
+                        fontWeight: FontWeight.w700,
+                      ),
+                      side: BorderSide.none,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    const SizedBox(height: 4),
+                    SizedBox(
+                      height: 32,
+                      width: 32,
+                      child: IconButton(
+                        onPressed: () => _showActions(context),
+                        icon: const Icon(Icons.more_horiz_rounded, size: 22),
+                        color: kOnSurfaceVariant,
+                        padding: EdgeInsets.zero,
+                        style: IconButton.styleFrom(
+                          backgroundColor: kSurfaceContainerLow,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -128,14 +162,6 @@ class InvoiceCard extends StatelessWidget {
                 onTap: () {
                   Navigator.of(context).pop();
                   onStatusChange(InvoiceStatus.paid);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.warning_amber_rounded),
-                title: Text(s.cardMarkOverdue),
-                onTap: () {
-                  Navigator.of(context).pop();
-                  onStatusChange(InvoiceStatus.overdue);
                 },
               ),
               ListTile(
@@ -172,9 +198,11 @@ class InvoiceCard extends StatelessWidget {
       case InvoiceStatus.paid:
         return s.statusPaid;
       case InvoiceStatus.pending:
-        return s.statusPending;
+        return 'Unpaid';
       case InvoiceStatus.overdue:
         return s.statusOverdue;
+      case InvoiceStatus.partiallyPaid:
+        return 'Partial';
     }
   }
 
@@ -183,9 +211,11 @@ class InvoiceCard extends StatelessWidget {
       case InvoiceStatus.paid:
         return kPaidBg;
       case InvoiceStatus.pending:
-        return kPendingBg;
+        return const Color(0xFFFEE2E2);
       case InvoiceStatus.overdue:
         return kOverdueBg;
+      case InvoiceStatus.partiallyPaid:
+        return const Color(0xFFFEF3C7);
     }
   }
 
@@ -194,9 +224,11 @@ class InvoiceCard extends StatelessWidget {
       case InvoiceStatus.paid:
         return kPaid;
       case InvoiceStatus.pending:
-        return kPending;
+        return const Color(0xFFEF4444);
       case InvoiceStatus.overdue:
         return kOverdue;
+      case InvoiceStatus.partiallyPaid:
+        return const Color(0xFFEAB308);
     }
   }
 }

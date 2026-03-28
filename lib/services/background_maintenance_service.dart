@@ -6,7 +6,7 @@ class BackgroundMaintenanceService {
     : _functions = functions ?? FirebaseFunctions.instance;
 
   static const String _invoiceSearchBackfillKey =
-      'maintenance.invoice_search_backfill.v1';
+      'maintenance.invoice_search_backfill.v3';
 
   final FirebaseFunctions _functions;
 
