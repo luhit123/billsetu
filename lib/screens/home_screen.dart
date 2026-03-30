@@ -21,6 +21,7 @@ import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
+import 'package:billeasy/services/review_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
@@ -29,6 +30,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import 'package:billeasy/utils/responsive.dart';
 
 Widget homescreen() => const HomeScreen();
 
@@ -58,17 +61,24 @@ class _HomeScreenState extends State<HomeScreen> {
       const CustomersScreen(),
       const ProductsScreen(),
     ];
+    ReviewService.instance.onAppOpen();
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    // Always use compact layout — NavigationRail has rendering issues on web.
+    // TODO: re-enable wide layout after fixing web rendering
+    return _buildCompactLayout(s);
+  }
+
+  /// Phone layout — bottom nav + draggable FAB.
+  Widget _buildCompactLayout(AppStrings s) {
     return Scaffold(
       body: Stack(
         children: [
           Column(
             children: [
-              const ConnectivityBanner(),
               Expanded(
                 child: IndexedStack(index: _selectedTab, children: _tabs),
               ),
@@ -83,6 +93,157 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       bottomNavigationBar: _buildBottomNav(s),
+    );
+  }
+
+  /// Tablet / Desktop layout — NavigationRail on the left.
+  Widget _buildWideLayout(AppStrings s) {
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
+    return Scaffold(
+      body: Row(
+        children: [
+          NavigationRail(
+            extended: expanded,
+            minExtendedWidth: 200,
+            backgroundColor: kSurfaceLowest,
+            selectedIndex: _selectedTab,
+            onDestinationSelected: (i) => setState(() => _selectedTab = i),
+            leading: Padding(
+              padding: EdgeInsets.symmetric(
+                vertical: 16,
+                horizontal: expanded ? 16 : 8,
+              ),
+              child: expanded
+                  ? Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: kSignatureGradient,
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'B',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        const Text(
+                          'BillRaja',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                            color: kOnSurface,
+                          ),
+                        ),
+                      ],
+                    )
+                  : Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: kSignatureGradient,
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'B',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+            ),
+            trailing: Padding(
+              padding: const EdgeInsets.only(bottom: 16, top: 16),
+              child: expanded
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: FilledButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const CreateInvoiceScreen(),
+                            ),
+                          ),
+                          icon: const Icon(Icons.add_rounded, size: 20),
+                          label: const Text('New Invoice'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: const Color(0xFF7C3AED),
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  : IconButton.filled(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const CreateInvoiceScreen(),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      style: IconButton.styleFrom(
+                        backgroundColor: const Color(0xFF7C3AED),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+            ),
+            indicatorColor: kPrimaryContainer,
+            selectedIconTheme: const IconThemeData(color: kPrimary),
+            unselectedIconTheme: const IconThemeData(color: kTextTertiary),
+            selectedLabelTextStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              color: kPrimary,
+            ),
+            unselectedLabelTextStyle: const TextStyle(
+              fontWeight: FontWeight.w500,
+              color: kTextTertiary,
+            ),
+            destinations: [
+              NavigationRailDestination(
+                icon: const Icon(Icons.home_outlined),
+                selectedIcon: const Icon(Icons.home_rounded),
+                label: Text(s.homeBottomHome),
+              ),
+              NavigationRailDestination(
+                icon: const Icon(Icons.receipt_long_outlined),
+                selectedIcon: const Icon(Icons.receipt_long_rounded),
+                label: Text(s.homeBottomInvoices),
+              ),
+              NavigationRailDestination(
+                icon: const Icon(Icons.people_outline_rounded),
+                selectedIcon: const Icon(Icons.people_alt_rounded),
+                label: Text(s.homeBottomClients),
+              ),
+              NavigationRailDestination(
+                icon: const Icon(Icons.inventory_2_outlined),
+                selectedIcon: const Icon(Icons.inventory_2_rounded),
+                label: Text(s.homeBottomProducts),
+              ),
+            ],
+          ),
+          const VerticalDivider(thickness: 1, width: 1, color: kSurfaceContainer),
+          Expanded(
+            child: IndexedStack(index: _selectedTab, children: _tabs),
+          ),
+        ],
+      ),
     );
   }
 
@@ -240,13 +401,17 @@ class _DashboardPageState extends State<_DashboardPage> {
       return;
     }
     try {
+      // Use cache-only when offline to avoid a network timeout hanging the UI
+      final getOpts = ConnectivityService.instance.isOffline
+          ? const GetOptions(source: Source.cache)
+          : const GetOptions(source: Source.serverAndCache);
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .collection('products')
           .where('trackInventory', isEqualTo: true)
           .limit(200)
-          .get();
+          .get(getOpts);
       if (!mounted) return;
       final products = snap.docs
           .map((d) => Product.fromMap(d.data(), docId: d.id))
@@ -376,7 +541,10 @@ class _DashboardPageState extends State<_DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_invoicesError != null) {
+    // Only show the hard error screen when there is no cached data to display.
+    // If we already have invoices (from Firestore cache), keep showing them
+    // even if a subsequent stream error occurs — the offline banner handles UX.
+    if (_invoicesError != null && _allInvoices.isEmpty) {
       return Scaffold(
         backgroundColor: kSurface,
         body: ErrorRetryWidget(
@@ -398,34 +566,39 @@ class _DashboardPageState extends State<_DashboardPage> {
       body: RefreshIndicator(
         color: kPrimary,
         onRefresh: _handleRefresh,
-        child: CustomScrollView(
-          slivers: [
-            // 1. SliverAppBar
-            _buildSliverAppBar(),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+            child: CustomScrollView(
+              slivers: [
+                // 1. SliverAppBar
+                _buildSliverAppBar(),
 
-            // 2. Hero Card
-            SliverToBoxAdapter(child: _buildHeroCard()),
+                // 2. Hero Card
+                SliverToBoxAdapter(child: _buildHeroCard()),
 
-            // 3. Status Strip
-            SliverToBoxAdapter(child: _buildStatusStrip()),
+                // 3. Status Strip
+                SliverToBoxAdapter(child: _buildStatusStrip()),
 
-            // 4. Overdue Alert (conditional)
-            if (_overdueCount > 0)
-              SliverToBoxAdapter(child: _buildOverdueAlert()),
+                // 4. Overdue Alert (conditional)
+                if (_overdueCount > 0)
+                  SliverToBoxAdapter(child: _buildOverdueAlert()),
 
-            // 5. Quick Actions
-            SliverToBoxAdapter(child: _buildQuickActions()),
+                // 5. Quick Actions
+                SliverToBoxAdapter(child: _buildQuickActions()),
 
-            // 6. Revenue Card
-            SliverToBoxAdapter(child: _buildRevenueCard()),
+                // 6. Revenue Card
+                SliverToBoxAdapter(child: _buildRevenueCard()),
 
-            // 7. Low Stock Banner (conditional)
-            if (!_lowStockLoading && _lowStockProducts.isNotEmpty)
-              SliverToBoxAdapter(child: _buildLowStockBanner()),
+                // 7. Low Stock Banner (conditional)
+                if (!_lowStockLoading && _lowStockProducts.isNotEmpty)
+                  SliverToBoxAdapter(child: _buildLowStockBanner()),
 
-            // Bottom spacing
-            const SliverToBoxAdapter(child: SizedBox(height: 32)),
-          ],
+                // Bottom spacing
+                const SliverToBoxAdapter(child: SizedBox(height: 32)),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -776,10 +949,15 @@ class _DashboardPageState extends State<_DashboardPage> {
             icon: Icons.workspace_premium_rounded,
             label: 'Manage Sub',
             gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF3CAC), Color(0xFF784BA0)]),
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SubscriptionsScreen()),
-            ),
+            onTap: () {
+              if (!RemoteConfigService.instance.featureMembership) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Membership feature is currently unavailable')),
+                );
+                return;
+              }
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionsScreen()));
+            },
           ),
           const SizedBox(width: 8),
           _buildQuickAction(

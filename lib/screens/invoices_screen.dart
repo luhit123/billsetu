@@ -11,6 +11,8 @@ import 'package:billeasy/services/firebase_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:billeasy/utils/responsive.dart';
+
 enum _Period { allTime, today, thisWeek, currentMonth, customRange }
 
 class InvoicesScreen extends StatefulWidget {
@@ -44,18 +46,20 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   Object? _loadError;
   StreamSubscription<List<Invoice>>? _invoiceSub;
 
-  /// Cached filtered list — only recomputed when data or query changes.
+  /// Cached filtered list — recomputed when data identity or query changes.
   List<Invoice>? _cachedFiltered;
   String _lastFilterQuery = '';
-  int _lastFilterCount = -1;
+  List<Invoice>? _lastFilterSource; // identity check, not length
 
   List<Invoice> get _filtered {
     final q = _query.toLowerCase();
-    if (q == _lastFilterQuery && _allInvoices.length == _lastFilterCount && _cachedFiltered != null) {
+    // Invalidate cache when the source list identity changes (stream emits
+    // a new list on ANY field update — status, amount, etc.) or query changes.
+    if (q == _lastFilterQuery && identical(_allInvoices, _lastFilterSource) && _cachedFiltered != null) {
       return _cachedFiltered!;
     }
     _lastFilterQuery = q;
-    _lastFilterCount = _allInvoices.length;
+    _lastFilterSource = _allInvoices;
     if (q.isEmpty) {
       _cachedFiltered = _allInvoices;
     } else {
@@ -86,7 +90,13 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
   void _subscribe() {
     _invoiceSub?.cancel();
     final bounds = _periodBounds;
-    setState(() { _isLoading = true; _loadError = null; });
+    // Only show loading spinner if we have no cached data — prevents
+    // the screen from blinking blank when re-subscribing with data on screen.
+    if (_allInvoices.isEmpty) {
+      setState(() { _isLoading = true; _loadError = null; });
+    } else {
+      setState(() { _loadError = null; });
+    }
     _invoiceSub = _firebaseService
         .getInvoicesStream(
           startDate: bounds?.$1,
@@ -120,7 +130,10 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
       backgroundColor: kSurface,
       appBar: _buildAppBar(s),
       body: SafeArea(
-        child: RefreshIndicator(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+            child: RefreshIndicator(
           onRefresh: () async => _subscribe(), // re-subscribe re-fetches
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
@@ -175,7 +188,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: ErrorRetryWidget(
-                    message: 'Could not load invoices.\nCheck your connection and try again.',
+                    message: s.invoicesLoadError,
                     onRetry: _subscribe,
                   ),
                 )
@@ -190,9 +203,9 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                   child: _allInvoices.isEmpty
                       ? EmptyStateWidget(
                           icon: Icons.receipt_long_outlined,
-                          title: 'No invoices yet',
-                          subtitle: 'Create your first invoice to get started',
-                          actionLabel: 'Create Invoice',
+                          title: s.invoicesEmptyTitle,
+                          subtitle: s.invoicesEmptyBody,
+                          actionLabel: s.invoicesCreateFirst,
                           iconColor: kPrimary,
                           onAction: () => Navigator.push(
                             context,
@@ -237,6 +250,8 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
                 ),
             ],
           ),
+          ),
+          ),
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -279,7 +294,7 @@ class _InvoicesScreenState extends State<InvoicesScreen> {
               onChanged: _handleSearchChanged,
             )
           : const Text(
-              'BillEasy',
+              'BillRaja',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 20,

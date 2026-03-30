@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/empty_state_widget.dart';
@@ -10,6 +11,10 @@ import 'package:billeasy/services/product_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:billeasy/utils/responsive.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/usage_tracking_service.dart';
+import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
 class ProductsScreen extends StatefulWidget {
   /// When [selectionMode] is true the screen returns a [Product] via
@@ -71,7 +76,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   void _subscribe() {
     _productSub?.cancel();
-    setState(() { _isLoading = true; _loadError = null; });
+    // Only show loading spinner if we have no cached data — prevents
+    // the screen from blinking blank when re-subscribing with data on screen.
+    if (_allProducts.isEmpty) {
+      setState(() { _isLoading = true; _loadError = null; });
+    } else {
+      setState(() { _loadError = null; });
+    }
     _productSub = _svc.getProductsStream(limit: 200).listen(
       (products) {
         if (!mounted) return;
@@ -99,7 +110,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
               elevation: 2,
               child: const Icon(Icons.add_rounded),
             ),
-      body: RefreshIndicator(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+          child: RefreshIndicator(
         onRefresh: () async => _subscribe(),
         child: Builder(
           builder: (context) {
@@ -108,8 +122,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
             }
 
             if (_loadError != null && _allProducts.isEmpty) {
+              final s = AppStrings.of(context);
               return ErrorRetryWidget(
-                message: 'Could not load products.\nCheck your connection and try again.',
+                message: s.productsLoadError,
                 onRetry: _subscribe,
               );
             }
@@ -152,6 +167,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
               },
             );
           },
+        ),
+          ),
         ),
       ),
     );
@@ -234,6 +251,20 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _openAddProduct() async {
+    // Plan gate: check product limit
+    final count = await UsageTrackingService.instance.getProductCount();
+    if (!PlanService.instance.canAddProduct(count)) {
+      if (!mounted) return;
+      final max = PlanService.instance.currentLimits.maxProducts;
+      await LimitReachedDialog.show(
+        context,
+        title: 'Product Limit Reached',
+        message: 'You have $count/$max products. Upgrade to add more.',
+        featureName: 'more products',
+      );
+      return;
+    }
+
     await Navigator.push<Product>(
       context,
       MaterialPageRoute(builder: (_) => const ProductFormScreen()),
@@ -250,19 +281,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _confirmDelete(Product product) async {
+    final s = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Product?'),
-        content: Text('Delete "${product.name}"? This cannot be undone.'),
+        title: Text(s.productsDeleteTitle(product.name)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(s.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete', style: TextStyle(color: kOverdue)),
+            child: Text(s.commonDelete, style: const TextStyle(color: kOverdue)),
           ),
         ],
       ),
@@ -429,6 +460,8 @@ class _StockBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (!product.trackInventory) return const SizedBox.shrink();
+
     final Color bgColor;
     final Color textColor;
     final String label;

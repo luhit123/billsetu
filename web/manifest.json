@@ -1,13 +1,14 @@
 {
-    "name": "BillRaja",
+    "name": "BillRaja — All-in-One Billing for Growing Businesses",
     "short_name": "BillRaja",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "BillRaja is a calm billing workspace for invoices, GST, and customers.",
-    "orientation": "portrait-primary",
+    "background_color": "#F9FAFB",
+    "theme_color": "#0057FF",
+    "description": "From creating your first bill to full GST compliance — one app for startups, small businesses, and growing enterprises.",
+    "orientation": "any",
     "prefer_related_applications": false,
+    "categories": ["business", "finance", "productivity"],
     "icons": [
         {
             "src": "icons/Icon-192.png",

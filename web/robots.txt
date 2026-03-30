@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Allow: /i/
+Disallow: /api/
+
+Sitemap: https://billeasy-3a6ad.web.app/sitemap.xml

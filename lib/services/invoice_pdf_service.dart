@@ -2,13 +2,16 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/services/logo_cache_service.dart';
 import 'package:billeasy/services/signature_service.dart';
-import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
+import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes, debugPrint, kIsWeb;
 import 'package:billeasy/modals/business_profile.dart';
+import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:billeasy/utils/upi_utils.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
@@ -113,6 +116,15 @@ class InvoicePdfService {
   // Active color scheme for current PDF build
   _VyColors _c = _VyColors(_vyPrimary, _vyLabelBg, _vyBorder, _vyBlack, _vyBody, _vyMuted);
 
+  // Cached logo image for the current PDF build
+  pw.ImageProvider? _logoImage;
+
+  // Dynamic UPI QR image bytes for the current PDF build
+  Uint8List? _invoiceQrBytes;
+
+  // Client details for the current PDF build (phone, email, address)
+  Client? _client;
+
   /// Pre-load fonts at app startup so first PDF is instant.
   Future<void> preloadFonts([AppLanguage language = AppLanguage.english]) => _loadFonts(language);
 
@@ -148,12 +160,18 @@ class InvoicePdfService {
           _fontRegular = pw.Font.ttf(data);
           _fontBold = pw.Font.ttf(data);
         case AppLanguage.gujarati:
+          // NOTE: assets/fonts/NotoSansGujarati.ttf is not yet bundled.
+          // Falls through to the catch block which uses NotoSansDevanagari
+          // as a graceful fallback (Latin + digits render correctly).
           final dataGu = await rootBundle.load(
             'assets/fonts/NotoSansGujarati.ttf',
           );
           _fontRegular = pw.Font.ttf(dataGu);
           _fontBold = pw.Font.ttf(dataGu);
         case AppLanguage.tamil:
+          // NOTE: assets/fonts/NotoSansTamil.ttf is not yet bundled.
+          // Falls through to the catch block which uses NotoSansDevanagari
+          // as a graceful fallback (Latin + digits render correctly).
           final dataTa = await rootBundle.load(
             'assets/fonts/NotoSansTamil.ttf',
           );
@@ -188,6 +206,7 @@ class InvoicePdfService {
   Future<Uint8List> buildInvoicePdf({
     required Invoice invoice,
     BusinessProfile? profile,
+    Client? client,
     AppLanguage language = AppLanguage.english,
     InvoiceTemplate template = InvoiceTemplate.vyapar,
     bool includePayment = true,
@@ -195,6 +214,7 @@ class InvoicePdfService {
     if (invoice.items.isEmpty) {
       throw ArgumentError('Cannot generate PDF for invoice with no items');
     }
+    _client = client;
     await _loadFonts(language);
     // Null-safety fallback: if _loadFonts failed to set fonts for any reason
     _fontRegular ??= pw.Font.helvetica();
@@ -206,6 +226,46 @@ class InvoicePdfService {
     const s = AppStrings(AppLanguage.english);
 
     final colors = _vyColorMap[template] ?? _vyColorMap[InvoiceTemplate.vyapar]!;
+
+    // Load business logo: try local cache first, then network
+    _logoImage = null;
+    try {
+      final cachedLogo = await LogoCacheService.load();
+      if (cachedLogo != null && cachedLogo.isNotEmpty) {
+        debugPrint('[InvoicePdf] Logo loaded from local cache: ${cachedLogo.length} bytes');
+        _logoImage = pw.MemoryImage(cachedLogo);
+      } else if (profile != null && profile.logoUrl.isNotEmpty) {
+        debugPrint('[InvoicePdf] Cache empty, downloading logo...');
+        final logoBytes = await _downloadImage(profile.logoUrl);
+        if (logoBytes != null && logoBytes.isNotEmpty) {
+          debugPrint('[InvoicePdf] Logo downloaded: ${logoBytes.length} bytes');
+          _logoImage = pw.MemoryImage(logoBytes);
+          await LogoCacheService.save(logoBytes);
+        }
+      }
+    } catch (e) {
+      debugPrint('[InvoicePdf] Logo load error: $e');
+    }
+
+    // Generate dynamic UPI QR code if merchant has UPI ID
+    _invoiceQrBytes = null;
+    if (profile != null &&
+        profile.upiId.isNotEmpty &&
+        invoice.grandTotal > 0) {
+      try {
+        // Use received amount (what customer is paying now), or grand total if nothing recorded
+        final upiAmount = invoice.amountReceived > 0 ? invoice.amountReceived : invoice.grandTotal;
+        final upiLink = buildUpiPaymentLink(
+          upiId: profile.upiId,
+          businessName: profile.storeName,
+          amount: upiAmount,
+          invoiceNumber: invoice.invoiceNumber,
+        );
+        _invoiceQrBytes = await generateQrImageBytes(upiLink, size: 200);
+      } catch (_) {
+        // Skip QR if generation fails
+      }
+    }
 
     // Route structurally different layouts to their own builders
     Future<Uint8List> Function() builder;
@@ -628,6 +688,10 @@ class InvoicePdfService {
         child: pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
+            if (_logoImage != null) ...[
+              pw.Image(_logoImage!, width: 50, height: 50, fit: pw.BoxFit.contain),
+              pw.SizedBox(width: 14),
+            ],
             pw.Expanded(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -718,6 +782,10 @@ class InvoicePdfService {
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
+            if (_logoImage != null) ...[
+              pw.Image(_logoImage!, width: 50, height: 50, fit: pw.BoxFit.contain),
+              pw.SizedBox(width: 14),
+            ],
             pw.Expanded(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -818,7 +886,6 @@ class InvoicePdfService {
             lines: [
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
             ],
             style: style,
           ),
@@ -1242,6 +1309,41 @@ class InvoicePdfService {
     final phone = profile?.phoneNumber ?? '';
     final smallFont = _vyBaseFontSize;
 
+    final sellerDetails = pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          sellerName,
+          style: pw.TextStyle(
+            color: _c.black,
+            fontSize: _vySellerNameFontSize,
+            fontWeight: pw.FontWeight.bold,
+          ),
+        ),
+        if (phone.trim().isNotEmpty) ...[
+          pw.SizedBox(height: 3),
+          pw.Text(
+            'Phone: $phone',
+            style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
+          ),
+        ],
+        if (profile != null && profile.gstin.isNotEmpty) ...[
+          pw.SizedBox(height: 2),
+          pw.Text(
+            'GSTIN: ${profile.gstin}',
+            style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
+          ),
+        ],
+        if (profile != null && profile.address.trim().isNotEmpty) ...[
+          pw.SizedBox(height: 2),
+          pw.Text(
+            profile.address.trim(),
+            style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
+          ),
+        ],
+      ],
+    );
+
     return pw.Container(
       width: double.infinity,
       padding: pw.EdgeInsets.all(_vyCellPadV * 2),
@@ -1249,40 +1351,16 @@ class InvoicePdfService {
         color: _c.labelBg,
         border: pw.Border.all(color: _c.border, width: 1),
       ),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            sellerName,
-            style: pw.TextStyle(
-              color: _c.black,
-              fontSize: _vySellerNameFontSize,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-          if (phone.trim().isNotEmpty) ...[
-            pw.SizedBox(height: 3),
-            pw.Text(
-              'Phone: $phone',
-              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
-            ),
-          ],
-          if (profile != null && profile.gstin.isNotEmpty) ...[
-            pw.SizedBox(height: 2),
-            pw.Text(
-              'GSTIN: ${profile.gstin}',
-              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
-            ),
-          ],
-          if (profile != null && profile.address.trim().isNotEmpty) ...[
-            pw.SizedBox(height: 2),
-            pw.Text(
-              profile.address.trim(),
-              style: pw.TextStyle(color: _c.muted, fontSize: smallFont),
-            ),
-          ],
-        ],
-      ),
+      child: _logoImage != null
+          ? pw.Row(
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Image(_logoImage!, width: 48, height: 48, fit: pw.BoxFit.contain),
+                pw.SizedBox(width: 10),
+                pw.Expanded(child: sellerDetails),
+              ],
+            )
+          : sellerDetails,
     );
   }
 
@@ -1346,6 +1424,27 @@ class InvoicePdfService {
                       fontWeight: pw.FontWeight.bold,
                     ),
                   ),
+                  if (_client != null && _client!.phone.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Phone: ${_client!.phone.trim()}',
+                      style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
+                    ),
+                  ],
+                  if (_client != null && _client!.email.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      'Email: ${_client!.email.trim()}',
+                      style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
+                    ),
+                  ],
+                  if (_client != null && _client!.address.trim().isNotEmpty) ...[
+                    pw.SizedBox(height: 2),
+                    pw.Text(
+                      _client!.address.trim(),
+                      style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
+                    ),
+                  ],
                   if (invoice.customerGstin.isNotEmpty) ...[
                     pw.SizedBox(height: 2),
                     pw.Text(
@@ -1612,36 +1711,9 @@ class InvoicePdfService {
                 ),
               ),
               _vyTotalRow('Amount Received', 'Rs. ${_vyNum(received)}'),
+              if (invoice.paymentMethod.isNotEmpty)
+                _vyTotalRow('Payment Mode', invoice.paymentMethod),
               _vyTotalRow('Balance Due', 'Rs. ${_vyNum(balance)}', bold: true),
-              // PAID / UNPAID stamp
-              pw.Container(
-                width: double.infinity,
-                padding: pw.EdgeInsets.symmetric(horizontal: 10, vertical: _vyCellPadV + 2),
-                decoration: pw.BoxDecoration(
-                  color: balance <= 0
-                      ? PdfColor.fromHex('#D1FAE5')   // green tint
-                      : PdfColor.fromHex('#FEF3C7'),  // amber tint
-                  border: pw.Border(
-                    top: pw.BorderSide(
-                      color: balance <= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#D97706'),
-                      width: 1,
-                    ),
-                  ),
-                ),
-                child: pw.Row(
-                  mainAxisAlignment: pw.MainAxisAlignment.center,
-                  children: [
-                    pw.Text(
-                      balance <= 0 ? '✓  PAID IN FULL' : '⚠  BALANCE PENDING',
-                      style: pw.TextStyle(
-                        fontSize: _vyBaseFontSize,
-                        fontWeight: pw.FontWeight.bold,
-                        color: balance <= 0 ? PdfColor.fromHex('#065F46') : PdfColor.fromHex('#92400E'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               if (invoice.notes != null && invoice.notes!.isNotEmpty)
                 pw.Container(
                   width: double.infinity,
@@ -2187,9 +2259,14 @@ class InvoicePdfService {
             label: s.pdfBillTo,
             name: _customerName(invoice),
             lines: [
+              if (_client != null && _client!.phone.trim().isNotEmpty)
+                'Phone: ${_client!.phone.trim()}',
+              if (_client != null && _client!.email.trim().isNotEmpty)
+                'Email: ${_client!.email.trim()}',
+              if (_client != null && _client!.address.trim().isNotEmpty)
+                _client!.address.trim(),
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
             ],
           ),
         ),
@@ -2604,6 +2681,15 @@ class InvoicePdfService {
                 _customerName(invoice),
                 style: pw.TextStyle(color: _compactText, fontSize: 8, fontWeight: pw.FontWeight.bold),
               ),
+              if (_client != null && _client!.phone.trim().isNotEmpty)
+                pw.Text('Phone: ${_client!.phone.trim()}',
+                  style: pw.TextStyle(color: _compactMuted, fontSize: 6)),
+              if (_client != null && _client!.email.trim().isNotEmpty)
+                pw.Text('Email: ${_client!.email.trim()}',
+                  style: pw.TextStyle(color: _compactMuted, fontSize: 6)),
+              if (_client != null && _client!.address.trim().isNotEmpty)
+                pw.Text(_client!.address.trim(),
+                  style: pw.TextStyle(color: _compactMuted, fontSize: 6)),
               if (invoice.customerGstin.isNotEmpty)
                 pw.Text(
                   'GSTIN: ${invoice.customerGstin}',
@@ -2844,42 +2930,6 @@ class InvoicePdfService {
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
-                  // Status banner inside card
-                  pw.Container(
-                    padding: const pw.EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: pw.BoxDecoration(
-                      color: _statusBg(invoice.effectiveStatus),
-                      borderRadius: const pw.BorderRadius.only(
-                        topLeft: pw.Radius.circular(13),
-                        topRight: pw.Radius.circular(13),
-                      ),
-                    ),
-                    child: pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text(
-                          s.detailsStatus.toUpperCase(),
-                          style: pw.TextStyle(
-                            color: _statusColor(invoice.effectiveStatus),
-                            fontSize: 8,
-                            fontWeight: pw.FontWeight.bold,
-                            letterSpacing: 1.0,
-                          ),
-                        ),
-                        pw.Text(
-                          _statusLabel(invoice.effectiveStatus, s),
-                          style: pw.TextStyle(
-                            color: _statusColor(invoice.effectiveStatus),
-                            fontSize: 10,
-                            fontWeight: pw.FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   pw.Padding(
                     padding: const pw.EdgeInsets.all(16),
                     child: pw.Column(
@@ -2946,9 +2996,12 @@ class InvoicePdfService {
             label: s.pdfBillTo,
             name: _customerName(invoice),
             lines: [
-              if (invoice.clientId.trim().isNotEmpty)
-                '${s.detailsReference}: ${invoice.clientId.trim()}',
-              '${s.detailsStatus}: ${_statusLabel(invoice.effectiveStatus, s)}',
+              if (_client != null && _client!.phone.trim().isNotEmpty)
+                'Phone: ${_client!.phone.trim()}',
+              if (_client != null && _client!.email.trim().isNotEmpty)
+                'Email: ${_client!.email.trim()}',
+              if (_client != null && _client!.address.trim().isNotEmpty)
+                _client!.address.trim(),
               if (invoice.customerGstin.isNotEmpty)
                 'GSTIN: ${invoice.customerGstin}',
             ],
@@ -3248,7 +3301,7 @@ class InvoicePdfService {
         color: const PdfColor(0.94, 0.99, 0.99),
       ),
       child: pw.Text(
-        '${_statusLabel(invoice.effectiveStatus, s)} · BillRaja',
+        'BillRaja',
         style: pw.TextStyle(color: _mutedText, fontSize: 10, lineSpacing: 2),
       ),
     );
@@ -3258,18 +3311,57 @@ class InvoicePdfService {
   // Payment Section (UPI) — only rendered if user has set up UPI
   // -------------------------------------------------------------------------
 
-  /// Downloads the QR code image bytes from the given URL.
+  /// Downloads image bytes from a URL. Works on both web and native.
   /// Returns null if download fails.
-  static Future<Uint8List?> _downloadImage(String url) async {
+  /// Strips the `token` query parameter from a Firebase Storage URL.
+  /// With public-read storage rules, the token is unnecessary and an
+  /// expired/revoked token causes 403 errors.
+  static String _stripStorageToken(String url) {
     try {
-      final httpClient = HttpClient();
-      final request = await httpClient.getUrl(Uri.parse(url));
-      final response = await request.close();
-      if (response.statusCode != 200) return null;
-      final bytes = await consolidateHttpClientResponseBytes(response);
-      httpClient.close();
-      return bytes;
-    } catch (_) {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('firebasestorage') && uri.queryParameters.containsKey('token')) {
+        final params = Map<String, String>.from(uri.queryParameters)..remove('token');
+        return uri.replace(queryParameters: params).toString();
+      }
+    } catch (_) {}
+    return url;
+  }
+
+  /// Downloads image bytes from a URL. Works on both web and native.
+  static Future<Uint8List?> _downloadImage(String rawUrl) async {
+    // Strip expired Firebase Storage tokens — public-read rules don't need them
+    final url = _stripStorageToken(rawUrl);
+    try {
+      // First try: use NetworkAssetBundle (works on both web and native)
+      try {
+        final uri = Uri.parse(url);
+        final bundle = NetworkAssetBundle(uri);
+        final data = await bundle.load(url).timeout(const Duration(seconds: 15));
+        final bytes = data.buffer.asUint8List();
+        if (bytes.isNotEmpty) return bytes;
+      } catch (e) {
+        debugPrint('[InvoicePdf] NetworkAssetBundle failed: $e');
+      }
+
+      // Fallback for native: use HttpClient directly
+      if (!kIsWeb) {
+        final httpClient = HttpClient();
+        httpClient.connectionTimeout = const Duration(seconds: 10);
+        final request = await httpClient.getUrl(Uri.parse(url));
+        final response = await request.close();
+        if (response.statusCode == 200) {
+          final bytes = await consolidateHttpClientResponseBytes(response);
+          httpClient.close();
+          if (bytes.isNotEmpty) return bytes;
+        } else {
+          debugPrint('[InvoicePdf] HttpClient failed: HTTP ${response.statusCode}');
+          httpClient.close();
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('[InvoicePdf] Image download error: $e');
       return null;
     }
   }
@@ -3278,13 +3370,17 @@ class InvoicePdfService {
     final hasUpi = profile.upiId.isNotEmpty;
     final hasNumber = profile.upiNumber.isNotEmpty;
     final hasQr = profile.upiQrUrl.isNotEmpty;
+    final hasDynamicQr = _invoiceQrBytes != null;
 
-    if (!hasUpi && !hasNumber && !hasQr) {
+    if (!hasUpi && !hasNumber && !hasQr && !hasDynamicQr) {
       return pw.SizedBox.shrink();
     }
 
+    // Prefer dynamic (invoice-specific) QR, fall back to static QR from profile
     pw.Widget? qrImage;
-    if (hasQr) {
+    if (hasDynamicQr) {
+      qrImage = pw.Image(pw.MemoryImage(_invoiceQrBytes!), width: 100, height: 100);
+    } else if (hasQr) {
       final bytes = await _downloadImage(profile.upiQrUrl);
       if (bytes != null) {
         qrImage = pw.Image(pw.MemoryImage(bytes), width: 100, height: 100);
@@ -3313,17 +3409,7 @@ class InvoicePdfService {
                   ),
                 ),
                 pw.SizedBox(height: 8),
-                if (hasUpi) ...[
-                  pw.Text('UPI ID', style: pw.TextStyle(fontSize: 8, color: _mutedText)),
-                  pw.SizedBox(height: 2),
-                  pw.Text(profile.upiId, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 6),
-                ],
-                if (hasNumber) ...[
-                  pw.Text('UPI Number', style: pw.TextStyle(fontSize: 8, color: _mutedText)),
-                  pw.SizedBox(height: 2),
-                  pw.Text(profile.upiNumber, style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
-                ],
+                // QR code is sufficient — no need to display UPI ID/number text
               ],
             ),
           ),
@@ -3331,9 +3417,17 @@ class InvoicePdfService {
             pw.SizedBox(width: 16),
             pw.Column(
               children: [
-                qrImage,
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(4),
+                  decoration: pw.BoxDecoration(
+                    border: pw.Border.all(color: _border, width: 0.5),
+                    borderRadius: pw.BorderRadius.circular(4),
+                  ),
+                  child: qrImage,
+                ),
                 pw.SizedBox(height: 4),
-                pw.Text('Scan to Pay', style: pw.TextStyle(fontSize: 7, color: _mutedText)),
+                pw.Text('Scan to Pay',
+                    style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: _headingText)),
               ],
             ),
           ],
@@ -3583,6 +3677,13 @@ class InvoicePdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: pw.CrossAxisAlignment.center,
                 children: [
+                  pw.Row(
+                    crossAxisAlignment: pw.CrossAxisAlignment.center,
+                    children: [
+                      if (_logoImage != null) ...[
+                        pw.Image(_logoImage!, width: 44, height: 44, fit: pw.BoxFit.contain),
+                        pw.SizedBox(width: 12),
+                      ],
                   pw.Column(
                     crossAxisAlignment: pw.CrossAxisAlignment.start,
                     children: [
@@ -3592,6 +3693,8 @@ class InvoicePdfService {
                         pw.Text(profile!.phoneNumber, style: pw.TextStyle(color: PdfColor.fromHex('#FFFFFFCC'), fontSize: _vyBaseFontSize)),
                       if (profile?.gstin.isNotEmpty == true)
                         pw.Text('GSTIN: ${profile!.gstin}', style: pw.TextStyle(color: PdfColor.fromHex('#FFFFFFCC'), fontSize: _vyBaseFontSize)),
+                    ],
+                  ),
                     ],
                   ),
                   pw.Column(
@@ -3633,6 +3736,12 @@ class InvoicePdfService {
                       pw.Text('BILL TO', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, fontWeight: pw.FontWeight.bold, color: _c.primary)),
                       pw.SizedBox(height: 2),
                       pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                      if (_client != null && _client!.phone.trim().isNotEmpty)
+                        pw.Text('Phone: ${_client!.phone.trim()}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                      if (_client != null && _client!.email.trim().isNotEmpty)
+                        pw.Text('Email: ${_client!.email.trim()}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                      if (_client != null && _client!.address.trim().isNotEmpty)
+                        pw.Text(_client!.address.trim(), style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                       if (invoice.customerGstin?.isNotEmpty == true)
                         pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                     ]),
@@ -3782,12 +3891,18 @@ class InvoicePdfService {
                 padding: const pw.EdgeInsets.all(10),
                 decoration: pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: _c.primary, width: 1))),
                 child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
-                  pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
-                    pw.Text(_sellerName(profile, s), style: pw.TextStyle(fontSize: _vySellerNameFontSize, fontWeight: pw.FontWeight.bold, color: _c.body)),
-                    if (profile?.phoneNumber.isNotEmpty == true)
-                      pw.Text('Ph: ${profile!.phoneNumber}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.muted)),
-                    if (profile?.address.isNotEmpty == true)
-                      pw.Text(profile!.address, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  pw.Row(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                    if (_logoImage != null) ...[
+                      pw.Image(_logoImage!, width: 40, height: 40, fit: pw.BoxFit.contain),
+                      pw.SizedBox(width: 8),
+                    ],
+                    pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
+                      pw.Text(_sellerName(profile, s), style: pw.TextStyle(fontSize: _vySellerNameFontSize, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                      if (profile?.phoneNumber.isNotEmpty == true)
+                        pw.Text('Ph: ${profile!.phoneNumber}', style: pw.TextStyle(fontSize: _vyBaseFontSize, color: _c.muted)),
+                      if (profile?.address.isNotEmpty == true)
+                        pw.Text(profile!.address, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                    ]),
                   ]),
                   pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
                     if (profile?.gstin.isNotEmpty == true)
@@ -3806,6 +3921,12 @@ class InvoicePdfService {
                 child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                   pw.Text('BILL TO:', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, fontWeight: pw.FontWeight.bold, color: _c.primary)),
                   pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                  if (_client != null && _client!.phone.trim().isNotEmpty)
+                    pw.Text('Phone: ${_client!.phone.trim()}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (_client != null && _client!.email.trim().isNotEmpty)
+                    pw.Text('Email: ${_client!.email.trim()}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (_client != null && _client!.address.trim().isNotEmpty)
+                    pw.Text(_client!.address.trim(), style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                   if (invoice.customerGstin?.isNotEmpty == true)
                     pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                 ]),
@@ -3887,6 +4008,10 @@ class InvoicePdfService {
                 child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                   pw.Text('FROM', style: pw.TextStyle(fontSize: _vyBaseFontSize - 2, fontWeight: pw.FontWeight.bold, color: _c.primary, letterSpacing: 1)),
                   pw.SizedBox(height: 3),
+                  if (_logoImage != null) ...[
+                    pw.Image(_logoImage!, width: 36, height: 36, fit: pw.BoxFit.contain),
+                    pw.SizedBox(height: 4),
+                  ],
                   pw.Text(_sellerName(profile, s), style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
                   if (profile?.phoneNumber.isNotEmpty == true)
                     pw.Text(profile!.phoneNumber, style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
@@ -3905,6 +4030,12 @@ class InvoicePdfService {
                   pw.Text('BILL TO', style: pw.TextStyle(fontSize: _vyBaseFontSize - 2, fontWeight: pw.FontWeight.bold, color: _c.primary, letterSpacing: 1)),
                   pw.SizedBox(height: 3),
                   pw.Text(invoice.clientName, style: pw.TextStyle(fontSize: _vyBaseFontSize + 1, fontWeight: pw.FontWeight.bold, color: _c.body)),
+                  if (_client != null && _client!.phone.trim().isNotEmpty)
+                    pw.Text('Ph: ${_client!.phone.trim()}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (_client != null && _client!.email.trim().isNotEmpty)
+                    pw.Text(_client!.email.trim(), style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
+                  if (_client != null && _client!.address.trim().isNotEmpty)
+                    pw.Text(_client!.address.trim(), style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                   if (invoice.customerGstin?.isNotEmpty == true)
                     pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: _vyBaseFontSize - 1, color: _c.muted)),
                   pw.SizedBox(height: 4),
@@ -3961,6 +4092,11 @@ class InvoicePdfService {
           crossAxisAlignment: pw.CrossAxisAlignment.center,
           mainAxisSize: pw.MainAxisSize.min,
           children: [
+            // Logo centered (small for receipt)
+            if (_logoImage != null) ...[
+              pw.Center(child: pw.Image(_logoImage!, width: 36, height: 36, fit: pw.BoxFit.contain)),
+              pw.SizedBox(height: 4),
+            ],
             // Store name centered
             pw.Text(_sellerName(profile, s),
               style: pw.TextStyle(fontSize: fs + 4, fontWeight: pw.FontWeight.bold, color: _c.body),
@@ -3982,6 +4118,12 @@ class InvoicePdfService {
             // Customer
             pw.Align(alignment: pw.Alignment.centerLeft,
               child: pw.Text('Customer: ${invoice.clientName}', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold, color: _c.body))),
+            if (_client != null && _client!.phone.trim().isNotEmpty)
+              pw.Align(alignment: pw.Alignment.centerLeft,
+                child: pw.Text('Ph: ${_client!.phone.trim()}', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted))),
+            if (_client != null && _client!.address.trim().isNotEmpty)
+              pw.Align(alignment: pw.Alignment.centerLeft,
+                child: pw.Text(_client!.address.trim(), style: pw.TextStyle(fontSize: fs - 1, color: _c.muted))),
             if (invoice.customerGstin?.isNotEmpty == true)
               pw.Align(alignment: pw.Alignment.centerLeft,
                 child: pw.Text('GSTIN: ${invoice.customerGstin}', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted))),
@@ -3995,15 +4137,33 @@ class InvoicePdfService {
             ]),
             pw.SizedBox(height: 2),
             // Items
-            ...invoice.items.map((item) => pw.Padding(
-              padding: const pw.EdgeInsets.symmetric(vertical: 1),
-              child: pw.Row(children: [
-                pw.Expanded(flex: 4, child: pw.Text(item.description, style: pw.TextStyle(fontSize: fs, color: _c.body), maxLines: 1)),
-                pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.center)),
-                pw.Expanded(flex: 2, child: pw.Text(_fmt(item.unitPrice), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
-                pw.Expanded(flex: 2, child: pw.Text(_fmt(item.total), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
-              ]),
-            )),
+            ...invoice.items.expand((item) => [
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                child: pw.Row(children: [
+                  pw.Expanded(flex: 4, child: pw.Text(item.description, style: pw.TextStyle(fontSize: fs, color: _c.body), maxLines: 1)),
+                  pw.Expanded(flex: 1, child: pw.Text('${item.quantity}', style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.center)),
+                  pw.Expanded(flex: 2, child: pw.Text(_fmt(item.unitPrice), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 2, child: pw.Text(_fmt(item.total), style: pw.TextStyle(fontSize: fs, color: _c.body), textAlign: pw.TextAlign.right)),
+                ]),
+              ),
+              if (item.discountPercent > 0)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(left: 8, bottom: 1),
+                  child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text('  Disc ${item.discountPercent.toStringAsFixed(item.discountPercent == item.discountPercent.truncateToDouble() ? 0 : 1)}%', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted)),
+                    pw.Text('- ${_fmt(item.discountAmount)}', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted)),
+                  ]),
+                ),
+              if (invoice.gstEnabled && item.gstRate > 0)
+                pw.Padding(
+                  padding: const pw.EdgeInsets.only(left: 8, bottom: 1),
+                  child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                    pw.Text('  GST ${item.gstRate.toStringAsFixed(item.gstRate == item.gstRate.truncateToDouble() ? 0 : 1)}%', style: pw.TextStyle(fontSize: fs - 1, color: _c.muted)),
+                    pw.Text(_fmt(item.gstAmount), style: pw.TextStyle(fontSize: fs - 1, color: _c.muted)),
+                  ]),
+                ),
+            ]),
             dashedLine(),
             // Totals
             _receiptTotalLine('Sub Total', _fmt(invoice.items.fold<double>(0, (sum, i) => sum + i.rawTotal)), fs),
@@ -4025,6 +4185,19 @@ class InvoicePdfService {
               pw.Text('GRAND TOTAL', style: pw.TextStyle(fontSize: fs + 2, fontWeight: pw.FontWeight.bold, color: _c.primary)),
               pw.Text(_fmt(invoice.grandTotal), style: pw.TextStyle(fontSize: fs + 2, fontWeight: pw.FontWeight.bold, color: _c.primary)),
             ]),
+            if (invoice.amountReceived > 0) ...[
+              pw.SizedBox(height: 2),
+              _receiptTotalLine('Paid', _fmt(invoice.amountReceived), fs),
+              pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 1),
+                child: pw.Row(mainAxisAlignment: pw.MainAxisAlignment.spaceBetween, children: [
+                  pw.Text('Balance Due', style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold,
+                    color: invoice.balanceDue <= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#D97706'))),
+                  pw.Text(_fmt(invoice.balanceDue), style: pw.TextStyle(fontSize: fs, fontWeight: pw.FontWeight.bold,
+                    color: invoice.balanceDue <= 0 ? PdfColor.fromHex('#059669') : PdfColor.fromHex('#D97706'))),
+                ]),
+              ),
+            ],
             dashedLine(),
             if (invoice.dueDate != null)
               pw.Text('Due Date: ${_dateFormat.format(invoice.dueDate!)}', style: pw.TextStyle(fontSize: fs, color: _c.muted), textAlign: pw.TextAlign.center),

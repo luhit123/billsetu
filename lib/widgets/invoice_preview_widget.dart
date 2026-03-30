@@ -60,6 +60,7 @@ class InvoicePreviewWidget extends StatelessWidget {
     this.profile,
     this.template = InvoiceTemplate.vyapar,
     this.signatureImage,
+    this.logoImage,
     this.onSignatureTap,
     this.onTermsTap,
     this.termsText,
@@ -69,6 +70,7 @@ class InvoicePreviewWidget extends StatelessWidget {
   final BusinessProfile? profile;
   final InvoiceTemplate template;
   final Uint8List? signatureImage;
+  final Uint8List? logoImage;
   final VoidCallback? onSignatureTap;
   final VoidCallback? onTermsTap;
   final String? termsText;
@@ -78,6 +80,53 @@ class InvoicePreviewWidget extends StatelessWidget {
   String get _sellerName {
     final name = profile?.storeName.trim() ?? '';
     return name.isNotEmpty ? name : 'Your Store';
+  }
+
+  bool get _hasLogo => profile != null && profile!.logoUrl.isNotEmpty;
+
+  /// Strip expired Firebase Storage token from URL (public-read rules don't need it)
+  String _cleanLogoUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (uri.host.contains('firebasestorage') && uri.queryParameters.containsKey('token')) {
+        final params = Map<String, String>.from(uri.queryParameters)..remove('token');
+        return uri.replace(queryParameters: params).toString();
+      }
+    } catch (_) {}
+    return url;
+  }
+
+  bool get _hasLogoImage => logoImage != null;
+
+  Widget _logoWidget({double size = 32}) {
+    if (!_hasLogo && !_hasLogoImage) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(4),
+        child: _hasLogoImage
+            ? Image.memory(
+                logoImage!,
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                cacheWidth: (size * 2).toInt(),
+                cacheHeight: (size * 2).toInt(),
+              )
+            : Image.network(
+                _cleanLogoUrl(profile!.logoUrl),
+                width: size,
+                height: size,
+                fit: BoxFit.contain,
+                cacheWidth: (size * 2).toInt(),
+                cacheHeight: (size * 2).toInt(),
+                errorBuilder: (_, error, ___) {
+                  debugPrint('[InvoicePreview] Logo load error: $error');
+                  return Icon(Icons.store_rounded, size: size * 0.6, color: const Color(0xFFBDBDBD));
+                },
+              ),
+      ),
+    );
   }
 
   static final _dateFormat = DateFormat('dd-MM-yyyy');
@@ -129,16 +178,24 @@ class InvoicePreviewWidget extends StatelessWidget {
           // ── Seller Box ──
           _bordered(c, child: Padding(
             padding: const EdgeInsets.all(8),
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_sellerName, style: TextStyle(color: c.black, fontSize: 12, fontWeight: FontWeight.bold)),
-                if (profile?.phoneNumber != null && profile!.phoneNumber.isNotEmpty)
-                  Text('Phone no.: ${profile!.phoneNumber}', style: TextStyle(color: c.body, fontSize: 9)),
-                if (profile?.address != null && profile!.address.isNotEmpty)
-                  Text(profile!.address, style: TextStyle(color: c.body, fontSize: 9)),
-                if (profile?.gstin != null && profile!.gstin.isNotEmpty)
-                  Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: c.body, fontSize: 9)),
+                _logoWidget(size: 36),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_sellerName, style: TextStyle(color: c.black, fontSize: 12, fontWeight: FontWeight.bold)),
+                      if (profile?.phoneNumber != null && profile!.phoneNumber.isNotEmpty)
+                        Text('Phone no.: ${profile!.phoneNumber}', style: TextStyle(color: c.body, fontSize: 9)),
+                      if (profile?.address != null && profile!.address.isNotEmpty)
+                        Text(profile!.address, style: TextStyle(color: c.body, fontSize: 9)),
+                      if (profile?.gstin != null && profile!.gstin.isNotEmpty)
+                        Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: c.body, fontSize: 9)),
+                    ],
+                  ),
+                ),
               ],
             ),
           )),
@@ -397,14 +454,24 @@ class InvoicePreviewWidget extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Expanded(child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Expanded(child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Text(_sellerName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
-                    if (profile?.phoneNumber.isNotEmpty == true)
-                      Text(profile!.phoneNumber, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 8)),
-                    if (profile?.gstin.isNotEmpty == true)
-                      Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 8)),
+                    if (_hasLogo) ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 30, height: 30, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    ),
+                    if (_hasLogo) const SizedBox(width: 8),
+                    Expanded(child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_sellerName, style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                        if (profile?.phoneNumber.isNotEmpty == true)
+                          Text(profile!.phoneNumber, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 8)),
+                        if (profile?.gstin.isNotEmpty == true)
+                          Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 8)),
+                      ],
+                    )),
                   ],
                 )),
                 Column(
@@ -427,7 +494,6 @@ class InvoicePreviewWidget extends StatelessWidget {
                 Text('Date: ${_dateFormat.format(invoice.createdAt)}', style: TextStyle(fontSize: 8, color: c.body)),
                 if (invoice.dueDate != null)
                   Text('Due: ${_dateFormat.format(invoice.dueDate!)}', style: TextStyle(fontSize: 8, color: c.body)),
-                Text(invoice.status.name.toUpperCase(), style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: c.primary)),
               ],
             ),
           ),
@@ -577,14 +643,17 @@ class InvoicePreviewWidget extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(_sellerName, style: TextStyle(color: c.primary, fontSize: 13, fontWeight: FontWeight.bold)),
-                  if (profile?.phoneNumber.isNotEmpty == true)
-                    Text(profile!.phoneNumber, style: TextStyle(color: c.body, fontSize: 8)),
-                  if (profile?.address.isNotEmpty == true)
-                    Text(profile!.address, style: TextStyle(color: c.body, fontSize: 8)),
-                  if (profile?.gstin.isNotEmpty == true)
-                    Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: c.body, fontSize: 8)),
+                Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  _logoWidget(size: 30),
+                  Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(_sellerName, style: TextStyle(color: c.primary, fontSize: 13, fontWeight: FontWeight.bold)),
+                    if (profile?.phoneNumber.isNotEmpty == true)
+                      Text(profile!.phoneNumber, style: TextStyle(color: c.body, fontSize: 8)),
+                    if (profile?.address.isNotEmpty == true)
+                      Text(profile!.address, style: TextStyle(color: c.body, fontSize: 8)),
+                    if (profile?.gstin.isNotEmpty == true)
+                      Text('GSTIN: ${profile!.gstin}', style: TextStyle(color: c.body, fontSize: 8)),
+                  ]),
                 ]),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
                   Text('TAX INVOICE', style: TextStyle(color: c.black, fontSize: 15, fontWeight: FontWeight.bold)),
@@ -654,7 +723,10 @@ class InvoicePreviewWidget extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.primary, width: 2))),
             child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text(_sellerName, style: TextStyle(color: c.primary, fontSize: 13, fontWeight: FontWeight.bold)),
+              Row(children: [
+                _logoWidget(size: 26),
+                Text(_sellerName, style: TextStyle(color: c.primary, fontSize: 13, fontWeight: FontWeight.bold)),
+              ]),
               Text('TAX INVOICE', style: TextStyle(color: c.black, fontSize: 13, fontWeight: FontWeight.bold)),
             ]),
           ),
@@ -752,6 +824,13 @@ class InvoicePreviewWidget extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
               children: [
+                if (_hasLogo) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 28, height: 28, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                  ),
+                  const SizedBox(height: 4),
+                ],
                 Text(_sellerName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: c.body), textAlign: TextAlign.center),
                 if (profile?.phoneNumber.isNotEmpty == true)
                   Text(profile!.phoneNumber, style: TextStyle(fontSize: 8, color: c.muted), textAlign: TextAlign.center),
@@ -781,14 +860,35 @@ class InvoicePreviewWidget extends StatelessWidget {
                   Expanded(flex: 2, child: Text('Amt', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: c.body), textAlign: TextAlign.right)),
                 ]),
                 const SizedBox(height: 2),
-                ...invoice.items.map((item) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 1),
-                  child: Row(children: [
-                    Expanded(flex: 4, child: Text(item.description, style: TextStyle(fontSize: 8, color: c.body), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                    Expanded(flex: 1, child: Text(item.quantityText, style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.center)),
-                    Expanded(flex: 2, child: Text('₹${_fmt(item.unitPrice)}', style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.right)),
-                    Expanded(flex: 2, child: Text('₹${_fmt(item.total)}', style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.right)),
-                  ]),
+                ...invoice.items.map((item) => Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 1),
+                      child: Row(children: [
+                        Expanded(flex: 4, child: Text(item.description, style: TextStyle(fontSize: 8, color: c.body), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                        Expanded(flex: 1, child: Text(item.quantityText, style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.center)),
+                        Expanded(flex: 2, child: Text('₹${_fmt(item.unitPrice)}', style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.right)),
+                        Expanded(flex: 2, child: Text('₹${_fmt(item.total)}', style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.right)),
+                      ]),
+                    ),
+                    if (item.discountPercent > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 1),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          Text('  Disc ${item.discountPercent.toStringAsFixed(item.discountPercent == item.discountPercent.truncateToDouble() ? 0 : 1)}%', style: TextStyle(fontSize: 7, color: c.muted)),
+                          Text('- ₹${_fmt(item.discountAmount)}', style: TextStyle(fontSize: 7, color: c.muted)),
+                        ]),
+                      ),
+                    if (hasGst && item.gstRate > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 8, bottom: 1),
+                        child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                          Text('  GST ${item.gstRate.toStringAsFixed(item.gstRate == item.gstRate.truncateToDouble() ? 0 : 1)}%', style: TextStyle(fontSize: 7, color: c.muted)),
+                          Text('₹${_fmt(item.gstAmount)}', style: TextStyle(fontSize: 7, color: c.muted)),
+                        ]),
+                      ),
+                  ],
                 )),
                 dashed(),
                 totalLine('Sub Total', '₹${_fmt(rawTotal)}'),
@@ -810,6 +910,12 @@ class InvoicePreviewWidget extends StatelessWidget {
                   Text('GRAND TOTAL', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c.primary)),
                   Text('₹${_fmt(invoice.grandTotal)}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: c.primary)),
                 ]),
+                if (invoice.amountReceived > 0) ...[
+                  const SizedBox(height: 2),
+                  totalLine('Paid', '₹${_fmt(invoice.amountReceived)}'),
+                  totalLine('Balance Due', '₹${_fmt(invoice.balanceDue)}', bold: true,
+                    col: invoice.balanceDue <= 0 ? const Color(0xFF059669) : const Color(0xFFD97706)),
+                ],
                 dashed(),
                 const SizedBox(height: 2),
                 Text('Thank you for your business!', style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: c.body), textAlign: TextAlign.center),

@@ -23,9 +23,11 @@ exports.setupUserTrial = onDocumentCreated('users/{uid}', async (event) => {
   // Only set trialExpiresAt if not already present
   if (data.trialExpiresAt) return;
 
+  const config = await getPricingConfig();
+  const trialMonths = config.trial_duration_months || 6;
   const createdAt = data.createdAt ? data.createdAt.toDate() : new Date();
   const trialExpiresAt = new Date(createdAt);
-  trialExpiresAt.setMonth(trialExpiresAt.getMonth() + 6);
+  trialExpiresAt.setMonth(trialExpiresAt.getMonth() + trialMonths);
 
   await db.collection('users').doc(uid).update({
     trialExpiresAt: Timestamp.fromDate(trialExpiresAt),
@@ -37,7 +39,7 @@ exports.setupUserTrial = onDocumentCreated('users/{uid}', async (event) => {
 // Keep one warm instance to eliminate cold-start latency for this
 // critical user-facing function called on every invoice creation.
 // NOTE: Enable enforceAppCheck once debug tokens are registered in Firebase Console
-exports.reserveInvoiceNumber = onCall({ minInstances: 1 }, async (request) => {
+exports.reserveInvoiceNumber = onCall({ minInstances: 1, memory: '256MiB', timeoutSeconds: 30 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in is required to reserve invoice numbers.');
@@ -463,7 +465,7 @@ exports.markOverdueInvoices = onSchedule(
 );
 
 // NOTE: Enable enforceAppCheck once debug tokens are registered in Firebase Console
-exports.backfillMyInvoiceData = onCall(async (request) => {
+exports.backfillMyInvoiceData = onCall({ memory: '512MiB', timeoutSeconds: 300 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in is required to backfill invoice data.');
@@ -1344,13 +1346,44 @@ if (!RAZORPAY_WEBHOOK_SECRET) {
   logger.warn('RAZORPAY_WEBHOOK_SECRET is not set — webhook signature verification will reject all requests');
 }
 
-// Plan pricing in paise (₹1 = 100 paise)
-const PLAN_PRICING = {
-  pro: {
-    monthly: 12900,    // ₹129/mo
-    annual: 99900,     // ₹999/yr
-  },
+// ── Pricing & config: read from Firestore config/pricing (single source of truth) ──
+// Defaults used only if the Firestore document doesn't exist yet.
+const DEFAULT_PRICING = {
+  pro_monthly_paise: 9900,     // ₹99/mo
+  pro_annual_paise: 99900,     // ₹999/yr
+  trial_duration_months: 6,
+  grace_period_days: 7,
 };
+
+let _pricingCache = null;
+let _pricingCacheTime = 0;
+const PRICING_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getPricingConfig() {
+  const now = Date.now();
+  if (_pricingCache && (now - _pricingCacheTime) < PRICING_CACHE_TTL_MS) {
+    return _pricingCache;
+  }
+  try {
+    const doc = await db.collection('config').doc('pricing').get();
+    if (doc.exists) {
+      _pricingCache = { ...DEFAULT_PRICING, ...doc.data() };
+    } else {
+      // Seed the config document with defaults on first access
+      await db.collection('config').doc('pricing').set(DEFAULT_PRICING);
+      _pricingCache = { ...DEFAULT_PRICING };
+    }
+  } catch (e) {
+    logger.warn('Failed to read config/pricing, using defaults', { error: e.message });
+    _pricingCache = { ...DEFAULT_PRICING };
+  }
+  _pricingCacheTime = now;
+  return _pricingCache;
+}
+
+function getPriceInPaise(config, billingCycle) {
+  return billingCycle === 'annual' ? config.pro_annual_paise : config.pro_monthly_paise;
+}
 
 // Razorpay Plan IDs — cached from Firestore config/razorpay_plans.
 // Only 'pro_monthly' and 'pro_annual' are valid now.
@@ -1374,13 +1407,16 @@ async function getRazorpayPlanIds() {
 async function ensureRazorpayPlan(planId, billingCycle) {
   const planIds = await getRazorpayPlanIds();
   const key = `${planId}_${billingCycle}`;
+  const amountKey = `${key}_amount`;
 
-  if (planIds && planIds[key]) {
+  // Create plan via Razorpay API using Firestore pricing config
+  const config = await getPricingConfig();
+  const amount = getPriceInPaise(config, billingCycle);
+
+  // Reuse cached plan only if pricing hasn't changed
+  if (planIds && planIds[key] && planIds[amountKey] === amount) {
     return planIds[key];
   }
-
-  // Create plan via Razorpay API
-  const pricing = PLAN_PRICING[planId];
   const displayName = planId.charAt(0).toUpperCase() + planId.slice(1);
   const period = billingCycle === 'annual' ? 'yearly' : 'monthly';
 
@@ -1389,23 +1425,24 @@ async function ensureRazorpayPlan(planId, billingCycle) {
     interval: 1,
     item: {
       name: `${displayName} ${billingCycle === 'annual' ? 'Annual' : 'Monthly'}`,
-      amount: pricing[billingCycle],
+      amount,
       currency: 'INR',
-      description: `BillEasy ${displayName} plan — ${billingCycle} billing`,
+      description: `BillRaja ${displayName} plan — ${billingCycle} billing`,
     },
   });
 
-  // Cache in Firestore
+  // Cache plan ID + amount in Firestore (amount lets us detect pricing changes)
   await db.collection('config').doc('razorpay_plans').set(
-    { [key]: rzpPlan.id },
+    { [key]: rzpPlan.id, [amountKey]: amount },
     { merge: true }
   );
 
   // Update in-memory cache
   if (!RAZORPAY_PLAN_IDS) RAZORPAY_PLAN_IDS = {};
   RAZORPAY_PLAN_IDS[key] = rzpPlan.id;
+  RAZORPAY_PLAN_IDS[amountKey] = amount;
 
-  logger.info('Created Razorpay plan', { key, rzpPlanId: rzpPlan.id });
+  logger.info('Created Razorpay plan', { key, rzpPlanId: rzpPlan.id, amount });
   return rzpPlan.id;
 }
 
@@ -1414,7 +1451,7 @@ async function ensureRazorpayPlan(planId, billingCycle) {
  * Returns the subscription ID for client-side checkout.
  */
 exports.createSubscription = onCall(
-  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
+  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'], memory: '256MiB', timeoutSeconds: 60 },
   async (request) => {
     const uid = request.auth && request.auth.uid;
     if (!uid) {
@@ -1461,8 +1498,8 @@ exports.createSubscription = onCall(
       logger.error('ensureRazorpayPlan failed', { error: JSON.stringify(errDetail), statusCode: planErr.statusCode, stack: planErr.stack });
       throw new HttpsError('internal', 'Failed to create billing plan. Please try again later.');
     }
-    const pricing = PLAN_PRICING[planId];
-    const priceInPaise = pricing[billingCycle];
+    const pricingConfig = await getPricingConfig();
+    const priceInPaise = getPriceInPaise(pricingConfig, billingCycle);
 
     // Total billing cycles: 12 for monthly (1 year), 1 for annual
     const totalCount = billingCycle === 'annual' ? 5 : 12;
@@ -1522,7 +1559,7 @@ exports.createSubscription = onCall(
  * Cancel subscription — cancels on Razorpay and updates Firestore.
  */
 exports.cancelSubscription = onCall(
-  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'] },
+  { secrets: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET'], memory: '256MiB', timeoutSeconds: 60 },
   async (request) => {
     const uid = request.auth && request.auth.uid;
     if (!uid) {
@@ -1579,7 +1616,7 @@ exports.cancelSubscription = onCall(
  * Reactivate a subscription that was set to cancel at period end.
  * Reverses the cancelAtPeriodEnd flag so the subscription continues.
  */
-exports.reactivateSubscription = onCall(async (request) => {
+exports.reactivateSubscription = onCall({ memory: '256MiB', timeoutSeconds: 60 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in required.');
@@ -1614,7 +1651,7 @@ exports.reactivateSubscription = onCall(async (request) => {
  * Called by Flutter client to confirm payment is genuine.
  */
 exports.verifyPayment = onCall(
-  { secrets: ['RAZORPAY_KEY_SECRET'] },
+  { secrets: ['RAZORPAY_KEY_SECRET'], memory: '256MiB', timeoutSeconds: 60 },
   async (request) => {
     const uid = request.auth && request.auth.uid;
     if (!uid) {
@@ -1766,8 +1803,10 @@ exports.razorpayWebhook = onRequest(
           if (subscription) {
             const userId = subscription.notes && subscription.notes.userId;
             if (userId) {
+              const graceCfg = await getPricingConfig();
+              const graceDays = graceCfg.grace_period_days || 7;
               const graceDate = new Date();
-              graceDate.setDate(graceDate.getDate() + 7);
+              graceDate.setDate(graceDate.getDate() + graceDays);
               await db.collection('subscriptions').doc(userId).update({
                 status: 'halted',
                 graceExpiresAt: Timestamp.fromDate(graceDate),
@@ -1917,13 +1956,16 @@ exports.checkSubscriptionExpiry = onSchedule(
 
     let haltedCount = 0;
 
+    const cronConfig = await getPricingConfig();
+    const cronGraceDays = cronConfig.grace_period_days || 7;
+
     activeSnapshot.forEach((doc) => {
       const data = doc.data();
       const periodEnd = data.currentPeriodEnd;
       if (periodEnd && periodEnd.toDate() < new Date()) {
         haltedCount++;
         const graceDate = new Date();
-        graceDate.setDate(graceDate.getDate() + 7);
+        graceDate.setDate(graceDate.getDate() + cronGraceDays);
         writer.update(doc.ref, {
           status: 'halted',
           graceExpiresAt: Timestamp.fromDate(graceDate),
@@ -1956,7 +1998,7 @@ exports.checkSubscriptionExpiry = onSchedule(
 /**
  * Get subscription status for current user.
  */
-exports.getSubscriptionStatus = onCall(async (request) => {
+exports.getSubscriptionStatus = onCall({ memory: '256MiB', timeoutSeconds: 30 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in required.');
@@ -1990,7 +2032,7 @@ exports.getSubscriptionStatus = onCall(async (request) => {
 //   final result = await FirebaseFunctions.instance
 //       .httpsCallable('sendInvoiceSms')
 //       .call({ invoiceId: '...', phoneNumber: '+91...', downloadUrl: 'https://...' });
-exports.sendInvoiceSms = onCall(async (request) => {
+exports.sendInvoiceSms = onCall({ memory: '256MiB', timeoutSeconds: 60 }, async (request) => {
   const uid = request.auth && request.auth.uid;
   if (!uid) {
     throw new HttpsError('unauthenticated', 'Sign in required.');
@@ -2073,6 +2115,9 @@ exports.invoicePage = onRequest(async (req, res) => {
     const cgstAmount = data.cgstAmount || 0;
     const sgstAmount = data.sgstAmount || 0;
     const igstAmount = data.igstAmount || 0;
+    const totalTax = (data.totalTax != null) ? data.totalTax : (cgstAmount + sgstAmount + igstAmount);
+    const discountType = data.discountType || null;
+    const taxableAmount = subtotal - discountAmount;
     const status = data.status || 'pending';
 
     // Seller details
@@ -2086,6 +2131,10 @@ exports.invoicePage = onRequest(async (req, res) => {
     const upiNumber = data.upiNumber || '';
     const upiQrUrl = data.upiQrUrl || '';
     const hasPayment = upiId || upiNumber || upiQrUrl;
+
+    // Signature & logo
+    const signatureUrl = data.signatureUrl || '';
+    const logoUrl = data.logoUrl || '';
 
     // Client phone for bill history OTP verification
     // Only show history portal for repeat customers (more than 1 invoice)
@@ -2168,11 +2217,47 @@ exports.invoicePage = onRequest(async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invoice ${esc(invoiceNumber)} — BillRaja</title>
+  <title>Invoice ${esc(invoiceNumber)} — ${esc(storeName || 'BillRaja')}</title>
+  <meta name="description" content="Invoice ${esc(invoiceNumber)} for ${esc(clientName)} — ${amount}. Dated ${esc(date)}. View details, download PDF, or pay online.">
+  <link rel="canonical" href="https://invoice.billraja.online/i/${esc(shortCode)}">
+
+  <!-- Open Graph -->
   <meta property="og:title" content="Invoice ${esc(invoiceNumber)} — ${amount}">
   <meta property="og:description" content="Invoice for ${esc(clientName)} dated ${esc(date)}. ${items.length} item${items.length !== 1 ? 's' : ''} — Tap to view and download.">
   <meta property="og:type" content="website">
-  <meta name="description" content="Invoice ${esc(invoiceNumber)} for ${esc(clientName)} — ${amount}">
+  <meta property="og:url" content="https://invoice.billraja.online/i/${esc(shortCode)}">
+  <meta property="og:site_name" content="BillRaja">
+  <meta property="og:locale" content="en_IN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Invoice ${esc(invoiceNumber)} — ${amount}">
+  <meta name="twitter:description" content="Invoice for ${esc(clientName)} dated ${esc(date)}. ${items.length} item${items.length !== 1 ? 's' : ''}. View and download.">
+
+  <!-- Structured Data -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Invoice",
+    "description": "Invoice ${esc(invoiceNumber)}",
+    "totalPaymentDue": {
+      "@type": "PriceSpecification",
+      "price": "${data.amount || 0}",
+      "priceCurrency": "INR"
+    },
+    "customer": {
+      "@type": "Person",
+      "name": "${esc(clientName)}"
+    },
+    "broker": {
+      "@type": "Organization",
+      "name": "${esc(storeName || 'BillRaja')}"
+    },
+    "paymentStatus": "${status === 'paid' ? 'PaymentComplete' : 'PaymentDue'}"
+  }
+  </script>
+
+  <meta name="robots" content="noindex">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <style>
@@ -2350,6 +2435,7 @@ exports.invoicePage = onRequest(async (req, res) => {
 
     <!-- Seller -->
     <div class="seller-box">
+      ${logoUrl ? `<img src="${esc(logoUrl)}" alt="Logo" style="max-height:48px;max-width:120px;object-fit:contain;margin-bottom:4px;display:block">` : ''}
       <div class="seller-name">${esc(storeName || 'Your Store')}</div>
       ${sellerPhone ? `<div class="seller-detail">Phone no.: ${esc(sellerPhone)}</div>` : ''}
       ${sellerAddress ? `<div class="seller-detail">${esc(sellerAddress)}</div>` : ''}
@@ -2437,8 +2523,8 @@ exports.invoicePage = onRequest(async (req, res) => {
           <div class="tot-line"><span>IGST</span><span>${fmtCur(igstAmount)}</span></div>` : ''}
         ${gstEnabled && totalTax > 0 ? `<div class="tot-line"><span>Total Tax</span><span>${fmtCur(totalTax)}</span></div>` : ''}
         <div class="tot-line bold highlight"><span>Grand Total</span><span>${amount}</span></div>
-        <div class="tot-line"><span>Received</span><span>${fmtCur(status === 'paid' ? data.amount : 0)}</span></div>
-        <div class="tot-line bold"><span>Balance</span><span>${fmtCur(status === 'paid' ? 0 : data.amount)}</span></div>
+        <div class="tot-line"><span>Received</span><span>${fmtCur(data.amountReceived != null ? data.amountReceived : (status === 'paid' ? data.amount : 0))}</span></div>
+        <div class="tot-line bold"><span>Balance</span><span>${fmtCur(data.balanceDue != null ? data.balanceDue : (status === 'paid' ? 0 : data.amount))}</span></div>
       </div>
     </div>
 
@@ -2450,7 +2536,7 @@ exports.invoicePage = onRequest(async (req, res) => {
       </div>
       <div class="sig-right">
         <div class="ts-header">For ${esc(storeName || 'Store')}:</div>
-        <div class="sig-area"></div>
+        <div class="sig-area">${signatureUrl ? `<img src="${esc(signatureUrl)}" alt="Signature" style="max-height:60px;max-width:160px;object-fit:contain">` : ''}</div>
         <div class="sig-label">Authorized Signatory</div>
       </div>
     </div>
@@ -2910,7 +2996,7 @@ exports.invoicePage = onRequest(async (req, res) => {
 
         // Download button
         if (bill.downloadUrl) {
-          html += '<a class="modal-download" href="' + escJs(bill.downloadUrl) + '" onclick="return forceDownload(this.href, \'Invoice_' + escJs(bill.invoiceNumber || '') + '.pdf\')">&#128196; Download PDF</a>';
+          html += '<a class="modal-download" href="' + escJs(bill.downloadUrl) + '" onclick="return forceDownload(this.href, \\'Invoice_' + escJs(bill.invoiceNumber || '') + '.pdf\\')">&#128196; Download PDF</a>';
         }
 
         document.getElementById('modalBody').innerHTML = html;
@@ -2932,6 +3018,25 @@ exports.invoicePage = onRequest(async (req, res) => {
         var d = document.createElement('div');
         d.appendChild(document.createTextNode(str || ''));
         return d.innerHTML;
+      }
+
+      function forceDownload(url, filename) {
+        fetch(url, { mode: 'cors' })
+          .then(function(r) { return r.blob(); })
+          .then(function(blob) {
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename || 'Invoice.pdf';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          })
+          .catch(function() {
+            // Fallback: open in new tab
+            window.open(url, '_blank');
+          });
+        return false;
       }
 
       // Close modal on back button
@@ -3108,7 +3213,7 @@ exports.clientBills = onRequest(async (req, res) => {
         pendingAmount, pendingCount,
         overdueAmount, overdueCount,
       },
-      clientName: clientName,
+      clientName: matchedClientName,
       storeName: invoiceData.storeName || '',
     });
   } catch (err) {
@@ -3158,3 +3263,98 @@ function fmtQty(val) {
   if (val === Math.floor(val)) return String(Math.floor(val));
   return Number(val).toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// UPI PAYMENT REDIRECT PAGE
+// Serves a mobile-friendly HTML page that auto-opens the UPI app.
+// WhatsApp renders HTTPS links as clickable — this bridges the gap
+// since upi:// deep links are NOT clickable in WhatsApp messages.
+// ════════════════════════════════════════════════════════════════════════════
+
+exports.pay = onRequest((req, res) => {
+  const pa = req.query.pa || '';
+  const pn = req.query.pn || '';
+  const am = req.query.am || '';
+  const tn = req.query.tn || '';
+
+  if (!pa || !am) {
+    res.status(400).send('Missing payment parameters');
+    return;
+  }
+
+  const upiParams = `pa=${encodeURIComponent(pa)}&pn=${encodeURIComponent(pn)}&am=${encodeURIComponent(am)}&tn=${encodeURIComponent(tn)}&cu=INR`;
+  const upiLink = `upi://pay?${upiParams}`;
+  // Android intent:// URL forces the system app chooser instead of WhatsApp
+  // intercepting the upi:// scheme in its in-app browser
+  const intentLink = `intent://pay?${upiParams}#Intent;scheme=upi;end`;
+  const displayAmount = fmtCur(parseFloat(am) || 0);
+  const displayName = esc(decodeURIComponent(pn) || 'Merchant');
+  const displayInvoice = esc(decodeURIComponent(tn) || '');
+
+  // Payment page with app-specific deep links.
+  // WhatsApp's in-app browser intercepts upi:// and routes to WhatsApp Pay.
+  // App-specific schemes (tez://, phonepe://, paytmmp://) bypass this.
+  const gpayLink = `tez://upi/pay?${upiParams}`;
+  const phonepeLink = `phonepe://pay?${upiParams}`;
+  const paytmLink = `paytmmp://pay?${upiParams}`;
+
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pay ${displayAmount} to ${displayName}</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .card { background: #fff; border-radius: 16px; box-shadow: 0 4px 24px rgba(0,0,0,0.08); padding: 32px 24px; max-width: 380px; width: 100%; text-align: center; }
+    .logo { font-size: 24px; font-weight: 800; color: #F97316; margin-bottom: 4px; }
+    .subtitle { color: #999; font-size: 12px; margin-bottom: 20px; }
+    .amount { font-size: 36px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+    .to { color: #666; font-size: 14px; margin-bottom: 4px; }
+    .invoice { color: #999; font-size: 12px; margin-bottom: 24px; }
+    .apps { display: flex; flex-direction: column; gap: 10px; }
+    .app-btn { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 12px; text-decoration: none; font-size: 15px; font-weight: 600; color: #fff; transition: transform 0.1s; }
+    .app-btn:active { transform: scale(0.97); }
+    .app-btn .icon { width: 28px; height: 28px; flex-shrink: 0; background: #fff; border-radius: 6px; display: flex; align-items: center; justify-content: center; }
+    .app-btn .icon svg { width: 20px; height: 20px; }
+    .gpay { background: #E8F0FE; color: #1a73e8; border: 1.5px solid #c2d7f2; }
+    .gpay .icon { background: transparent; }
+    .phonepe { background: #5F259F; }
+    .paytm { background: #002E6E; }
+    .other { background: #444; font-size: 13px; padding: 12px 16px; }
+    .other .icon { background: transparent; }
+    .other .icon svg { width: 22px; height: 22px; }
+    .secure { margin-top: 16px; color: #bbb; font-size: 10px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">BillRaja</div>
+    <div class="subtitle">Payment Request</div>
+    <div class="amount">${displayAmount}</div>
+    <div class="to">to ${displayName}</div>
+    ${displayInvoice ? `<div class="invoice">Invoice: ${displayInvoice}</div>` : '<div style="margin-bottom:24px"></div>'}
+    <div class="apps">
+      <a href="${gpayLink}" class="app-btn gpay">
+        <span class="icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M3.963 7.235A3.963 3.963 0 00.422 9.419a3.963 3.963 0 000 3.559 3.963 3.963 0 003.541 2.184c1.07 0 1.97-.352 2.627-.957.748-.69 1.18-1.71 1.18-2.916a4.722 4.722 0 00-.07-.806H3.964v1.526h2.14a1.835 1.835 0 01-.79 1.205c-.356.241-.814.379-1.35.379-1.034 0-1.911-.697-2.225-1.636a2.375 2.375 0 010-1.517c.314-.94 1.191-1.636 2.225-1.636a2.152 2.152 0 011.52.594l1.132-1.13a3.808 3.808 0 00-2.652-1.033zm6.501.55v6.9h.886V11.89h1.465c.603 0 1.11-.196 1.522-.588a1.911 1.911 0 00.635-1.464 1.92 1.92 0 00-.635-1.456 2.125 2.125 0 00-1.522-.598zm2.427.85a1.156 1.156 0 01.823.365 1.176 1.176 0 010 1.686 1.171 1.171 0 01-.877.357H11.35V8.635h1.487a1.156 1.156 0 01.054 0zm4.124 1.175c-.842 0-1.477.308-1.907.925l.781.491c.288-.417.68-.626 1.175-.626a1.255 1.255 0 01.856.323 1.009 1.009 0 01.366.785v.202c-.34-.193-.774-.289-1.3-.289-.617 0-1.11.145-1.479.434-.37.288-.554.677-.554 1.165a1.476 1.476 0 00.525 1.156c.35.308.785.463 1.305.463.61 0 1.098-.27 1.465-.81h.038v.655h.848v-2.909c0-.61-.19-1.09-.568-1.44-.38-.35-.896-.525-1.551-.525zm2.263.154l1.946 4.422-1.098 2.38h.915L24 9.963h-.965l-1.368 3.391h-.02l-1.406-3.39zm-2.146 2.368c.494 0 .88.11 1.156.33 0 .372-.147.696-.44.973a1.413 1.413 0 01-.997.414 1.081 1.081 0 01-.69-.232.708.708 0 01-.293-.578c0-.257.12-.47.363-.647.24-.173.54-.26.9-.26Z" fill="#3c4043"/></svg></span>
+        Pay with Google Pay
+      </a>
+      <a href="${phonepeLink}" class="app-btn phonepe">
+        <span class="icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M10.206 9.941h2.949v4.692c-.402.201-.938.268-1.34.268-1.072 0-1.609-.536-1.609-1.743V9.941zm13.47 4.816c-1.523 6.449-7.985 10.442-14.433 8.919C2.794 22.154-1.199 15.691.324 9.243 1.847 2.794 8.309-1.199 14.757.324c6.449 1.523 10.442 7.985 8.919 14.433zm-6.231-5.888a.887.887 0 0 0-.871-.871h-1.609l-3.686-4.222c-.335-.402-.871-.536-1.407-.402l-1.274.401c-.201.067-.268.335-.134.469l4.021 3.82H6.386c-.201 0-.335.134-.335.335v.67c0 .469.402.871.871.871h.938v3.217c0 2.413 1.273 3.82 3.418 3.82.67 0 1.206-.067 1.877-.335v2.145c0 .603.469 1.072 1.072 1.072h.938a.432.432 0 0 0 .402-.402V9.874h1.542c.201 0 .335-.134.335-.335v-.67z" fill="#5F259F"/></svg></span>
+        Pay with PhonePe
+      </a>
+      <a href="${paytmLink}" class="app-btn paytm">
+        <span class="icon"><svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.85 8.167a.204.204 0 0 0-.04.004c-.68.19-.543 1.148-1.781 1.23h-.12a.23.23 0 0 0-.052.005h-.001a.24.24 0 0 0-.184.235v1.09c0 .134.106.241.237.241h.645v4.623c0 .132.104.238.233.238h1.058a.236.236 0 0 0 .233-.238v-4.623h.6c.13 0 .236-.107.236-.241v-1.09a.239.239 0 0 0-.236-.24h-.612V8.386a.218.218 0 0 0-.216-.22zm4.225 1.17c-.398 0-.762.15-1.042.395v-.124a.238.238 0 0 0-.234-.224h-1.07a.24.24 0 0 0-.236.242v5.92a.24.24 0 0 0 .236.242h1.07c.12 0 .217-.091.233-.209v-4.25a.393.393 0 0 1 .371-.408h.196a.41.41 0 0 1 .226.09.405.405 0 0 1 .145.319v4.074l.004.155a.24.24 0 0 0 .237.241h1.07a.239.239 0 0 0 .235-.23l-.001-4.246c0-.14.062-.266.174-.34a.419.419 0 0 1 .196-.068h.198c.23.02.37.2.37.408.005 1.396.004 2.8.004 4.224a.24.24 0 0 0 .237.241h1.07c.13 0 .236-.108.236-.241v-4.543c0-.31-.034-.442-.08-.577a1.601 1.601 0 0 0-1.51-1.09h-.015a1.58 1.58 0 0 0-1.152.5c-.291-.308-.7-.5-1.153-.5zM.232 9.4A.234.234 0 0 0 0 9.636v5.924c0 .132.096.238.216.241h1.09c.13 0 .237-.107.237-.24l.004-1.658H2.57c.857 0 1.453-.605 1.453-1.481v-1.538c0-.877-.596-1.484-1.453-1.484H.232zm9.032 0a.239.239 0 0 0-.237.241v2.47c0 .94.657 1.608 1.579 1.608h.675s.016 0 .037.004a.253.253 0 0 1 .222.253c0 .13-.096.235-.219.251l-.018.004-.303.006H9.739a.239.239 0 0 0-.236.24v1.09a.24.24 0 0 0 .236.242h1.75c.92 0 1.577-.669 1.577-1.608v-4.56a.239.239 0 0 0-.236-.24h-1.07a.239.239 0 0 0-.236.24c-.005.787 0 1.525 0 2.255a.253.253 0 0 1-.25.25h-.449a.253.253 0 0 1-.25-.255c.005-.754-.005-1.5-.005-2.25a.239.239 0 0 0-.236-.24zm-4.004.006a.232.232 0 0 0-.238.226v1.023c0 .132.113.24.252.24h1.413c.112.017.2.1.213.23v.14c-.013.124-.1.214-.207.224h-.7c-.93 0-1.594.63-1.594 1.515v1.269c0 .88.57 1.506 1.495 1.506h1.94c.348 0 .63-.27.63-.6v-4.136c0-1.004-.508-1.637-1.72-1.637zm-3.713 1.572h.678c.139 0 .25.115.25.256v.836a.253.253 0 0 1-.25.256h-.1c-.192.002-.386 0-.578 0zm4.67 1.977h.445c.139 0 .252.108.252.24v.932a.23.23 0 0 1-.014.076.25.25 0 0 1-.238.164h-.445a.247.247 0 0 1-.252-.24v-.933c0-.132.113-.239.252-.239Z" fill="#00BAF2"/></svg></span>
+        Pay with Paytm
+      </a>
+      <a href="${upiLink}" class="app-btn other">
+        <span class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 15l3-6 3 4 2-2 2 4"/></svg></span>
+        Other UPI App
+      </a>
+    </div>
+    <div class="secure">\u{1f512} Secure UPI Payment \u00b7 Zero Fees</div>
+  </div>
+</body>
+</html>`);
+});

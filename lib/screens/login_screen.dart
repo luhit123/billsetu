@@ -304,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
                 children: [
                   // ── Branding ────────────────────────────────────────────
                   const Text(
-                    'BillEasy',
+                    'BillRaja',
                     style: TextStyle(
                       color: kOnSurface,
                       fontSize: 42,
@@ -372,21 +372,19 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
                         ),
                         const SizedBox(height: 28),
 
-                        // Phone auth (skip on web)
-                        if (!kIsWeb) ...[
-                          if (!_otpSent) _buildPhoneInput() else _buildOtpView(),
-                          const SizedBox(height: 24),
-                          _buildDivider(),
-                          const SizedBox(height: 24),
-                        ],
+                        // Phone auth
+                        if (!_otpSent) _buildPhoneInput() else _buildOtpView(),
+                        const SizedBox(height: 24),
+                        _buildDivider(),
+                        const SizedBox(height: 24),
 
-                        // Google sign-in (secondary when phone is available)
+                        // Google sign-in (secondary)
                         _GoogleSignInButton(
                           isLoading: _isSigningInGoogle,
                           onPressed: _isSigningInGoogle
                               ? null
                               : _handleGoogleSignIn,
-                          isSecondary: !kIsWeb,
+                          isSecondary: true,
                         ),
                         const SizedBox(height: 16),
                         _LegalConsentText(),

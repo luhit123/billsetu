@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/screens/member_detail_screen.dart';
 import 'package:billeasy/screens/member_form_screen.dart';
@@ -171,6 +172,7 @@ class _MembersScreenState extends State<MembersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final members = _filteredMembers;
 
     return Scaffold(
@@ -191,7 +193,7 @@ class _MembersScreenState extends State<MembersScreen> {
                   fontWeight: FontWeight.w600,
                 ),
                 decoration: InputDecoration(
-                  hintText: 'Search members...',
+                  hintText: s.membersSearchHint,
                   hintStyle: const TextStyle(color: kTextTertiary),
                   border: InputBorder.none,
                   prefixIcon: const Icon(Icons.search, color: kTextTertiary),
@@ -216,7 +218,7 @@ class _MembersScreenState extends State<MembersScreen> {
               ],
             )
           : kBuildGradientAppBar(
-              titleText: widget.planName ?? 'Members',
+              titleText: widget.planName ?? s.membersTitle,
               actions: [
                 IconButton(
                   onPressed: _toggleSearch,
@@ -237,9 +239,9 @@ class _MembersScreenState extends State<MembersScreen> {
                         children: [
                           const Icon(Icons.error_outline_rounded, size: 48, color: kOverdue),
                           const SizedBox(height: 16),
-                          const Text(
-                            'Could not load members',
-                            style: TextStyle(
+                          Text(
+                            s.membersLoadError,
+                            style: const TextStyle(
                               color: kOnSurface,
                               fontSize: 16,
                               fontWeight: FontWeight.w700,
@@ -354,6 +356,7 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   Widget _buildEmptyState() {
+    final s = AppStrings.of(context);
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -374,17 +377,17 @@ class _MembersScreenState extends State<MembersScreen> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'No members yet',
-              style: TextStyle(
+            Text(
+              s.membersEmpty,
+              style: const TextStyle(
                 color: kOnSurface,
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Start managing your memberships by adding your first member.',
+            Text(
+              s.membersEmptyBody,
               style: TextStyle(
                 color: kOnSurfaceVariant,
                 fontSize: 13,
@@ -413,6 +416,7 @@ class _MembersScreenState extends State<MembersScreen> {
   }
 
   Widget _buildFilterChips() {
+    final s = AppStrings.of(context);
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -421,11 +425,11 @@ class _MembersScreenState extends State<MembersScreen> {
           final isSelected = _activeFilter == filter;
           final count = _countForFilter(filter);
           final label = switch (filter) {
-            _MemberFilter.all => 'All',
-            _MemberFilter.active => 'Active',
-            _MemberFilter.expiringSoon => 'Expiring Soon',
-            _MemberFilter.expired => 'Expired',
-            _MemberFilter.frozen => 'Frozen',
+            _MemberFilter.all => s.memberFilterAll,
+            _MemberFilter.active => s.memberFilterActive,
+            _MemberFilter.expiringSoon => s.memberFilterExpiringSoon,
+            _MemberFilter.expired => s.memberFilterExpired,
+            _MemberFilter.frozen => s.memberFilterFrozen,
           };
 
           return Padding(

@@ -5,12 +5,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/force_update_screen.dart';
 import 'package:billeasy/screens/login_screen.dart';
 import 'package:billeasy/screens/maintenance_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
+import 'package:billeasy/screens/trial_celebration_screen.dart';
 import 'package:billeasy/services/app_check_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/plan_service.dart';
@@ -19,7 +21,10 @@ import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:billeasy/screens/home_screen.dart';
+import 'package:billeasy/screens/onboarding_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
 
 Future<void> main() async {
@@ -32,24 +37,31 @@ Future<void> main() async {
   }
 
   // ── Crashlytics: catch all Flutter and platform errors ──────────────────
-  FlutterError.onError = (FlutterErrorDetails details) {
-    debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
-    FirebaseCrashlytics.instance.recordFlutterFatalError(details);
-  };
+  // Crashlytics is not supported on web — guard with kIsWeb.
+  if (!kIsWeb) {
+    FlutterError.onError = (FlutterErrorDetails details) {
+      debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+      FirebaseCrashlytics.instance.recordFlutterFatalError(details);
+    };
 
-  PlatformDispatcher.instance.onError = (error, stack) {
-    debugPrint('[PlatformError] $error\n$stack');
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+    PlatformDispatcher.instance.onError = (error, stack) {
+      debugPrint('[PlatformError] $error\n$stack');
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
 
   // ── Enable Firestore offline persistence ──────────────────────────────────
   // After the first load, all data is served instantly from the on-device
   // cache. The app works offline and syncs when reconnected.
-  FirebaseFirestore.instance.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: 104857600, // 100 MB — maximum allowed by Firestore SDK
-  );
+  // On web, persistence is enabled by default and cacheSizeBytes is not
+  // supported — use default settings.
+  if (!kIsWeb) {
+    FirebaseFirestore.instance.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: 104857600, // 100 MB — maximum allowed by Firestore SDK
+    );
+  }
 
   ConnectivityService.instance.init();
   await AppCheckService.activate();
@@ -76,9 +88,28 @@ class BillRajaApp extends StatelessWidget {
         builder: (context) => MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'BillRaja',
+          // ── Localizations for date pickers, text fields, etc. ───────────
+          localizationsDelegates: const [
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: const [
+            Locale('en'),
+            Locale('hi'),
+          ],
           theme: ThemeData(
             useMaterial3: true,
             primaryColor: kPrimary,
+            pageTransitionsTheme: const PageTransitionsTheme(
+              builders: {
+                TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+                TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+                TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
+              },
+            ),
             colorScheme: ColorScheme.fromSeed(
               seedColor: kPrimary,
               brightness: Brightness.light,
@@ -178,6 +209,19 @@ class BillRajaApp extends StatelessWidget {
             ),
           ),
           home: const AppGate(),
+          // ── Global offline banner (Stack overlay) ─────────────────────────
+          // Using Stack instead of Column so the banner overlays the top of
+          // the screen without stealing layout space from child screens.
+          // A Column approach subtracts banner height from the Navigator's
+          // available height while MediaQuery.size still reports the full
+          // screen — causing screens with fixed/flex layouts to overflow or
+          // clip their bottom content when the banner is visible.
+          builder: (context, child) => Stack(
+            children: [
+              child!,
+              const Positioned(top: 0, left: 0, right: 0, child: ConnectivityBanner()),
+            ],
+          ),
         ),
       ),
     );
@@ -222,11 +266,56 @@ class _AppGateState extends State<AppGate> {
   }
 }
 
-class AuthGate extends StatelessWidget {
+class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
   @override
+  State<AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<AuthGate> {
+  bool _checkingOnboarding = true;
+  bool _showOnboarding = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkOnboarding();
+  }
+
+  Future<void> _checkOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('onboarding_seen') ?? false;
+    if (mounted) {
+      setState(() {
+        _showOnboarding = !seen;
+        _checkingOnboarding = false;
+      });
+    }
+  }
+
+  Future<void> _completeOnboarding() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('onboarding_seen', true);
+    if (mounted) {
+      setState(() => _showOnboarding = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_checkingOnboarding) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_showOnboarding) {
+      return OnboardingScreen(
+        onCompleted: _completeOnboarding,
+      );
+    }
+
     return StreamBuilder<User?>(
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snapshot) {
@@ -247,11 +336,27 @@ class AuthGate extends StatelessWidget {
 }
 
 /// Restored sessions go straight to profile completion or home.
-class SignedInHomeGate extends StatelessWidget {
+/// Shows a one-time celebration screen after first profile setup.
+class SignedInHomeGate extends StatefulWidget {
   const SignedInHomeGate({super.key});
 
   @override
+  State<SignedInHomeGate> createState() => _SignedInHomeGateState();
+}
+
+class _SignedInHomeGateState extends State<SignedInHomeGate> {
+  /// null = not checked yet, true = show it, false = skip
+  bool? _showCelebration;
+  bool _profileWasNull = true;
+
+  @override
   Widget build(BuildContext context) {
+    if (_showCelebration == true) {
+      return TrialCelebrationScreen(
+        onContinue: () => setState(() => _showCelebration = false),
+      );
+    }
+
     return StreamBuilder<BusinessProfile?>(
       stream: ProfileService().watchCurrentProfile(),
       builder: (context, snapshot) {
@@ -263,14 +368,26 @@ class SignedInHomeGate extends StatelessWidget {
         }
 
         if (snapshot.hasError) {
+          if (ConnectivityService.instance.isOffline) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
           return Scaffold(
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  AppStrings.of(context).drawerProfileLoadError,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 48, color: Colors.red),
+                    const SizedBox(height: 16),
+                    Text(
+                      AppStrings.of(context).drawerProfileLoadError,
+                      style: Theme.of(context).textTheme.titleMedium,
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -278,11 +395,33 @@ class SignedInHomeGate extends StatelessWidget {
         }
 
         if (snapshot.data == null) {
+          _profileWasNull = true;
           return const ProfileSetupScreen(isRequiredSetup: true);
+        }
+
+        // Profile just appeared after being null → user finished setup
+        if (_profileWasNull && _showCelebration == null) {
+          _profileWasNull = false;
+          // Check async, show spinner meanwhile
+          _checkAndShowCelebration();
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
 
         return const HomeScreen();
       },
     );
+  }
+
+  Future<void> _checkAndShowCelebration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool('trial_celebration_shown') ?? false;
+    if (!seen) {
+      await prefs.setBool('trial_celebration_shown', true);
+      if (mounted) setState(() => _showCelebration = true);
+    } else {
+      if (mounted) setState(() => _showCelebration = false);
+    }
   }
 }

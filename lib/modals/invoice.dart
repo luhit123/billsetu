@@ -35,6 +35,7 @@ class Invoice {
     this.storedTotalTax,
     this.storedGrandTotal,
     this.amountReceived = 0,
+    this.paymentMethod = '',
     this.notes,
   });
 
@@ -48,6 +49,7 @@ class Invoice {
   final InvoiceStatus status;
   final DateTime? dueDate;
   final String? notes;
+  final String paymentMethod; // Cash, UPI, Bank Transfer, Cheque, Other
   final InvoiceDiscountType? discountType;
   final double discountValue;
   // GST fields (optional, defaults to disabled)
@@ -201,6 +203,7 @@ class Invoice {
       storedTotalTax: _nullableDoubleFromMapValue(map['totalTax']),
       storedGrandTotal: _nullableDoubleFromMapValue(map['grandTotal']),
       amountReceived: _doubleFromMapValue(map['amountReceived']),
+      paymentMethod: map['paymentMethod'] as String? ?? '',
       notes: map['notes'] as String?,
     );
   }
@@ -275,6 +278,7 @@ class Invoice {
       'hasGst': mapHasGst,
       'amountReceived': amountReceived,
       'balanceDue': mapBalanceDue,
+      if (paymentMethod.isNotEmpty) 'paymentMethod': paymentMethod,
       if (notes != null) 'notes': notes,
     };
   }

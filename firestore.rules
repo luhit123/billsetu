@@ -68,6 +68,8 @@ service cloud.firestore {
             'hasGst',
             'amountReceived',
             'balanceDue',
+            'paymentMethod',
+            'notes',
           ]) &&
           request.resource.data.keys().hasAll([
             'id',

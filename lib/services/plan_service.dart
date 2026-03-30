@@ -14,7 +14,6 @@ class PlanLimits {
   final int maxPdfTemplates;
   final int maxWhatsAppSharesPerMonth; // 0 = disabled, -1 = unlimited
   final bool hasReports;
-  final bool hasEwayBill;
   final bool hasPurchaseOrders;
   final bool hasDataExport;
   final String name;
@@ -29,7 +28,6 @@ class PlanLimits {
     required this.maxPdfTemplates,
     required this.maxWhatsAppSharesPerMonth,
     required this.hasReports,
-    required this.hasEwayBill,
     required this.hasPurchaseOrders,
     required this.hasDataExport,
     required this.name,
@@ -43,14 +41,14 @@ class PlanService {
   PlanService._();
   static final PlanService instance = PlanService._();
 
-  /// Plan limits are now driven by Firebase Remote Config.
+  /// Plan limits are driven by Firebase Remote Config.
   /// Trial gets the same limits as Pro (full access during trial).
   static Map<AppPlan, PlanLimits> get limits {
     final rc = RemoteConfigService.instance;
     return {
       AppPlan.trial: PlanLimits(
         name: 'trial',
-        displayName: 'Trial',
+        displayName: 'Pro',
         priceMonthly: 0,
         priceAnnual: 0,
         maxInvoicesPerMonth: -1,
@@ -59,13 +57,12 @@ class PlanService {
         maxPdfTemplates: -1,
         maxWhatsAppSharesPerMonth: -1,
         hasReports: true,
-        hasEwayBill: true,
         hasPurchaseOrders: true,
         hasDataExport: true,
       ),
       AppPlan.expired: PlanLimits(
         name: 'expired',
-        displayName: 'Expired',
+        displayName: 'Free',
         priceMonthly: 0,
         priceAnnual: 0,
         maxInvoicesPerMonth: rc.expiredMaxInvoices,
@@ -74,7 +71,6 @@ class PlanService {
         maxPdfTemplates: rc.expiredMaxPdfTemplates,
         maxWhatsAppSharesPerMonth: rc.expiredMaxWhatsAppShares,
         hasReports: rc.expiredHasReports,
-        hasEwayBill: rc.expiredHasEwayBill,
         hasPurchaseOrders: rc.expiredHasPurchaseOrders,
         hasDataExport: rc.expiredHasDataExport,
       ),
@@ -89,7 +85,6 @@ class PlanService {
         maxPdfTemplates: rc.proMaxPdfTemplates,
         maxWhatsAppSharesPerMonth: rc.proMaxWhatsAppShares,
         hasReports: rc.proHasReports,
-        hasEwayBill: rc.proHasEwayBill,
         hasPurchaseOrders: rc.proHasPurchaseOrders,
         hasDataExport: rc.proHasDataExport,
       ),
@@ -129,6 +124,7 @@ class PlanService {
   DateTime? get currentPeriodEnd => _currentPeriodEnd;
 
   StreamSubscription<DocumentSnapshot>? _planListener;
+  StreamSubscription<void>? _rcListener;
   final _planController = StreamController<AppPlan>.broadcast();
   Stream<AppPlan> get planStream => _planController.stream;
 
@@ -142,6 +138,13 @@ class PlanService {
 
     // Then start real-time listener
     _startPlanListener(uid);
+
+    // Listen to Remote Config changes so feature flags apply immediately
+    _rcListener?.cancel();
+    _rcListener = RemoteConfigService.instance.onConfigUpdated.listen((_) {
+      // RC values changed — re-emit so UI rebuilds with new limits/flags
+      _planController.add(_currentPlan);
+    });
   }
 
   void _startPlanListener(String uid) {
@@ -176,9 +179,10 @@ class PlanService {
         final data = userDoc.data()!;
         final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
         if (createdAt != null) {
+          final trialMonths = RemoteConfigService.instance.trialDurationMonths;
           _trialExpiresAt = DateTime(
             createdAt.year,
-            createdAt.month + 6,
+            createdAt.month + trialMonths,
             createdAt.day,
             createdAt.hour,
             createdAt.minute,
@@ -281,10 +285,13 @@ class PlanService {
   void reset() {
     _planListener?.cancel();
     _planListener = null;
+    _rcListener?.cancel();
+    _rcListener = null;
   }
 
   void dispose() {
     _planListener?.cancel();
+    _rcListener?.cancel();
     _planController.close();
   }
 
@@ -306,6 +313,7 @@ class PlanService {
   }
 
   bool canShareWhatsApp(int thisMonthCount) {
+    if (!RemoteConfigService.instance.featureWhatsAppShare) return false;
     final max = currentLimits.maxWhatsAppSharesPerMonth;
     if (max == 0) return false;
     if (max == -1) return true;
@@ -318,14 +326,10 @@ class PlanService {
   }
 
   /// Feature access checks combine plan-level gating with global feature flags
-  /// from Remote Config — so a feature can be killed even for Pro users.
+  /// from Remote Config — so a feature can be killed even for Pro/Trial users.
   bool get hasReports =>
       currentLimits.hasReports &&
       RemoteConfigService.instance.featureReports;
-
-  bool get hasEwayBill =>
-      currentLimits.hasEwayBill &&
-      RemoteConfigService.instance.featureEwayBill;
 
   bool get hasPurchaseOrders =>
       currentLimits.hasPurchaseOrders &&

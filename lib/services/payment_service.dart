@@ -7,11 +7,7 @@ import 'package:flutter/foundation.dart';
 
 import '../modals/payment.dart';
 import 'razorpay_checkout.dart';
-
-/// Razorpay key — MUST be set at build time: --dart-define=RAZORPAY_KEY=rzp_live_XXXXXXX
-/// No default value to prevent test key shipping to production.
-const _razorpayKey = String.fromEnvironment('RAZORPAY_KEY');
-const _isRazorpayConfigured = _razorpayKey.length > 0;
+import 'remote_config_service.dart';
 
 class PaymentService {
   PaymentService._() {
@@ -35,7 +31,8 @@ class PaymentService {
     required String planId,
     required String billingCycle,
   }) async {
-    if (!_isRazorpayConfigured) {
+    final razorpayKey = RemoteConfigService.instance.razorpayKey;
+    if (razorpayKey.isEmpty) {
       return const PaymentResult(
         success: false,
         message: 'Payment gateway not configured. Please contact support.',
@@ -74,9 +71,9 @@ class PaymentService {
 
       // Step 2: Open Razorpay Checkout
       final options = <String, dynamic>{
-        'key': _razorpayKey,
+        'key': razorpayKey,
         'subscription_id': subscriptionId,
-        'name': 'BillEasy',
+        'name': 'BillRaja',
         'description': '${_planDisplayName(planId)} Plan — ${billingCycle == 'annual' ? 'Annual' : 'Monthly'}',
         'prefill': <String, String>{
           if (user.email != null) 'email': user.email!,

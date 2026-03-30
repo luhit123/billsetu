@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/invoice_link_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +11,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
+import 'package:billeasy/utils/upi_utils.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
 /// Bottom sheet for sharing an invoice via WhatsApp or SMS.
@@ -25,6 +28,8 @@ class WhatsAppShareSheet extends StatefulWidget {
     this.pdfBytes,
     required this.currencyFormat,
     this.clientPhone,
+    this.upiId,
+    this.businessName,
   });
 
   final Invoice invoice;
@@ -32,6 +37,8 @@ class WhatsAppShareSheet extends StatefulWidget {
   final Uint8List? pdfBytes;
   final NumberFormat currencyFormat;
   final String? clientPhone;
+  final String? upiId;
+  final String? businessName;
 
   @override
   State<WhatsAppShareSheet> createState() => _WhatsAppShareSheetState();
@@ -43,23 +50,44 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   String get _formattedAmount =>
       widget.currencyFormat.format(widget.invoice.grandTotal);
 
+  String? get _upiWebLink {
+    if (widget.upiId == null || widget.upiId!.isEmpty) return null;
+    // The "received" amount is what the customer is paying right now.
+    // If received > 0, use that as the UPI link amount.
+    // If nothing received yet, use grand total (collect full amount).
+    final payAmount = widget.invoice.amountReceived > 0
+        ? widget.invoice.amountReceived
+        : widget.invoice.grandTotal;
+    if (payAmount <= 0) return null;
+    return buildUpiWebPaymentLink(
+      upiId: widget.upiId!,
+      businessName: widget.businessName ?? '',
+      amount: payAmount,
+      invoiceNumber: widget.invoice.invoiceNumber,
+    );
+  }
+
   String _shareMessage() {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
-    return 'Hi $name!\n\n'
-        'Your invoice *#${widget.invoice.invoiceNumber}* for '
-        '*$_formattedAmount* is attached.\n\n'
-        'Thank you for your business!';
+    final base = 'Hi $name, your invoice *#${widget.invoice.invoiceNumber}* '
+        'of *$_formattedAmount* is attached.';
+    final payLink = _upiWebLink;
+    if (payLink != null) {
+      return '$base\n\nPay now: $payLink';
+    }
+    return base;
   }
 
   String _smsMessage(String downloadUrl) {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
-    return 'Hi $name, your invoice #${widget.invoice.invoiceNumber} '
-        'for $_formattedAmount is ready.\n'
-        'Download: $downloadUrl';
+    final webLink = _upiWebLink;
+    final payPart = webLink != null ? '\nPay: $webLink' : '';
+    return 'Hi $name, invoice #${widget.invoice.invoiceNumber} '
+        'of $_formattedAmount.\nDownload: $downloadUrl$payPart';
   }
 
   String? _normalizedPhone() {
@@ -158,16 +186,42 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
         await UsageTrackingService.instance.getWhatsAppShareCount();
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!context.mounted) return;
+      final killSwitchOff = !RemoteConfigService.instance.featureWhatsAppShare;
       final max =
           PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
+      String msg;
+      if (killSwitchOff) {
+        msg = 'WhatsApp sharing is temporarily unavailable. Please restart the app.';
+      } else if (max == 0) {
+        msg = 'WhatsApp sharing is available on Pro plan.';
+      } else {
+        msg = 'You\'ve used $shareCount/$max WhatsApp shares this month.';
+      }
       await LimitReachedDialog.show(
         context,
         title: 'WhatsApp Share Limit',
-        message: max == 0
-            ? 'WhatsApp sharing is available on Raja plan and above.'
-            : 'You\'ve used $shareCount/$max WhatsApp shares this month.',
+        message: msg,
         featureName: 'WhatsApp sharing',
       );
+      return;
+    }
+
+    if (kIsWeb) {
+      // On web, generate download link and open wa.me with text
+      final phone = _normalizedPhone() ?? '';
+      String? downloadLink;
+      try {
+        downloadLink = await InvoiceLinkService.shareLink(invoice: widget.invoice);
+      } catch (_) {}
+
+      final baseMsg = _shareMessage();
+      final fullMsg = downloadLink != null
+          ? '$baseMsg\n\nDownload: $downloadLink'
+          : baseMsg;
+      final waUri = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(fullMsg)}');
+      await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+      if (context.mounted) Navigator.pop(context);
       return;
     }
 

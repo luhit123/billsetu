@@ -1,0 +1,280 @@
+{
+  "parameters": {
+    "upgrade_title": {
+      "defaultValue": {
+        "value": "Upgrade to Pro"
+      },
+      "valueType": "STRING"
+    },
+    "pro_max_products": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "valueType": "NUMBER"
+    },
+    "upgrade_features_json": {
+      "defaultValue": {
+        "value": "[{\"icon\":\"receipt_long\",\"label\":\"Unlimited Invoices\"},{\"icon\":\"people\",\"label\":\"Unlimited Customers\"},{\"icon\":\"inventory_2\",\"label\":\"Unlimited Products\"},{\"icon\":\"picture_as_pdf\",\"label\":\"20 PDF Templates\"},{\"icon\":\"chat\",\"label\":\"Unlimited WhatsApp Sharing\"},{\"icon\":\"shopping_cart\",\"label\":\"Purchase Orders\"},{\"icon\":\"bar_chart\",\"label\":\"Reports & Analytics\"},{\"icon\":\"local_shipping\",\"label\":\"E-Way Bill\"},{\"icon\":\"download\",\"label\":\"Data Export\"},{\"icon\":\"palette\",\"label\":\"Custom Branding\"}]"
+      },
+      "valueType": "JSON"
+    },
+    "upgrade_cta_text": {
+      "defaultValue": {
+        "value": "Upgrade to Pro  "
+      },
+      "valueType": "STRING"
+    },
+    "pro_has_eway_bill": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_invoices": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "valueType": "NUMBER"
+    },
+    "promo_banner_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "feature_qr_attendance": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "0"
+      },
+      "valueType": "NUMBER"
+    },
+    "feature_whatsapp_share": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "force_update_title": {
+      "defaultValue": {
+        "value": "Update Required"
+      },
+      "valueType": "STRING"
+    },
+    "force_update_store_url": {
+      "defaultValue": {
+        "useInAppDefault": true
+      },
+      "valueType": "STRING"
+    },
+    "expired_max_pdf_templates": {
+      "defaultValue": {
+        "value": "1"
+      },
+      "valueType": "NUMBER"
+    },
+    "expired_has_eway_bill": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "feature_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "maintenance_title": {
+      "defaultValue": {
+        "value": "Under Maintenance"
+      },
+      "valueType": "STRING"
+    },
+    "pro_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "valueType": "NUMBER"
+    },
+    "pro_price_monthly": {
+      "defaultValue": {
+        "value": "99"
+      },
+      "valueType": "NUMBER"
+    },
+    "trial_duration_months": {
+      "defaultValue": {
+        "value": "6"
+      },
+      "valueType": "NUMBER"
+    },
+    "grace_period_days": {
+      "defaultValue": {
+        "value": "7"
+      },
+      "valueType": "NUMBER"
+    },
+    "enabled_languages": {
+      "defaultValue": {
+        "value": ""
+      },
+      "valueType": "STRING"
+    },
+    "expired_has_reports": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "expired_has_data_export": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "pro_has_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_customers": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER"
+    },
+    "force_update_message": {
+      "defaultValue": {
+        "value": "A new version of BillRaja is available. Please update to continue using the app."
+      },
+      "valueType": "STRING"
+    },
+    "review_invoice_threshold": {
+      "defaultValue": {
+        "value": "3"
+      },
+      "valueType": "NUMBER"
+    },
+    "pro_price_annual": {
+      "defaultValue": {
+        "value": "999"
+      },
+      "valueType": "NUMBER"
+    },
+    "force_update_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "promo_banner_color": {
+      "defaultValue": {
+        "value": "#0057FF"
+      },
+      "valueType": "STRING"
+    },
+    "review_session_threshold": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER"
+    },
+    "promo_banner_text": {
+      "defaultValue": {
+        "value": "sureshot"
+      },
+      "valueType": "STRING"
+    },
+    "feature_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "pro_has_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "maintenance_message": {
+      "defaultValue": {
+        "value": "We're performing scheduled maintenance. We'll be back shortly!"
+      },
+      "valueType": "STRING"
+    },
+    "expired_has_purchase_orders": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "feature_eway_bill": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_customers": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "valueType": "NUMBER"
+    },
+    "min_supported_version": {
+      "defaultValue": {
+        "value": "1.0.0"
+      },
+      "valueType": "STRING"
+    },
+    "pro_has_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "feature_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "feature_membership": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_products": {
+      "defaultValue": {
+        "value": "20"
+      },
+      "valueType": "NUMBER"
+    },
+    "maintenance_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_pdf_templates": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "valueType": "NUMBER"
+    },
+    "expired_max_invoices": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "valueType": "NUMBER"
+    }
+  }
+}

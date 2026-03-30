@@ -103,7 +103,7 @@ class PrivacyPolicyScreen extends StatelessWidget {
           ),
           _subSection(
             'f) Subscription & Payment Data',
-            '  \u2022 Subscription plan (Free, Raja, Maharaja, King)\n'
+            '  \u2022 Subscription plan (Free, Pro)\n'
                 '  \u2022 Billing cycle and subscription status\n'
                 '  \u2022 Razorpay payment and subscription IDs\n\n'
                 'Note: We do NOT store your credit/debit card numbers or banking '

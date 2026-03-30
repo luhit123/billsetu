@@ -102,10 +102,10 @@ const kTextPrimary = kOnSurface;
 const kGradientColors = [kPrimary, kPrimaryDark];
 const kGradient = kSignatureGradient;
 
-// ── BillEasy logo widget ────────────────────────────────────────────────────
+// ── BillRaja logo widget ─────────────────────────────────────────────────────
 Widget kBillRajaLogo({double fontSize = 20}) {
   return Text(
-    'BillEasy',
+    'BillRaja',
     style: TextStyle(
       color: kOnSurface,
       fontWeight: FontWeight.w700,

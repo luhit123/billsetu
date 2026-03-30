@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/modals/stock_movement.dart';
+import 'package:billeasy/screens/create_purchase_order_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/services/inventory_service.dart';
 import 'package:flutter/material.dart';
@@ -93,14 +94,39 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
           Expanded(child: _buildBody()),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'adjust-stock',
-        onPressed: _showAdjustSheet,
-        backgroundColor: kPrimary,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        icon: const Icon(Icons.edit_rounded),
-        label: const Text('Adjust Stock'),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Purchase Order FAB — creates a PO pre-filled with this product
+          FloatingActionButton.extended(
+            heroTag: 'create-po',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => CreatePurchaseOrderScreen(
+                  prefilledProduct: widget.product,
+                ),
+              ),
+            ),
+            backgroundColor: kSurfaceLowest,
+            foregroundColor: kPrimary,
+            elevation: 2,
+            icon: const Icon(Icons.shopping_cart_outlined, size: 20),
+            label: const Text('Create PO'),
+          ),
+          const SizedBox(height: 12),
+          // Adjust Stock FAB
+          FloatingActionButton.extended(
+            heroTag: 'adjust-stock',
+            onPressed: _showAdjustSheet,
+            backgroundColor: kPrimary,
+            foregroundColor: Colors.white,
+            elevation: 2,
+            icon: const Icon(Icons.edit_rounded),
+            label: const Text('Adjust Stock'),
+          ),
+        ],
       ),
     );
   }

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/screens/member_detail_screen.dart';
@@ -8,6 +9,7 @@ import 'package:billeasy/screens/members_screen.dart';
 import 'package:billeasy/screens/plan_builder_screen.dart';
 import 'package:billeasy/screens/qr_attendance_screen.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -146,19 +148,21 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     return Scaffold(
       backgroundColor: kSurface,
       appBar: kBuildGradientAppBar(
-        titleText: 'Subscriptions',
+        titleText: s.subscriptionsTitle,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            tooltip: 'Check-in',
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
+          if (RemoteConfigService.instance.featureQrAttendance)
+            IconButton(
+              icon: const Icon(Icons.qr_code_scanner_rounded),
+              tooltip: 'Check-in',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
+              ),
             ),
-          ),
         ],
       ),
       body: RefreshIndicator(
@@ -353,7 +357,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Revenue', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(AppStrings.of(context).subscriptionsRevenue, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w500)),
                       const SizedBox(height: 6),
                       Text(
                         _currencyFmt.format(_rangeRevenue),
@@ -361,7 +365,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        '$_rangeMemberCount member${_rangeMemberCount == 1 ? '' : 's'} joined',
+                        '$_rangeMemberCount ${AppStrings.of(context).subscriptionsMembersJoined}',
                         style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
                       ),
                     ],
@@ -370,7 +374,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('All-time', style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11)),
+                    Text(AppStrings.of(context).subscriptionsAllTime, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11)),
                     const SizedBox(height: 4),
                     Text(_currencyFmt.format(_totalRevenue),
                         style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 16, fontWeight: FontWeight.w600)),
@@ -449,18 +453,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 ),
               ),
               const SizedBox(width: 12),
-              Expanded(
-                child: _QuickActionCard(
-                  icon: Icons.qr_code_scanner_rounded,
-                  label: 'Check-in',
-                  iconColor: const Color(0xFFEA580C),
-                  iconBg: const Color(0xFFFFF7ED),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
+              if (RemoteConfigService.instance.featureQrAttendance)
+                Expanded(
+                  child: _QuickActionCard(
+                    icon: Icons.qr_code_scanner_rounded,
+                    label: 'Check-in',
+                    iconColor: const Color(0xFFEA580C),
+                    iconBg: const Color(0xFFFFF7ED),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
         ],
@@ -495,9 +500,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     context,
                     MaterialPageRoute(builder: (_) => const PlanBuilderScreen()),
                   ),
-                  child: const Text(
-                    'Create',
-                    style: TextStyle(
+                  child: Text(
+                    AppStrings.of(context).subscriptionsCreatePlan,
+                    style: const TextStyle(
                       color: kPrimary,
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
@@ -676,25 +681,26 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   }
 
   Future<void> _confirmDeletePlan(SubscriptionPlan plan) async {
+    final s = AppStrings.of(context);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: kSurfaceLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Plan?', style: TextStyle(color: kOnSurface)),
+        title: Text(s.subscriptionsDeletePlan, style: const TextStyle(color: kOnSurface)),
         content: Text(
-          'Delete "${plan.name}"? This cannot be undone. Existing members will keep their data.',
+          s.subscriptionsDeletePlanBody,
           style: const TextStyle(color: kOnSurfaceVariant),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: Text(s.commonCancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: kOverdue),
-            child: const Text('Delete'),
+            child: Text(s.commonDelete),
           ),
         ],
       ),
@@ -1306,8 +1312,8 @@ class _PlanCard extends StatelessWidget {
             const Divider(height: 16),
             ListTile(
               leading: const Icon(Icons.edit_rounded, color: kPrimary),
-              title: const Text('Modify Plan',
-                style: TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(AppStrings.of(context).subscriptionsModifyPlan,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
               subtitle: const Text('Edit name, price, duration'),
               onTap: () {
                 Navigator.pop(context);
@@ -1316,8 +1322,8 @@ class _PlanCard extends StatelessWidget {
             ),
             ListTile(
               leading: const Icon(Icons.delete_outline_rounded, color: kOverdue),
-              title: const Text('Delete Plan',
-                style: TextStyle(color: kOverdue, fontWeight: FontWeight.w600)),
+              title: Text(AppStrings.of(context).subscriptionsDeletePlan,
+                style: const TextStyle(color: kOverdue, fontWeight: FontWeight.w600)),
               subtitle: const Text('Permanently remove this plan'),
               onTap: () {
                 Navigator.pop(context);

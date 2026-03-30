@@ -201,32 +201,33 @@ class MembershipService {
   }
 
   Future<List<AttendanceLog>> getTodayAttendance() async {
+    final uid = _requireOwnerId();
     final now = DateTime.now();
     final startOfDay = DateTime(now.year, now.month, now.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
 
-    // Get all members first, then query each member's attendance subcollection
-    final membersSnap = await _membersCol().get();
-    final List<AttendanceLog> allLogs = [];
+    // Single collectionGroup query replaces N+1 per-member queries.
+    // Requires a Firestore composite index on 'attendance' collectionGroup:
+    //   markedBy ASC, checkInTime ASC
+    final snap = await _firestore
+        .collectionGroup('attendance')
+        .where('markedBy', isEqualTo: uid)
+        .where('checkInTime',
+            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where('checkInTime', isLessThan: Timestamp.fromDate(endOfDay))
+        .orderBy('checkInTime', descending: true)
+        .get();
 
-    for (final memberDoc in membersSnap.docs) {
-      final snap = await _attendanceCol(memberDoc.id)
-          .where('checkInTime', isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
-          .where('checkInTime', isLessThan: Timestamp.fromDate(endOfDay))
-          .orderBy('checkInTime', descending: true)
-          .get();
-      allLogs.addAll(
-        snap.docs.map((d) => AttendanceLog.fromMap(d.data(), docId: d.id)),
-      );
-    }
-
-    // Sort combined results by checkInTime descending
-    allLogs.sort((a, b) => b.checkInTime.compareTo(a.checkInTime));
-    return allLogs;
+    return snap.docs
+        .map((d) => AttendanceLog.fromMap(d.data(), docId: d.id))
+        .toList();
   }
 
   // ── Dashboard Stats ─────────────────────────────────────────────────────────
 
+  // Loads all members for field-level aggregation (revenue, expiry dates).
+  // For very large gyms (>10K members), consider denormalizing stats into
+  // a summary document updated by a Cloud Function trigger.
   Future<Map<String, dynamic>> getDashboardStats() async {
     final snap = await _membersCol().get();
     final members = snap.docs.map((d) => Member.fromMap(d.data(), docId: d.id)).toList();

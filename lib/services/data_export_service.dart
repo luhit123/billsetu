@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:csv/csv.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -18,38 +20,43 @@ class DataExportService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final snap = await _db
-        .collection('invoices')
-        .where('ownerId', isEqualTo: uid)
-        .orderBy('createdAt', descending: true)
-        .limit(5000)
-        .get();
-
     final rows = <List<dynamic>>[
-      [
-        'Invoice #',
-        'Date',
-        'Customer',
-        'Status',
-        'Subtotal',
-        'Tax',
-        'Total',
-        'Due Date',
-      ],
+      ['Invoice #', 'Date', 'Customer', 'Status', 'Subtotal', 'Tax', 'Total', 'Due Date'],
     ];
 
-    for (final doc in snap.docs) {
-      final inv = Invoice.fromMap(doc.data(), docId: doc.id);
-      rows.add([
-        inv.invoiceNumber,
-        inv.createdAt.toIso8601String(),
-        inv.clientName,
-        inv.status.name,
-        inv.subtotal,
-        inv.totalTax,
-        inv.grandTotal,
-        inv.dueDate?.toIso8601String() ?? '',
-      ]);
+    const pageSize = 500;
+    DocumentSnapshot? lastDoc;
+
+    while (true) {
+      var query = _db
+          .collection('invoices')
+          .where('ownerId', isEqualTo: uid)
+          .orderBy('createdAt', descending: true)
+          .limit(pageSize);
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snap = await query.get();
+      if (snap.docs.isEmpty) break;
+
+      for (final doc in snap.docs) {
+        final inv = Invoice.fromMap(doc.data(), docId: doc.id);
+        rows.add([
+          inv.invoiceNumber,
+          inv.createdAt.toIso8601String(),
+          inv.clientName,
+          inv.status.name,
+          inv.subtotal,
+          inv.totalTax,
+          inv.grandTotal,
+          inv.dueDate?.toIso8601String() ?? '',
+        ]);
+      }
+
+      if (snap.docs.length < pageSize) break;
+      lastDoc = snap.docs.last;
     }
 
     final csv = const ListToCsvConverter().convert(rows);
@@ -60,26 +67,41 @@ class DataExportService {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
 
-    final snap = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('clients')
-        .limit(5000)
-        .get();
-
     final rows = <List<dynamic>>[
       ['Name', 'Phone', 'Email', 'GSTIN', 'Address'],
     ];
 
-    for (final doc in snap.docs) {
-      final c = Client.fromMap(doc.data(), docId: doc.id);
-      rows.add([
-        c.name,
-        c.phone,
-        c.email,
-        c.gstin,
-        c.address,
-      ]);
+    const pageSize = 500;
+    DocumentSnapshot? lastDoc;
+
+    while (true) {
+      var query = _db
+          .collection('users')
+          .doc(uid)
+          .collection('clients')
+          .orderBy(FieldPath.documentId)
+          .limit(pageSize);
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snap = await query.get();
+      if (snap.docs.isEmpty) break;
+
+      for (final doc in snap.docs) {
+        final c = Client.fromMap(doc.data(), docId: doc.id);
+        rows.add([
+          c.name,
+          c.phone,
+          c.email,
+          c.gstin,
+          c.address,
+        ]);
+      }
+
+      if (snap.docs.length < pageSize) break;
+      lastDoc = snap.docs.last;
     }
 
     final csv = const ListToCsvConverter().convert(rows);
@@ -89,13 +111,6 @@ class DataExportService {
   Future<void> exportProductsCSV() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-
-    final snap = await _db
-        .collection('users')
-        .doc(uid)
-        .collection('products')
-        .limit(5000)
-        .get();
 
     final rows = <List<dynamic>>[
       [
@@ -111,19 +126,41 @@ class DataExportService {
       ],
     ];
 
-    for (final doc in snap.docs) {
-      final p = Product.fromMap(doc.data(), docId: doc.id);
-      rows.add([
-        p.name,
-        p.description,
-        p.unitPrice,
-        p.unit,
-        p.category,
-        p.hsnCode,
-        p.gstRate,
-        p.gstApplicable ? 'Yes' : 'No',
-        p.currentStock,
-      ]);
+    const pageSize = 500;
+    DocumentSnapshot? lastDoc;
+
+    while (true) {
+      var query = _db
+          .collection('users')
+          .doc(uid)
+          .collection('products')
+          .orderBy(FieldPath.documentId)
+          .limit(pageSize);
+
+      if (lastDoc != null) {
+        query = query.startAfterDocument(lastDoc);
+      }
+
+      final snap = await query.get();
+      if (snap.docs.isEmpty) break;
+
+      for (final doc in snap.docs) {
+        final p = Product.fromMap(doc.data(), docId: doc.id);
+        rows.add([
+          p.name,
+          p.description,
+          p.unitPrice,
+          p.unit,
+          p.category,
+          p.hsnCode,
+          p.gstRate,
+          p.gstApplicable ? 'Yes' : 'No',
+          p.currentStock,
+        ]);
+      }
+
+      if (snap.docs.length < pageSize) break;
+      lastDoc = snap.docs.last;
     }
 
     final csv = const ListToCsvConverter().convert(rows);
@@ -132,6 +169,15 @@ class DataExportService {
 
   /// Write CSV to a temp file, share it, then delete the file.
   Future<void> _shareAndCleanup(String csv, String fileName, String subject) async {
+    if (kIsWeb) {
+      // On web, share from bytes directly (no temp file)
+      final bytes = Uint8List.fromList(csv.codeUnits);
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile.fromData(bytes, mimeType: 'text/csv', name: fileName)],
+        text: subject,
+      ));
+      return;
+    }
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/$fileName');
     try {

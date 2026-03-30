@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/empty_state_widget.dart';
@@ -13,6 +14,10 @@ import 'package:billeasy/services/customer_group_service.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:billeasy/utils/responsive.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/usage_tracking_service.dart';
+import 'package:billeasy/widgets/limit_reached_dialog.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
 
@@ -129,7 +134,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
         ],
       ),
       body: SafeArea(
-        child: _isLoadingClients && _clients.isEmpty
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+            child: _isLoadingClients && _clients.isEmpty
             ? const Center(
                 child: CircularProgressIndicator(color: kPrimary),
               )
@@ -167,7 +175,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                     if (_clientsLoadError != null && _clients.isEmpty) ...[
                       const SizedBox(height: 16),
                       ErrorRetryWidget(
-                        message: 'Could not load customers.\nCheck your connection and try again.',
+                        message: s.customersLoadError,
                         onRetry: () => _loadClients(reset: true),
                       ),
                     ] else if (_clients.isEmpty) ...[
@@ -228,6 +236,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   ],
                 ),
               ),
+          ),
+          ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: widget.selectionMode ? 'pick-customer-fab' : 'customers-fab',
@@ -269,6 +279,26 @@ class _CustomersScreenState extends State<CustomersScreen> {
   }
 
   Future<void> _openCustomerForm() async {
+    // Plan gate: check customer limit
+    final count = await UsageTrackingService.instance.getCustomerCount();
+    if (!PlanService.instance.canAddCustomer(count)) {
+      if (!mounted) return;
+      final max = PlanService.instance.currentLimits.maxCustomers;
+      await LimitReachedDialog.show(
+        context,
+        title: 'Customer Limit Reached',
+        message: 'You have $count/$max customers. Upgrade to add more.',
+        featureName: 'more customers',
+      );
+      return;
+    }
+
+    // On web, skip contact picker — go straight to manual form
+    if (kIsWeb) {
+      await _navigateToForm();
+      return;
+    }
+
     await showModalBottomSheet(
       context: context,
       backgroundColor: kSurfaceLowest,
@@ -397,10 +427,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
       context,
       MaterialPageRoute(builder: (_) => CustomerDetailsScreen(client: client)),
     );
-    if (!mounted) {
-      return;
-    }
-    await _loadClients(reset: true);
+    // Don't force a full reload — the list is still valid.
+    // Only refresh if the detail screen signalled a change.
   }
 
   void _handleSearchChanged(String value) {
@@ -430,7 +458,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
     if (reset) {
       setState(() {
-        _isLoadingClients = true;
+        // Only show spinner if we have no cached data — prevents screen blink
+        _isLoadingClients = _clients.isEmpty;
         _isLoadingMoreClients = false;
         _clientsLoadError = null;
         _hasMoreClients = true;

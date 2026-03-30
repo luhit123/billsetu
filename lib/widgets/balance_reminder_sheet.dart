@@ -3,6 +3,7 @@ import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/upi_utils.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -16,11 +17,15 @@ class BalanceReminderSheet extends StatefulWidget {
     required this.client,
     required this.unpaidInvoices,
     required this.totalOutstanding,
+    this.upiId,
+    this.businessName,
   });
 
   final Client client;
   final List<Invoice> unpaidInvoices;
   final double totalOutstanding;
+  final String? upiId;
+  final String? businessName;
 
   @override
   State<BalanceReminderSheet> createState() => _BalanceReminderSheetState();
@@ -72,7 +77,24 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
     buf
       ..writeln()
-      ..writeln('*Total Outstanding: $total*')
+      ..writeln('*Total Outstanding: $total*');
+
+    // Add UPI payment link if merchant has UPI configured
+    if (widget.upiId != null &&
+        widget.upiId!.isNotEmpty &&
+        widget.totalOutstanding > 0) {
+      final payLink = buildUpiWebPaymentLink(
+        upiId: widget.upiId!,
+        businessName: widget.businessName ?? '',
+        amount: widget.totalOutstanding,
+        invoiceNumber: 'Balance',
+      );
+      buf
+        ..writeln()
+        ..writeln('Pay now: $payLink');
+    }
+
+    buf
       ..writeln()
       ..writeln('Please arrange payment at your earliest convenience. '
           'Thank you! 🙏');
@@ -87,9 +109,21 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
     final total = _currency.format(widget.totalOutstanding);
     final count = widget.unpaidInvoices.length;
 
+    String payPart = '';
+    if (widget.upiId != null &&
+        widget.upiId!.isNotEmpty &&
+        widget.totalOutstanding > 0) {
+      final payLink = buildUpiWebPaymentLink(
+        upiId: widget.upiId!,
+        businessName: widget.businessName ?? '',
+        amount: widget.totalOutstanding,
+        invoiceNumber: 'Balance',
+      );
+      payPart = ' Pay: $payLink';
+    }
     return 'Hi $name, this is a reminder that you have $count unpaid '
         'invoice${count > 1 ? 's' : ''} totalling $total. '
-        'Please arrange payment at your earliest convenience. Thank you!';
+        'Please arrange payment at your earliest convenience.$payPart';
   }
 
   String? _normalizedPhone() {

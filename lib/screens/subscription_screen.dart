@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../modals/payment.dart';
 import '../services/plan_service.dart';
+import '../services/remote_config_service.dart';
 import '../services/payment_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../theme/app_colors.dart';
@@ -35,6 +36,10 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     _loadUsage();
     _listenPlanChanges();
     _listenSubscriptionDoc();
+    // Force-refresh Remote Config so limits are always up to date
+    RemoteConfigService.instance.refetch().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
@@ -285,7 +290,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             icon: Icons.rocket_launch_rounded,
             title: plan == AppPlan.expired ? 'Upgrade Plan' : 'Change Plan',
             subtitle: plan == AppPlan.expired
-                ? 'Unlock more features with Raja or Maharaja'
+                ? 'Unlock more features with Pro'
                 : 'Switch to a different plan',
             onTap: () {
               Navigator.of(context).push(
@@ -559,7 +564,14 @@ class _PlanHeaderCard extends StatelessWidget {
                     Row(
                       children: [
                         _StatusChip(label: _statusLabel, color: _statusColor),
-                        if (plan != AppPlan.expired) ...[
+                        if (plan == AppPlan.trial) ...[
+                          const SizedBox(width: 8),
+                          _StatusChip(
+                            label: '${PlanService.instance.trialDaysLeft}d trial left',
+                            color: Colors.white.withValues(alpha: 0.25),
+                            textColor: Colors.white,
+                          ),
+                        ] else if (plan != AppPlan.expired) ...[
                           const SizedBox(width: 8),
                           _StatusChip(
                             label: cycleName,

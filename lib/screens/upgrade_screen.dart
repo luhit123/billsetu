@@ -232,9 +232,11 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                         children: [
                           Icon(Icons.timer_outlined, color: Colors.amber.shade800, size: 20),
                           const SizedBox(width: 10),
-                          Text(
-                            '$trialDays days left in your free trial',
-                            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.amber.shade900, fontSize: 14),
+                          Expanded(
+                            child: Text(
+                              '$trialDays days left in your free trial',
+                              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.amber.shade900, fontSize: 14),
+                            ),
                           ),
                         ],
                       ),
@@ -244,8 +246,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   _buildBillingToggle(),
                   const SizedBox(height: 20),
 
-                  // Single Pro plan card
-                  _buildProCard(),
+                  // Comparison card
+                  _buildComparisonCard(),
                   const SizedBox(height: 20),
 
                   // CTA
@@ -408,9 +410,8 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     );
   }
 
-  Widget _buildProCard() {
-    final rc = RemoteConfigService.instance;
-    final features = rc.upgradeFeatures;
+  Widget _buildComparisonCard() {
+    final features = RemoteConfigService.instance.planComparisonFeatures;
 
     return Container(
       decoration: BoxDecoration(
@@ -418,57 +419,163 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [kSubtleShadow],
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Header row
+          Row(
+            children: [
+              // Feature column header
+              Expanded(
+                flex: 5,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  color: Colors.grey.shade50,
+                  child: const Text(
+                    'Features',
+                    style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface),
+                  ),
+                ),
+              ),
+              // Free column header
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  color: Colors.grey.shade100,
+                  child: const Center(
+                    child: Text(
+                      'Free',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurfaceVariant),
+                    ),
+                  ),
+                ),
+              ),
+              // Pro column header
+              Expanded(
+                flex: 2,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: const BoxDecoration(gradient: kSignatureGradient),
+                  child: const Center(
+                    child: Text(
+                      'Pro',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Feature rows
+          ...features.asMap().entries.map((entry) {
+            final i = entry.key;
+            final f = entry.value;
+            final isEven = i % 2 == 0;
+            final freeVal = f['free'];
+            final proVal = f['pro'];
+
+            return Container(
+              color: isEven ? Colors.white : Colors.grey.shade50.withAlpha(120),
+              child: Row(
+                children: [
+                  // Feature label
+                  Expanded(
+                    flex: 5,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      child: Row(
+                        children: [
+                          Icon(_resolveIcon(f['icon'] as String? ?? ''), size: 16, color: kPrimary.withAlpha(180)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              f['label'] as String? ?? '',
+                              style: const TextStyle(fontSize: 12, color: kOnSurface, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Free value
+                  Expanded(
+                    flex: 2,
+                    child: Center(child: _buildCellFromDynamic(freeVal)),
+                  ),
+                  // Pro value
+                  Expanded(
+                    flex: 2,
+                    child: Center(child: _buildCellFromDynamic(proVal, isPro: true)),
+                  ),
+                ],
+              ),
+            );
+          }),
+
+          // Price row at bottom
           Container(
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 14),
-            decoration: const BoxDecoration(
-              gradient: kSignatureGradient,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade50,
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
-                const SizedBox(width: 8),
-                const Text(
-                  'Pro',
-                  style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                Expanded(
+                  flex: 5,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    child: Text(
+                      'Price',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.grey.shade700),
+                    ),
+                  ),
                 ),
-                const Spacer(),
-                Text(
-                  _priceLabel(),
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Text(
+                      'Free',
+                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.green.shade600),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Center(
+                    child: Text(
+                      _priceLabel(),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary),
+                    ),
+                  ),
                 ),
               ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
-            child: Column(
-              children: features.map((f) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  child: Row(
-                    children: [
-                      Icon(_resolveIcon(f['icon'] ?? ''), size: 18, color: kPrimary),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          f['label'] ?? '',
-                          style: const TextStyle(fontSize: 13, color: kOnSurface, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                      Icon(Icons.check_circle_rounded, size: 20, color: Colors.green.shade500),
-                    ],
-                  ),
-                );
-              }).toList(),
             ),
           ),
         ],
       ),
     );
+  }
+
+  /// Renders a cell value from Remote Config dynamic data.
+  /// If the value is a String → show text. If bool true → green check. If bool false → grey dash.
+  Widget _buildCellFromDynamic(dynamic value, {bool isPro = false}) {
+    if (value is String) {
+      return Text(
+        value,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isPro ? kPrimary : kOnSurfaceVariant,
+        ),
+      );
+    }
+    if (value == true) {
+      return Icon(Icons.check_circle_rounded, size: 18, color: Colors.green.shade500);
+    }
+    return Icon(Icons.remove_circle_outline, size: 18, color: Colors.grey.shade300);
   }
 
   /// Maps icon name strings from Remote Config to Material Icons.
@@ -481,7 +588,6 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       'chat': Icons.chat,
       'shopping_cart': Icons.shopping_cart,
       'bar_chart': Icons.bar_chart,
-      'local_shipping': Icons.local_shipping,
       'download': Icons.download,
       'palette': Icons.palette,
       'workspace_premium': Icons.workspace_premium_rounded,
@@ -490,8 +596,17 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       'diamond': Icons.diamond,
       'support': Icons.support_agent,
       'cloud': Icons.cloud,
+      'cloud_off': Icons.cloud_off,
       'security': Icons.security,
       'speed': Icons.speed,
+      'currency_rupee': Icons.currency_rupee,
+      'qr_code': Icons.qr_code,
+      'qr_code_scanner': Icons.qr_code_scanner,
+      'language': Icons.language,
+      'badge': Icons.badge,
+      'assessment': Icons.assessment,
+      'card_membership': Icons.card_membership,
+      'local_shipping': Icons.local_shipping,
     };
     return map[name] ?? Icons.check_circle_outline;
   }
@@ -503,3 +618,4 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     return Color(int.parse(hex, radix: 16));
   }
 }
+

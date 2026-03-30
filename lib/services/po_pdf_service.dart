@@ -1,5 +1,7 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/modals/purchase_order.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,14 +36,23 @@ class PoPdfService {
       ),
     );
 
-    final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/PO_${po.orderNumber}.pdf');
-    await file.writeAsBytes(await pdf.save());
+    final pdfBytes = await pdf.save();
 
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'Purchase Order #${po.orderNumber}',
-    );
+    if (kIsWeb) {
+      await SharePlus.instance.share(ShareParams(
+        files: [XFile.fromData(Uint8List.fromList(pdfBytes), mimeType: 'application/pdf', name: 'PO_${po.orderNumber}.pdf')],
+        text: 'Purchase Order #${po.orderNumber}',
+      ));
+    } else {
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/PO_${po.orderNumber}.pdf');
+      await file.writeAsBytes(pdfBytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'Purchase Order #${po.orderNumber}',
+      );
+    }
   }
 
   // ── Page builder ──────────────────────────────────────────────────────

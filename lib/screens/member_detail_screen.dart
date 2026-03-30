@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
 import 'package:billeasy/modals/member.dart';
@@ -9,6 +10,7 @@ import 'package:billeasy/screens/member_form_screen.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/membership_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/utils/upi_utils.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -383,23 +385,37 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
         includePayment: false,
       );
 
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/Receipt_${_member.name.replaceAll(' ', '_')}.pdf');
-      await file.writeAsBytes(pdfBytes);
+      // Build UPI payment link for renewal if merchant has UPI configured
+      String payPart = '';
+      if (profile != null &&
+          profile.upiId.isNotEmpty &&
+          _member.amountPaid > 0) {
+        final payLink = buildUpiWebPaymentLink(
+          upiId: profile.upiId,
+          businessName: profile.storeName,
+          amount: _member.amountPaid,
+          invoiceNumber: 'Membership-${_member.name.replaceAll(' ', '')}',
+        );
+        payPart = '\n\nPay now: $payLink';
+      }
 
       final message =
           'Hi ${_member.name}! 🙏\n\n'
           'Here is your *${_member.planName}* membership receipt.\n'
           '📅 Valid: ${_dateFmt.format(_member.startDate)} → ${_dateFmt.format(_member.endDate)}\n'
-          '💰 Amount Paid: ₹${_member.amountPaid.toStringAsFixed(0)}\n\n'
+          '💰 Amount: ₹${_member.amountPaid.toStringAsFixed(0)}'
+          '$payPart\n\n'
           'Thank you for being a valued member! ⭐\n'
           '_Powered by BillRaja_';
 
       // Build the WhatsApp number — add +91 country code if 10-digit Indian number.
       final waPhone = phone.length == 10 ? '91$phone' : phone;
 
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         try {
+          final dir = await getTemporaryDirectory();
+          final file = File('${dir.path}/Receipt_${_member.name.replaceAll(' ', '_')}.pdf');
+          await file.writeAsBytes(pdfBytes);
           const channel = MethodChannel('com.luhit.billeasy/share');
           await channel.invokeMethod('whatsapp', {
             'phone': waPhone,
@@ -413,8 +429,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
         }
       }
 
-      // Fallback (iOS or WhatsApp not installed): open wa.me URL.
-      // wa.me works even if the number is not saved in contacts.
+      // Fallback (iOS, web, or WhatsApp not installed): open wa.me URL.
       final uri = Uri.parse(
         'https://wa.me/$waPhone?text=${Uri.encodeComponent(message)}',
       );
@@ -445,6 +460,24 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       final dateFmt = DateFormat('dd MMM yyyy');
       final endStr = dateFmt.format(_member.endDate);
 
+      // Build UPI payment link for renewal if available
+      String payLink = '';
+      try {
+        final profile = await ProfileService().getCurrentProfile();
+        if (profile != null &&
+            profile.upiId.isNotEmpty &&
+            _member.amountPaid > 0) {
+          payLink = buildUpiWebPaymentLink(
+            upiId: profile.upiId,
+            businessName: profile.storeName,
+            amount: _member.amountPaid,
+            invoiceNumber: 'Renewal-${_member.name.replaceAll(' ', '')}',
+          );
+        }
+      } catch (_) {}
+
+      final payPart = payLink.isNotEmpty ? '\nPay now: $payLink\n' : '';
+
       String message;
       if (_member.status == MemberStatus.frozen) {
         message =
@@ -457,13 +490,15 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
         message =
             'Hi ${_member.name}! 👋\n\n'
             'Your *${_member.planName}* membership expired *$expiredDays day${expiredDays == 1 ? '' : 's'} ago* (on $endStr).\n\n'
-            'We\'d love to have you back! 🙏 Renew today to continue enjoying all the benefits.\n\n'
+            'We\'d love to have you back! 🙏 Renew today to continue enjoying all the benefits.\n'
+            '$payPart\n'
             '_Powered by BillRaja_';
       } else if (daysLeft <= 7) {
         message =
             'Hi ${_member.name}! 👋\n\n'
             '⚠️ Your *${_member.planName}* membership is expiring in *$daysLeft day${daysLeft == 1 ? '' : 's'}* (on $endStr).\n\n'
-            'Renew now to avoid any interruption to your membership benefits! 💪\n\n'
+            'Renew now to avoid any interruption to your membership benefits! 💪\n'
+            '$payPart\n'
             '_Powered by BillRaja_';
       } else {
         message =
@@ -475,7 +510,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
 
       final waPhone = phone.length == 10 ? '91$phone' : phone;
 
-      if (Platform.isAndroid) {
+      if (!kIsWeb && Platform.isAndroid) {
         try {
           const channel = MethodChannel('com.luhit.billeasy/share');
           await channel.invokeMethod('whatsapp', {

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:billeasy/screens/how_to_use_screen.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/responsive.dart';
 
 // ── Localized strings ─────────────────────────────────────────────────────────
 
@@ -23,6 +25,13 @@ class _Strings {
   final String feat3a;
   final String feat3b;
   final String feat3c;
+  final String step4Badge;
+  final String screen4Title;
+  final String screen4Subtitle;
+  final String feat4a;
+  final String feat4b;
+  final String feat4c;
+  final String howToUseButton;
   final String skip;
   final String next;
   final String getStarted;
@@ -46,6 +55,13 @@ class _Strings {
     required this.feat3a,
     required this.feat3b,
     required this.feat3c,
+    required this.step4Badge,
+    required this.screen4Title,
+    required this.screen4Subtitle,
+    required this.feat4a,
+    required this.feat4b,
+    required this.feat4c,
+    required this.howToUseButton,
     required this.skip,
     required this.next,
     required this.getStarted,
@@ -74,6 +90,13 @@ const _english = _Strings(
   feat3a: 'Create & assign customer groups',
   feat3b: 'Full invoice history per customer',
   feat3c: 'Track outstanding dues instantly',
+  step4Badge: '✦  Step 4 of 4',
+  screen4Title: 'Your Complete\nBusiness Toolkit',
+  screen4Subtitle: 'GST compliance, purchase orders, inventory tracking, business cards, and more — everything a growing business needs.',
+  feat4a: 'GST reports & compliance',
+  feat4b: 'Product inventory & stock alerts',
+  feat4c: 'Purchase orders & supplier tracking',
+  howToUseButton: 'See How It Works',
   skip: 'Skip',
   next: 'Next',
   getStarted: 'Get Started',
@@ -101,6 +124,13 @@ const _hindi = _Strings(
   feat3a: '\u0917\u094d\u0930\u093e\u0939\u0915 \u0938\u092e\u0942\u0939 \u092c\u0928\u093e\u090f\u0902 \u0914\u0930 \u0905\u0938\u093e\u0907\u0928 \u0915\u0930\u0947\u0902',
   feat3b: '\u0939\u0930 \u0917\u094d\u0930\u093e\u0939\u0915 \u0915\u093e \u092a\u0942\u0930\u093e \u0907\u0928\u0935\u0949\u0907\u0938 \u0907\u0924\u093f\u0939\u093e\u0938',
   feat3c: '\u092c\u0915\u093e\u092f\u093e \u0930\u093e\u0936\u093f \u0924\u0941\u0930\u0902\u0924 \u091f\u094d\u0930\u0948\u0915 \u0915\u0930\u0947\u0902',
+  step4Badge: '✦  चरण 4 / 4',
+  screen4Title: 'आपका पूरा\nबिज़नेस टूलकिट',
+  screen4Subtitle: 'GST अनुपालन, खरीद आदेश, इन्वेंटरी ट्रैकिंग, बिजनेस कार्ड, और भी बहुत कुछ — एक बढ़ते बिज़नेस के लिए सब कुछ।',
+  feat4a: 'GST रिपोर्ट और अनुपालन',
+  feat4b: 'प्रोडक्ट इन्वेंटरी और स्टॉक अलर्ट',
+  feat4c: 'खरीद आदेश और सप्लायर ट्रैकिंग',
+  howToUseButton: 'देखें कैसे काम करता है',
   skip: '\u091b\u094b\u0921\u093c\u0947\u0902',
   next: '\u0906\u0917\u0947',
   getStarted: '\u0936\u0941\u0930\u0942 \u0915\u0930\u0947\u0902',
@@ -128,6 +158,13 @@ const _assamese = _Strings(
   feat3a: '\u0997\u09cd\u09f0\u09be\u09b9\u0995 \u0997\u09cb\u099f \u09ac\u09a8\u09be\u0993\u0995 \u0986\u09f0\u09c1 \u09a8\u09bf\u09af\u09c1\u0995\u09cd\u09a4 \u0995\u09f0\u0995',
   feat3b: '\u09aa\u09cd\u09f0\u09a4\u09bf\u099c\u09a8 \u0997\u09cd\u09f0\u09be\u09b9\u0995\u09f0 \u09b8\u09ae\u09cd\u09aa\u09c2\u09f0\u09cd\u09a3 \u09ac\u09bf\u09b2\u09f0 \u0987\u09a4\u09bf\u09b9\u09be\u09b8',
   feat3c: '\u09ac\u0995\u09c7\u09af\u09bc\u09be \u09aa\u09f0\u09bf\u09ae\u09be\u09a3 \u09a4\u09ce\u0995\u09cd\u09b7\u09a3\u09be\u09ce \u099f\u09cd\u09f0\u09c7\u0995 \u0995\u09f0\u0995',
+  step4Badge: '✦  পদক্ষেপ ৪ / ৪',
+  screen4Title: 'আপোনাৰ সম্পূৰ্ণ\nবিজনেছ টুলকিট',
+  screen4Subtitle: 'GST অনুপালন, ক্ৰয় আদেশ, ইনভেণ্টৰি ট্ৰেকিং, বিজনেছ কাৰ্ড — বৃদ্ধি পোৱা ব্যৱসায়ৰ বাবে সকলো।',
+  feat4a: 'GST ৰিপোৰ্ট আৰু অনুপালন',
+  feat4b: 'প্ৰডাক্ট ইনভেণ্টৰি আৰু ষ্টক এলাৰ্ট',
+  feat4c: 'ক্ৰয় আদেশ আৰু যোগানকাৰী ট্ৰেকিং',
+  howToUseButton: 'চাওক কেনেকৈ কাম কৰে',
   skip: '\u098f\u09f0\u0995',
   next: '\u09aa\u09f0\u09f1\u09f0\u09cd\u09a4\u09c0',
   getStarted: '\u0986\u09f0\u09ae\u09cd\u09ad \u0995\u09f0\u0995',
@@ -223,13 +260,19 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   void _nextPage() {
-    if (_currentPage < 2) {
-      _slideController.reset();
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
-      _slideController.forward();
+    if (_currentPage < 3) {
+      final wide = isWideScreen(context);
+      if (wide) {
+        // Web layout: no PageView, just update state
+        setState(() => _currentPage++);
+      } else {
+        _slideController.reset();
+        _pageController.nextPage(
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+        _slideController.forward();
+      }
     } else {
       _completeOnboarding();
     }
@@ -237,13 +280,20 @@ class _OnboardingScreenState extends State<OnboardingScreen>
 
   @override
   Widget build(BuildContext context) {
+    final wide = isWideScreen(context);
+    if (wide) return _buildWebLayout(context);
+    return _buildMobileLayout();
+  }
+
+  // ── Mobile layout (original PageView) ──────────────────────────────────────
+  Widget _buildMobileLayout() {
     return Scaffold(
       body: Stack(
         children: [
           PageView(
             controller: _pageController,
             onPageChanged: (page) => setState(() => _currentPage = page),
-            children: [_buildPage1(), _buildPage2(), _buildPage3()],
+            children: [_buildPage1(), _buildPage2(), _buildPage3(), _buildPage4()],
           ),
           // Bottom controls overlay
           Positioned(
@@ -254,6 +304,387 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           ),
         ],
       ),
+    );
+  }
+
+  // ── Web / wide-screen layout ───────────────────────────────────────────────
+  // Side-by-side: illustration on left, content on right, with smooth
+  // cross-fade transitions and a sleek progress bar.
+  Widget _buildWebLayout(BuildContext context) {
+    final pages = _webPages;
+    final page = pages[_currentPage];
+    final isLast = _currentPage == 3;
+
+    return Scaffold(
+      backgroundColor: kSurfaceLowest,
+      body: Stack(
+        children: [
+          // Background orbs
+          _buildOrb(top: -120, right: -80, size: 400, opacity: 0.06),
+          _buildOrb(bottom: -100, left: -100, size: 360, opacity: 0.05),
+
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1100),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 48, vertical: 40),
+                child: Column(
+                  children: [
+                    // ── Top bar: logo + skip ──────────────────────────────────
+                    Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            gradient: kSignatureGradient,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          alignment: Alignment.center,
+                          child: const Text(
+                            'B',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'BillRaja',
+                          style: TextStyle(
+                            color: kOnSurface,
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const Spacer(),
+                        TextButton(
+                          onPressed: _completeOnboarding,
+                          child: Text(
+                            _s.skip,
+                            style: const TextStyle(
+                              color: kTextTertiary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 32),
+
+                    // ── Main content: illustration + text side by side ────────
+                    Expanded(
+                      child: Row(
+                        children: [
+                          // Left: illustration
+                          Expanded(
+                            flex: 5,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 500),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              child: Container(
+                                key: ValueKey('web_illust_$_currentPage'),
+                                alignment: Alignment.center,
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: AnimatedBuilder(
+                                    animation: _floatAnimation,
+                                    builder: (context, child) =>
+                                        Transform.translate(
+                                      offset:
+                                          Offset(0, _floatAnimation.value),
+                                      child: child,
+                                    ),
+                                    child: page.illustration,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 64),
+
+                          // Right: text content
+                          Expanded(
+                            flex: 5,
+                            child: AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 400),
+                              switchInCurve: Curves.easeOut,
+                              switchOutCurve: Curves.easeIn,
+                              child: Container(
+                                key: ValueKey('web_text_$_currentPage'),
+                                alignment: Alignment.centerLeft,
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      _buildBadge(page.badge),
+                                      const SizedBox(height: 24),
+                                      Text(
+                                        page.title,
+                                        style: const TextStyle(
+                                          color: kOnSurface,
+                                          fontSize: 44,
+                                          fontWeight: FontWeight.w800,
+                                          height: 1.12,
+                                          letterSpacing: -1.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      Text(
+                                        page.subtitle,
+                                        style: const TextStyle(
+                                          color: kOnSurfaceVariant,
+                                          fontSize: 17,
+                                          height: 1.6,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 36),
+                                      ...page.features.map((f) => Padding(
+                                            padding: const EdgeInsets.only(
+                                                bottom: 14),
+                                            child: _buildWebFeatureRow(
+                                                f.icon, f.label),
+                                          )),
+                                      if (isLast) ...[
+                                        const SizedBox(height: 12),
+                                        GestureDetector(
+                                          onTap: () {
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const HowToUseScreen(),
+                                              ),
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 20, vertical: 12),
+                                            decoration: BoxDecoration(
+                                              color: kPrimaryContainer,
+                                              borderRadius:
+                                                  BorderRadius.circular(30),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(
+                                                    Icons.menu_book_rounded,
+                                                    size: 16,
+                                                    color: kPrimary),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  _s.howToUseButton,
+                                                  style: const TextStyle(
+                                                    color: kPrimary,
+                                                    fontSize: 14,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // ── Bottom controls ───────────────────────────────────────
+                    _buildWebBottomControls(),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Data holder for web pages
+  List<_WebPageData> get _webPages => [
+        _WebPageData(
+          badge: _s.step1Badge,
+          title: _s.screen1Title.replaceAll('\n', ' '),
+          subtitle: _s.screen1Subtitle,
+          illustration: _buildInvoiceIllustration(),
+          features: [
+            _FeatureItem(Icons.person_add_alt_1_rounded, _s.feat1a),
+            _FeatureItem(Icons.add_shopping_cart_rounded, _s.feat1b),
+            _FeatureItem(Icons.local_offer_rounded, _s.feat1c),
+          ],
+        ),
+        _WebPageData(
+          badge: _s.step2Badge,
+          title: _s.screen2Title.replaceAll('\n', ' '),
+          subtitle: _s.screen2Subtitle,
+          illustration: _buildDashboardIllustration(),
+          features: [
+            _FeatureItem(Icons.bar_chart_rounded, _s.feat2a),
+            _FeatureItem(Icons.filter_alt_rounded, _s.feat2b),
+            _FeatureItem(Icons.picture_as_pdf_rounded, _s.feat2c),
+          ],
+        ),
+        _WebPageData(
+          badge: _s.step3Badge,
+          title: _s.screen3Title.replaceAll('\n', ' '),
+          subtitle: _s.screen3Subtitle,
+          illustration: _buildCustomerGroupsIllustration(),
+          features: [
+            _FeatureItem(Icons.folder_special_rounded, _s.feat3a),
+            _FeatureItem(Icons.history_rounded, _s.feat3b),
+            _FeatureItem(Icons.account_balance_wallet_rounded, _s.feat3c),
+          ],
+        ),
+        _WebPageData(
+          badge: _s.step4Badge,
+          title: _s.screen4Title.replaceAll('\n', ' '),
+          subtitle: _s.screen4Subtitle,
+          illustration: _buildToolkitIllustration(),
+          features: [
+            _FeatureItem(Icons.account_balance_rounded, _s.feat4a),
+            _FeatureItem(Icons.inventory_2_rounded, _s.feat4b),
+            _FeatureItem(Icons.local_shipping_rounded, _s.feat4c),
+          ],
+        ),
+      ];
+
+  Widget _buildWebFeatureRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: kPrimaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Icon(icon, color: kPrimary, size: 20),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: kOnSurface,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebBottomControls() {
+    final isLast = _currentPage == 3;
+
+    return Row(
+      children: [
+        // Progress indicator — segmented bar
+        Expanded(
+          child: Row(
+            children: List.generate(4, (i) {
+              final isActive = i <= _currentPage;
+              return Expanded(
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeOut,
+                  height: 4,
+                  margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
+                  decoration: BoxDecoration(
+                    color: isActive ? kPrimary : kSurfaceContainer,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              );
+            }),
+          ),
+        ),
+        const SizedBox(width: 40),
+
+        // Back button
+        if (_currentPage > 0)
+          TextButton.icon(
+            onPressed: () {
+              setState(() => _currentPage--);
+            },
+            icon: const Icon(Icons.arrow_back_rounded, size: 18),
+            label: const Text('Back'),
+            style: TextButton.styleFrom(foregroundColor: kOnSurfaceVariant),
+          ),
+        const SizedBox(width: 12),
+
+        // Next / Get Started button
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: _nextPage,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: EdgeInsets.symmetric(
+                horizontal: isLast ? 40 : 28,
+                vertical: isLast ? 18 : 16,
+              ),
+              decoration: BoxDecoration(
+                gradient: isLast
+                    ? const LinearGradient(
+                        colors: [Color(0xFF0057FF), Color(0xFF7C3AED)],
+                        begin: Alignment.centerLeft,
+                        end: Alignment.centerRight,
+                      )
+                    : kSignatureGradient,
+                borderRadius: BorderRadius.circular(50),
+                boxShadow: [
+                  BoxShadow(
+                    color: kPrimary.withAlpha(isLast ? 100 : 77),
+                    blurRadius: isLast ? 24 : 16,
+                    spreadRadius: isLast ? 2 : 0,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (isLast) ...[
+                    const Icon(Icons.rocket_launch_rounded, color: kOnPrimary, size: 20),
+                    const SizedBox(width: 10),
+                  ],
+                  Text(
+                    isLast ? _s.getStarted : _s.next,
+                    style: TextStyle(
+                      color: kOnPrimary,
+                      fontSize: isLast ? 17 : 15,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: isLast ? 0.5 : 0.2,
+                    ),
+                  ),
+                  if (!isLast) ...[
+                    const SizedBox(width: 8),
+                    const Icon(Icons.arrow_forward_rounded, color: kOnPrimary, size: 18),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -729,7 +1160,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   Widget _buildBottomControls() {
-    final isLast = _currentPage == 2;
+    final isLast = _currentPage == 3;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(28, 20, 28, 36),
@@ -744,7 +1175,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
-            children: List.generate(3, (index) {
+            children: List.generate(4, (index) {
               final isActive = index == _currentPage;
               return AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
@@ -769,32 +1200,50 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 300),
                 padding: EdgeInsets.symmetric(
-                  horizontal: isLast ? 32 : 28,
-                  vertical: 16,
+                  horizontal: isLast ? 36 : 28,
+                  vertical: isLast ? 18 : 16,
                 ),
                 decoration: BoxDecoration(
-                  color: kPrimary,
+                  gradient: isLast
+                      ? const LinearGradient(
+                          colors: [Color(0xFF0057FF), Color(0xFF7C3AED)],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        )
+                      : null,
+                  color: isLast ? null : kPrimary,
                   borderRadius: BorderRadius.circular(50),
-                  boxShadow: const [kWhisperShadow],
+                  boxShadow: isLast
+                      ? [
+                          BoxShadow(
+                            color: kPrimary.withAlpha(100),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : const [kWhisperShadow],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (isLast) ...[
+                      const Icon(Icons.rocket_launch_rounded, color: kOnPrimary, size: 20),
+                      const SizedBox(width: 10),
+                    ],
                     Text(
                       isLast ? _s.getStarted : _s.next,
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: kOnPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
+                        fontSize: isLast ? 17 : 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: isLast ? 0.5 : 0.2,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      isLast ? Icons.rocket_launch_rounded : Icons.arrow_forward_rounded,
-                      color: kOnPrimary,
-                      size: 18,
-                    ),
+                    if (!isLast) ...[
+                      const SizedBox(width: 8),
+                      const Icon(Icons.arrow_forward_rounded, color: kOnPrimary, size: 18),
+                    ],
                   ],
                 ),
               ),
@@ -1167,6 +1616,254 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     );
   }
 
+  Widget _buildPage4() {
+    return Container(
+      decoration: _pageDecoration,
+      child: Stack(
+        children: [
+          _buildOrb(top: -50, left: -60, size: 240, opacity: 0.08),
+          _buildOrb(bottom: 160, right: -40, size: 200, opacity: 0.06),
+
+          SafeArea(
+            bottom: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(28, 24, 28, 140),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 44),
+                  Expanded(
+                    flex: 5,
+                    child: Center(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: AnimatedBuilder(
+                          animation: _floatAnimation,
+                          builder: (context, child) => Transform.translate(
+                            offset: Offset(0, _floatAnimation.value * 0.6),
+                            child: child,
+                          ),
+                          child: _buildToolkitIllustration(),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  SlideTransition(
+                    position: _slideAnimation,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildBadge(_s.step4Badge),
+                        const SizedBox(height: 20),
+                        _buildTitle(_s.screen4Title),
+                        const SizedBox(height: 14),
+                        _buildSubtitle(_s.screen4Subtitle),
+                        const SizedBox(height: 28),
+                        _buildFeatureRow(Icons.account_balance_rounded, _s.feat4a),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(Icons.inventory_2_rounded, _s.feat4b),
+                        const SizedBox(height: 12),
+                        _buildFeatureRow(Icons.local_shipping_rounded, _s.feat4c),
+                        const SizedBox(height: 20),
+                        // -- "How to Use" shortcut button --
+                        Center(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const HowToUseScreen(),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [Color(0xFF0057FF), Color(0xFF7C3AED)],
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                ),
+                                borderRadius: BorderRadius.circular(50),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: kPrimary.withAlpha(80),
+                                    blurRadius: 16,
+                                    spreadRadius: 1,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.play_circle_rounded, size: 20, color: Colors.white),
+                                  const SizedBox(width: 10),
+                                  Text(
+                                    _s.howToUseButton,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToolkitIllustration() {
+    return SizedBox(
+      width: 300,
+      height: 280,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Central card with a grid of feature icons
+          Container(
+            width: 240,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: kSurfaceContainerLow,
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: const [kWhisperShadow],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.auto_awesome_rounded, size: 14, color: kPrimary),
+                    SizedBox(width: 6),
+                    Text(
+                      'ALL-IN-ONE TOOLKIT',
+                      style: TextStyle(
+                        color: kOnSurface,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _toolIcon(Icons.receipt_long_rounded, 'Invoices'),
+                    _toolIcon(Icons.people_rounded, 'Customers'),
+                    _toolIcon(Icons.inventory_2_rounded, 'Products'),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _toolIcon(Icons.account_balance_rounded, 'GST'),
+                    _toolIcon(Icons.local_shipping_rounded, 'PO'),
+                    _toolIcon(Icons.bar_chart_rounded, 'Reports'),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          // Floating badges
+          Positioned(
+            top: 10,
+            right: 8,
+            child: AnimatedBuilder(
+              animation: _pulseAnimation,
+              builder: (_, child) =>
+                  Transform.scale(scale: _pulseAnimation.value, child: child),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: kPaid,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.verified_rounded, color: Colors.white, size: 11),
+                    SizedBox(width: 4),
+                    Text('GST Ready', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 20,
+            left: 0,
+            child: AnimatedBuilder(
+              animation: _floatAnimation,
+              builder: (_, child) => Transform.translate(
+                offset: Offset(_floatAnimation.value * -0.4, 0),
+                child: child,
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: kSurfaceContainerLow,
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: const [kSubtleShadow],
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.offline_bolt_rounded, color: kPrimary, size: 11),
+                    SizedBox(width: 4),
+                    Text('Works Offline', style: TextStyle(color: kOnSurface, fontSize: 10, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _toolIcon(IconData icon, String label) {
+    return Column(
+      children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: kPrimaryContainer,
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(icon, color: kPrimary, size: 20),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          label,
+          style: const TextStyle(
+            color: kOnSurfaceVariant,
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _glassCard({required double width, required double height, double opacity = 0.1}) {
     return Container(
       width: width,
@@ -1177,4 +1874,28 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       ),
     );
   }
+}
+
+// ── Helper classes for web layout ────────────────────────────────────────────
+
+class _FeatureItem {
+  final IconData icon;
+  final String label;
+  const _FeatureItem(this.icon, this.label);
+}
+
+class _WebPageData {
+  final String badge;
+  final String title;
+  final String subtitle;
+  final Widget illustration;
+  final List<_FeatureItem> features;
+
+  const _WebPageData({
+    required this.badge,
+    required this.title,
+    required this.subtitle,
+    required this.illustration,
+    required this.features,
+  });
 }

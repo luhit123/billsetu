@@ -37,7 +37,19 @@
       "Bash(git pull:*)",
       "WebSearch",
       "WebFetch(domain:pub.dev)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Read(//private/tmp/**)",
+      "Bash(curl -sL -o gpay.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Google_Pay_Logo.svg/200px-Google_Pay_Logo.svg.png\")",
+      "Bash(curl -sL -o phonepe.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/7/71/PhonePe_Logo.svg/200px-PhonePe_Logo.svg.png\")",
+      "Bash(curl -sL -o paytm.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Paytm_Logo_%28standalone%29.svg/200px-Paytm_Logo_%28standalone%29.svg.png\")",
+      "Bash(curl -sL -o upi.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/e/e1/UPI-Logo-vector.svg/200px-UPI-Logo-vector.svg.png\")",
+      "Bash(curl -sL -o gpay_icon.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Google_Pay_Logo_%282020%29.svg/120px-Google_Pay_Logo_%282020%29.svg.png\")",
+      "Bash(curl -sL -o gpay_app.png \"https://upload.wikimedia.org/wikipedia/commons/thumb/1/13/Google_Pay_%28GPay%29_Logo_%282018-2020%29.svg/64px-Google_Pay_%28GPay%29_Logo_%282018-2020%29.svg.png\")",
+      "Bash(curl -sL \"https://simpleicons.org/icons/googlepay.svg\" -o gpay.svg)",
+      "Bash(curl -sL \"https://simpleicons.org/icons/phonepe.svg\" -o phonepe.svg)",
+      "Bash(curl -sL \"https://simpleicons.org/icons/paytm.svg\" -o paytm.svg)",
+      "Bash(curl -sL \"https://simpleicons.org/icons/upi.svg\" -o /tmp/upi.svg)",
+      "Read(//tmp/**)"
     ]
   }
 }

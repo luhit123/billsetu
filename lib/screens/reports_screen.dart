@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
@@ -295,11 +296,12 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     if (!PlanService.instance.hasReports) {
       return Scaffold(
         backgroundColor: kSurface,
         appBar: AppBar(
-          title: const Text('Reports'),
+          title: Text(s.reportsTitle),
           backgroundColor: kSurface,
           foregroundColor: kOnSurface,
           elevation: 0,
@@ -316,12 +318,12 @@ class _ReportsScreenState extends State<ReportsScreen>
                 const SizedBox(height: 16),
                 const Text('Reports & Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
                 const SizedBox(height: 8),
-                const Text('Upgrade to Maharaja plan to access detailed reports.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
+                Text(s.reportsUpgradeHint, textAlign: TextAlign.center, style: const TextStyle(color: kOnSurfaceVariant)),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Reports'))),
                   icon: const Icon(Icons.workspace_premium),
-                  label: const Text('Upgrade Now'),
+                  label: Text(s.reportsUpgradeNow),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: kPrimary,
                     foregroundColor: Colors.white,

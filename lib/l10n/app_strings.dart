@@ -646,6 +646,177 @@ class AppStrings {
   String get poMarkReceived => _t('poMarkReceived');
   String get supplierName => _t('supplierName');
   String get purchasePrice => _t('purchasePrice');
+
+  // ── Common ─────────────────────────────────────────────────────────────────
+
+  String get commonCancel => _t('commonCancel');
+  String get commonDelete => _t('commonDelete');
+  String get commonSave => _t('commonSave');
+  String get commonEdit => _t('commonEdit');
+  String get commonClose => _t('commonClose');
+  String get commonConfirm => _t('commonConfirm');
+  String get commonRetry => _t('commonRetry');
+  String get commonYes => _t('commonYes');
+  String get commonNo => _t('commonNo');
+  String get commonLoadError => _t('commonLoadError');
+  String get commonUpdate => _t('commonUpdate');
+
+  // ── Settings (additional) ─────────────────────────────────────────────────
+
+  String get settingsTitle => _t('settingsTitle');
+  String get settingsBilling => _t('settingsBilling');
+  String get settingsLegal => _t('settingsLegal');
+  String get settingsBillingPayments => _t('settingsBillingPayments');
+  String get settingsUpgradePlan => _t('settingsUpgradePlan');
+  String get settingsPrivacyPolicy => _t('settingsPrivacyPolicy');
+  String get settingsTermsConditions => _t('settingsTermsConditions');
+  String get settingsUpgradeHint => _t('settingsUpgradeHint');
+  String get settingsManageSubscription => _t('settingsManageSubscription');
+
+  // ── Invoices list ─────────────────────────────────────────────────────────
+
+  String get invoicesLoadError => _t('invoicesLoadError');
+  String get invoicesEmptyTitle => _t('invoicesEmptyTitle');
+  String get invoicesEmptyBody => _t('invoicesEmptyBody');
+  String get invoicesCreateFirst => _t('invoicesCreateFirst');
+
+  // ── Members ───────────────────────────────────────────────────────────────
+
+  String get membersTitle => _t('membersTitle');
+  String get membersLoadError => _t('membersLoadError');
+  String get membersSearchHint => _t('membersSearchHint');
+  String get membersEmpty => _t('membersEmpty');
+  String get membersEmptyBody => _t('membersEmptyBody');
+  String get memberFilterAll => _t('memberFilterAll');
+  String get memberFilterActive => _t('memberFilterActive');
+  String get memberFilterExpired => _t('memberFilterExpired');
+  String get memberFilterFrozen => _t('memberFilterFrozen');
+  String get memberFilterExpiringSoon => _t('memberFilterExpiringSoon');
+  String get memberAttendance => _t('memberAttendance');
+  String get memberPlan => _t('memberPlan');
+  String get memberValidTill => _t('memberValidTill');
+  String get memberStatus => _t('memberStatus');
+  String get memberJoined => _t('memberJoined');
+  String get memberAmountPaid => _t('memberAmountPaid');
+  String get memberShareReceipt => _t('memberShareReceipt');
+  String get memberSendReminder => _t('memberSendReminder');
+  String get memberRenew => _t('memberRenew');
+  String get memberFreeze => _t('memberFreeze');
+  String get memberUnfreeze => _t('memberUnfreeze');
+  String get memberDelete => _t('memberDelete');
+  String get memberEdit => _t('memberEdit');
+  String get memberCheckIn => _t('memberCheckIn');
+  String get memberRenewTitle => _t('memberRenewTitle');
+  String get memberDeleteConfirm => _t('memberDeleteConfirm');
+  String get memberFreezeTitle => _t('memberFreezeTitle');
+  String get memberUnfreezeTitle => _t('memberUnfreezeTitle');
+
+  // ── Subscriptions (plans) ─────────────────────────────────────────────────
+
+  String get subscriptionsTitle => _t('subscriptionsTitle');
+  String get subscriptionsPlans => _t('subscriptionsPlans');
+  String get subscriptionsCreatePlan => _t('subscriptionsCreatePlan');
+  String get subscriptionsDeletePlan => _t('subscriptionsDeletePlan');
+  String get subscriptionsModifyPlan => _t('subscriptionsModifyPlan');
+  String get subscriptionsDeletePlanBody => _t('subscriptionsDeletePlanBody');
+  String get subscriptionsRevenue => _t('subscriptionsRevenue');
+  String get subscriptionsAllTime => _t('subscriptionsAllTime');
+  String get subscriptionsMembersJoined => _t('subscriptionsMembersJoined');
+  String get subscriptionsCheckIn => _t('subscriptionsCheckIn');
+  String get subscriptionsExpiringSoon => _t('subscriptionsExpiringSoon');
+  String get subscriptionsRecentCheckIns => _t('subscriptionsRecentCheckIns');
+
+  // ── Products (additional) ─────────────────────────────────────────────────
+
+  String get productsLoadError => _t('productsLoadError');
+  String productsDeleteTitle(String name) =>
+      _t('productsDeleteTitle').replaceAll('\$name', name);
+
+  // ── Customers (additional) ────────────────────────────────────────────────
+
+  String get customersLoadError => _t('customersLoadError');
+
+  // ── Purchase Orders (additional) ──────────────────────────────────────────
+
+  String get poLoadError => _t('poLoadError');
+
+  // ── Reports ───────────────────────────────────────────────────────────────
+
+  String get reportsTitle => _t('reportsTitle');
+  String get reportsUpgradeHint => _t('reportsUpgradeHint');
+  String get reportsUpgradeNow => _t('reportsUpgradeNow');
+
+  // ── GST Report (extended) ─────────────────────────────────────────────────
+
+  String get gstReportExportTitle => _t('gstReportExportTitle');
+  String get gstReportPdfSummary => _t('gstReportPdfSummary');
+  String get gstReportPdfSubtitle => _t('gstReportPdfSubtitle');
+  String get gstReportCsvAll => _t('gstReportCsvAll');
+  String get gstReportCsvSubtitle => _t('gstReportCsvSubtitle');
+  String get gstReportOutputGst => _t('gstReportOutputGst');
+  String get gstReportInputGst => _t('gstReportInputGst');
+  String get gstReportNetGstHeader => _t('gstReportNetGstHeader');
+  String get gstReportNetGstLiability => _t('gstReportNetGstLiability');
+  String get gstReportNetPayable => _t('gstReportNetPayable');
+  String get gstReportNetCredit => _t('gstReportNetCredit');
+  String get gstReportItcCredit => _t('gstReportItcCredit');
+  String get gstReportItcCreditAvailable => _t('gstReportItcCreditAvailable');
+  String get gstReportItcCreditBalance => _t('gstReportItcCreditBalance');
+  String get gstReportOutputMinusInput => _t('gstReportOutputMinusInput');
+  String get gstReportPoBreakdown => _t('gstReportPoBreakdown');
+  String get gstReportGeneratedBy => _t('gstReportGeneratedBy');
+  String get gstReportNetGstPayable => _t('gstReportNetGstPayable');
+  String get gstReportNetItcCredit => _t('gstReportNetItcCredit');
+  String get gstReportNetTaxPayable => _t('gstReportNetTaxPayable');
+  String get gstReportOverview => _t('gstReportOverview');
+  String get gstReportOutputGstSales => _t('gstReportOutputGstSales');
+  String get gstReportInputGstPurchases => _t('gstReportInputGstPurchases');
+  String get gstReportOutputSales => _t('gstReportOutputSales');
+  String get gstReportInputPurchases => _t('gstReportInputPurchases');
+  String get gstReportLoadError => _t('gstReportLoadError');
+  String get gstReportPoLoadError => _t('gstReportPoLoadError');
+  String get gstReportNoPurchaseOrders => _t('gstReportNoPurchaseOrders');
+  String get gstTabOutput => _t('gstTabOutput');
+  String get gstTabInput => _t('gstTabInput');
+  String get gstTabNet => _t('gstTabNet');
+  String get gstTabTaxRate => _t('gstTabTaxRate');
+  String get gstStatusUnpaid => _t('gstStatusUnpaid');
+  String get gstStatusPartial => _t('gstStatusPartial');
+  String get gstStatusReceived => _t('gstStatusReceived');
+  String get gstLabelTaxable => _t('gstLabelTaxable');
+  String get gstLabelTax => _t('gstLabelTax');
+  String get gstLabelTotal => _t('gstLabelTotal');
+  String get gstLabelTotalTax => _t('gstLabelTotalTax');
+  String get gstLabelTaxableAmount => _t('gstLabelTaxableAmount');
+  String get gstLabelTaxableValue => _t('gstLabelTaxableValue');
+  String get gstLabelTaxAmount => _t('gstLabelTaxAmount');
+  String get gstLabelTotalTaxable => _t('gstLabelTotalTaxable');
+  String get gstHsnCode => _t('gstHsnCode');
+  String get gstDetailedBreakdown => _t('gstDetailedBreakdown');
+  String get gstNoHsn => _t('gstNoHsn');
+  String get gstRates => _t('gstRates');
+  String get gstLoadMore => _t('gstLoadMore');
+  String get gstNoMore => _t('gstNoMore');
+  String get gstPurchaseOrderBreakdown => _t('gstPurchaseOrderBreakdown');
+  String get gstrOutwardSupplies => _t('gstrOutwardSupplies');
+  String get gstrInputTaxCredit => _t('gstrInputTaxCredit');
+  String get gstrItcAvailable => _t('gstrItcAvailable');
+  String get gstrTotalItc => _t('gstrTotalItc');
+  String get gstrPaymentOfTax => _t('gstrPaymentOfTax');
+  String get gstrComponentWiseNet => _t('gstrComponentWiseNet');
+  String get gstrOutwardSuppliesLabel => _t('gstrOutwardSuppliesLabel');
+  String gstHsnFilingNote(int count) =>
+      _t('gstHsnFilingNote').replaceAll('\$count', count.toString());
+  String gstTaxRateNote(int count) =>
+      _t('gstTaxRateNote').replaceAll('\$count', count.toString());
+  String gstReportInvoicesWithGst(int count) =>
+      _t('gstReportInvoicesWithGst').replaceAll('\$count', count.toString());
+  String gstReportPosWithGst(int count) =>
+      _t('gstReportPosWithGst').replaceAll('\$count', count.toString());
+  String gstReportPrepareError(String error) =>
+      _t('gstReportPrepareError').replaceAll('\$error', error);
+  String gstGstrSummaryFor(String period) =>
+      _t('gstGstrSummaryFor').replaceAll('\$period', period);
 }
 
 // ─── InheritedWidget scope ───────────────────────────────────────────────────

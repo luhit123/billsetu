@@ -17,7 +17,10 @@ BoxDecoration _cardDecoration() => BoxDecoration(
     );
 
 class CreatePurchaseOrderScreen extends StatefulWidget {
-  const CreatePurchaseOrderScreen({super.key});
+  const CreatePurchaseOrderScreen({super.key, this.prefilledProduct});
+
+  /// When non-null the first item row is pre-populated with this product.
+  final Product? prefilledProduct;
 
   @override
   State<CreatePurchaseOrderScreen> createState() =>
@@ -60,8 +63,21 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   @override
   void initState() {
     super.initState();
-    itemRows = [_createItemRowControllers()];
-    _linkedProductIds = [''];
+    final p = widget.prefilledProduct;
+    if (p != null) {
+      // Pre-fill the first item row from the product
+      final row = _createItemRowControllers();
+      row['desc']!.text = p.name;
+      row['hsn']!.text = p.hsnCode;
+      row['unit']!.text = _itemUnitOptions.contains(p.unit) ? p.unit : _defaultItemUnit;
+      row['price']!.text = p.unitPrice > 0 ? p.unitPrice.toString() : '';
+      row['gstRate']!.text = p.gstApplicable ? p.gstRate.toStringAsFixed(0) : '0';
+      itemRows = [row];
+      _linkedProductIds = [p.id];
+    } else {
+      itemRows = [_createItemRowControllers()];
+      _linkedProductIds = [''];
+    }
   }
 
   @override

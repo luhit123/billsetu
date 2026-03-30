@@ -5,6 +5,7 @@ import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/services/signature_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -66,14 +67,7 @@ class InvoiceLinkService {
 
     final shortCode = _shortCode(invoice);
 
-    // Check if branded link already exists
-    final existingDoc =
-        await _firestore.collection('shared_invoices').doc(shortCode).get();
-    if (existingDoc.exists) {
-      return '$_baseUrl/i/$shortCode';
-    }
-
-    // Upload PDF to Storage
+    // Upload PDF to Storage (skip if already uploaded)
     final path = _storagePath(uid, invoice);
     final ref = _storage.ref(path);
 
@@ -81,7 +75,6 @@ class InvoiceLinkService {
     try {
       downloadUrl = await ref.getDownloadURL();
     } on FirebaseException catch (_) {
-      // Not found — upload
       await ref.putData(
         pdfBytes,
         SettableMetadata(
@@ -96,7 +89,7 @@ class InvoiceLinkService {
       downloadUrl = await ref.getDownloadURL();
     }
 
-    // Write metadata for the landing page (includes item details)
+    // Always re-write metadata so payment status stays current.
     final data = <String, dynamic>{
       'invoiceNumber': invoice.invoiceNumber,
       'clientId': invoice.clientId,
@@ -104,7 +97,9 @@ class InvoiceLinkService {
       'amount': invoice.grandTotal,
       'subtotal': invoice.subtotal,
       'date': DateFormat('dd MMM yyyy').format(invoice.createdAt),
-      'status': invoice.status.name,
+      'status': invoice.effectiveStatus.name,
+      'amountReceived': invoice.amountReceived,
+      'balanceDue': invoice.balanceDue,
       'downloadUrl': downloadUrl,
       'ownerId': uid,
       'createdAt': FieldValue.serverTimestamp(),
@@ -140,11 +135,36 @@ class InvoiceLinkService {
       if (profile.storeName.isNotEmpty) data['storeName'] = profile.storeName;
     }
 
+    // Upload signature image to Storage (if saved locally)
+    try {
+      final sigBytes = await SignatureService.load();
+      if (sigBytes != null && sigBytes.isNotEmpty) {
+        final sigRef = _storage.ref('signatures/$uid/signature.png');
+        await sigRef.putData(sigBytes, SettableMetadata(contentType: 'image/png'));
+        final sigUrl = await sigRef.getDownloadURL();
+        data['signatureUrl'] = sigUrl;
+      }
+    } catch (_) {}
+
+    // Logo URL from profile
+    if (profile != null && profile.logoUrl.isNotEmpty) {
+      data['logoUrl'] = profile.logoUrl;
+    }
+
     // NOTE: clientPhone intentionally NOT stored in shared_invoices
     // to avoid exposing customer PII in a publicly readable collection.
     // OTP verification should be handled via an authenticated Cloud Function.
 
     await _firestore.collection('shared_invoices').doc(shortCode).set(data);
+
+    // Verify the write reached the server (same guard as shareLink)
+    final verify = await _firestore
+        .collection('shared_invoices')
+        .doc(shortCode)
+        .get(const GetOptions(source: Source.server));
+    if (!verify.exists) {
+      throw StateError('Invoice link could not be confirmed on the server');
+    }
 
     return '$_baseUrl/i/$shortCode';
   }
@@ -161,14 +181,8 @@ class InvoiceLinkService {
 
     final shortCode = _shortCode(invoice);
 
-    // Check if link already exists (idempotent)
-    final existingDoc =
-        await _firestore.collection('shared_invoices').doc(shortCode).get();
-    if (existingDoc.exists) {
-      return '$_baseUrl/i/$shortCode';
-    }
-
-    // Build metadata — everything the landing page needs to render
+    // Build metadata — everything the landing page needs to render.
+    // Always re-write so payment status / received amount stays current.
     final data = <String, dynamic>{
       'invoiceNumber': invoice.invoiceNumber,
       'clientId': invoice.clientId,
@@ -176,9 +190,12 @@ class InvoiceLinkService {
       'amount': invoice.grandTotal,
       'subtotal': invoice.subtotal,
       'date': DateFormat('dd MMM yyyy').format(invoice.createdAt),
-      'status': invoice.status.name,
+      'status': invoice.effectiveStatus.name,
+      'amountReceived': invoice.amountReceived,
+      'balanceDue': invoice.balanceDue,
       'ownerId': uid,
       'createdAt': FieldValue.serverTimestamp(),
+      'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 90))),
       'items': invoice.items
           .map((item) => {
                 'description': item.description,
@@ -218,6 +235,29 @@ class InvoiceLinkService {
       if (profile.upiQrUrl.isNotEmpty) data['upiQrUrl'] = profile.upiQrUrl;
     }
 
+    // Upload signature image to Storage (if saved locally)
+    try {
+      final sigBytes = await SignatureService.load();
+      if (sigBytes != null && sigBytes.isNotEmpty) {
+        final sigRef = _storage.ref('signatures/$uid/signature.png');
+        // Always re-upload to ensure the file exists (previous uploads
+        // may have failed silently due to storage rules).
+        await sigRef.putData(
+          sigBytes,
+          SettableMetadata(contentType: 'image/png'),
+        );
+        final sigUrl = await sigRef.getDownloadURL();
+        data['signatureUrl'] = sigUrl;
+      }
+    } catch (_) {
+      // Non-critical — invoice still works without signature
+    }
+
+    // Logo URL from profile
+    if (profile != null && profile.logoUrl.isNotEmpty) {
+      data['logoUrl'] = profile.logoUrl;
+    }
+
     // Client phone for bill history
     if (invoice.clientId.isNotEmpty) {
       try {
@@ -229,6 +269,19 @@ class InvoiceLinkService {
     }
 
     await _firestore.collection('shared_invoices').doc(shortCode).set(data);
+
+    // Verify the write reached the server — Firestore offline persistence
+    // resolves set() from local cache, but the Cloud Function that serves
+    // the link reads from the server. Without this check the recipient can
+    // tap the SMS link before the document is synced → "invoice not found".
+    final verify = await _firestore
+        .collection('shared_invoices')
+        .doc(shortCode)
+        .get(const GetOptions(source: Source.server));
+    if (!verify.exists) {
+      throw StateError('Invoice link could not be confirmed on the server');
+    }
+
     return '$_baseUrl/i/$shortCode';
   }
 

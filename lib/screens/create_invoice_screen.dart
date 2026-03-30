@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/services/review_service.dart';
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/utils/number_utils.dart' as nu;
@@ -25,6 +28,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:intl/intl.dart';
+import 'package:billeasy/utils/responsive.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class CreateInvoiceScreen extends StatefulWidget {
@@ -57,6 +61,10 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   final TextEditingController _discountController = TextEditingController();
   final TextEditingController _customerNameController = TextEditingController();
   final TextEditingController _customerPhoneController = TextEditingController();
+  final TextEditingController _customerAddressController = TextEditingController();
+  final TextEditingController _customerEmailController = TextEditingController();
+  final TextEditingController _customerGstinController = TextEditingController();
+  bool _showMoreCustomerFields = false;
   final TextEditingController _receivedController = TextEditingController();
 
   // Customer autocomplete state
@@ -100,6 +108,11 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   bool _showSettingsSection = false;
   bool _showCustomerFields = true;
 
+  // Web two-panel layout: index of item being edited inline
+  // null = not editing, -1 = new item (unused, we use actual index)
+  int? _webEditingItemIndex;
+  bool _webEditingCustomer = false;
+
   bool get _isEditing => widget.editingInvoice != null;
 
   @override
@@ -109,6 +122,14 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     if (widget.initialClient != null) {
       _customerNameController.text = widget.initialClient!.name;
       _customerPhoneController.text = widget.initialClient!.phone;
+      _customerAddressController.text = widget.initialClient!.address;
+      _customerEmailController.text = widget.initialClient!.email;
+      _customerGstinController.text = widget.initialClient!.gstin;
+      if (widget.initialClient!.address.isNotEmpty ||
+          widget.initialClient!.email.isNotEmpty ||
+          widget.initialClient!.gstin.isNotEmpty) {
+        _showMoreCustomerFields = true;
+      }
     }
     _customerNameController.addListener(_onCustomerNameChanged);
     _customerNameFocus.addListener(_onCustomerNameFocusChanged);
@@ -134,6 +155,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       if (editInv.amountReceived > 0) {
         _receivedController.text = editInv.amountReceived.toString();
       }
+      if (editInv.paymentMethod.isNotEmpty) {
+        _selectedPaymentMethod = editInv.paymentMethod;
+      }
 
       // Pre-fill item rows from invoice
       for (final item in editInv.items) {
@@ -153,9 +177,30 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         _itemQtyFocusNodes.add(FocusNode());
       }
 
-      // Resolve client
+      // Set GSTIN from invoice
+      if (editInv.customerGstin.isNotEmpty) {
+        _customerGstinController.text = editInv.customerGstin;
+        _showMoreCustomerFields = true;
+      }
+
+      // Resolve client — fetch full details for address/email
       if (editInv.clientId.isNotEmpty) {
         _selectedClient = Client(id: editInv.clientId, name: editInv.clientName);
+        // Load full client details async
+        ClientService().getClient(editInv.clientId).then((client) {
+          if (client != null && mounted) {
+            setState(() {
+              _selectedClient = client;
+              if (_customerPhoneController.text.isEmpty) _customerPhoneController.text = client.phone;
+              if (_customerAddressController.text.isEmpty) _customerAddressController.text = client.address;
+              if (_customerEmailController.text.isEmpty) _customerEmailController.text = client.email;
+              if (_customerGstinController.text.isEmpty) _customerGstinController.text = client.gstin;
+              if (client.address.isNotEmpty || client.email.isNotEmpty || client.gstin.isNotEmpty) {
+                _showMoreCustomerFields = true;
+              }
+            });
+          }
+        });
       }
     } else {
       _loadLastUsedGstSettings();
@@ -199,6 +244,9 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     _customerNameController.removeListener(_onCustomerNameChanged);
     _customerNameController.dispose();
     _customerPhoneController.dispose();
+    _customerAddressController.dispose();
+    _customerEmailController.dispose();
+    _customerGstinController.dispose();
     _customerNameFocus.removeListener(_onCustomerNameFocusChanged);
     _customerNameFocus.dispose();
     _clientSearchSub?.cancel();
@@ -297,6 +345,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     final amountReceived = (nu.parseDouble(_receivedController.text) ?? 0).clamp(0.0, double.infinity);
     final double balanceDue = rc((grandTotal - amountReceived).clamp(0.0, double.infinity));
 
+    // ── Premium two-panel web layout for wide screens ──
+    if (kIsWeb && windowSizeOf(context) == WindowSize.expanded) {
+      return _buildWebLayout(s, grandTotal, subtotal, totalDiscount, totalTax,
+        taxableAmount, cgstAmount, sgstAmount, igstAmount, amountReceived, balanceDue, totalQty);
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -315,9 +369,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         ),
         actions: const [],
       ),
-      bottomNavigationBar: _buildSaveBar(),
+      bottomNavigationBar: itemRows.isEmpty ? null : _buildSaveBar(),
       body: SafeArea(
-        child: Form(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: kWebFormMaxWidth),
+            child: Form(
           key: _formKey,
           child: Column(
             children: [
@@ -347,6 +404,16 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
                             _buildCustomerSection(context),
                             const SizedBox(height: 10),
                             _buildPhoneField(),
+                            const SizedBox(height: 6),
+                            _buildMoreCustomerToggle(),
+                            if (_showMoreCustomerFields) ...[
+                              const SizedBox(height: 10),
+                              _buildCustomerAddressField(),
+                              const SizedBox(height: 10),
+                              _buildCustomerEmailField(),
+                              const SizedBox(height: 10),
+                              _buildCustomerGstinField(),
+                            ],
                             if (itemRows.isNotEmpty)
                               Align(
                                 alignment: Alignment.centerRight,
@@ -517,20 +584,1397 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
             ],
           ),
         ),
+          ),
+        ),
       ),
     );
   }
+
+  // ── Premium Two-Panel Web Layout ─────────────────────────────────────────
+
+  Widget _buildWebLayout(
+    AppStrings s,
+    double grandTotal,
+    double subtotal,
+    double totalDiscount,
+    double totalTax,
+    double taxableAmount,
+    double cgstAmount,
+    double sgstAmount,
+    double igstAmount,
+    double amountReceived,
+    double balanceDue,
+    int totalQty,
+  ) {
+    final _headerCustomerName = _customerNameController.text.trim();
+    final _headerCustomerPhone = _customerPhoneController.text.trim();
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F6F8),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: kOnSurface,
+        elevation: 0,
+        scrolledUnderElevation: 0.5,
+        surfaceTintColor: Colors.white,
+        toolbarHeight: 56,
+        title: Row(
+          children: [
+            Text(
+              _isEditing ? 'Edit Invoice' : s.createTitle,
+              style: const TextStyle(color: kOnSurface, fontWeight: FontWeight.w700, fontSize: 18),
+            ),
+            if (itemRows.isNotEmpty) ...[
+              const SizedBox(width: 20),
+              Container(width: 1, height: 28, color: const Color(0xFFE8ECF0)),
+              const SizedBox(width: 16),
+              // Customer avatar
+              Container(
+                width: 30, height: 30,
+                decoration: BoxDecoration(
+                  color: kPrimary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Center(
+                  child: Text(
+                    _headerCustomerName.isNotEmpty ? _headerCustomerName[0].toUpperCase() : '?',
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kPrimary),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _headerCustomerName.isNotEmpty ? _headerCustomerName : 'No customer',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface),
+                  ),
+                  if (_headerCustomerPhone.isNotEmpty)
+                    Text(_headerCustomerPhone, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant, fontWeight: FontWeight.w400)),
+                ],
+              ),
+              const SizedBox(width: 12),
+              // Date pill
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF7F8FA),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFE8ECF0)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.calendar_today_rounded, size: 11, color: kPrimary),
+                    const SizedBox(width: 4),
+                    Text(DateFormat('dd MMM').format(selectedDate),
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              // Edit button
+              IconButton(
+                onPressed: () => setState(() => _webEditingCustomer = !_webEditingCustomer),
+                icon: Icon(_webEditingCustomer ? Icons.close_rounded : Icons.edit_rounded, size: 14),
+                color: kOnSurfaceVariant,
+                tooltip: 'Edit customer details',
+                style: IconButton.styleFrom(
+                  backgroundColor: const Color(0xFFF3F4F6),
+                  minimumSize: const Size(28, 28),
+                  padding: EdgeInsets.zero,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          if (_itemConfirmed.any((c) => c))
+            Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: SizedBox(
+                height: 38,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveInvoice,
+                  icon: _isSaving
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_rounded, size: 18),
+                  label: Text(_isEditing ? 'Update' : 'Save & Share'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+        ],
+        bottom: PreferredSize(
+          preferredSize: Size.fromHeight(_webEditingCustomer ? 72 : 1),
+          child: _webEditingCustomer
+              ? Container(
+                  color: const Color(0xFFFAFBFC),
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                  child: Row(
+                    children: [
+                      // Invoice No
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(7),
+                          border: Border.all(color: const Color(0xFFE8ECF0)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.tag, size: 13, color: kPrimary),
+                            SizedBox(width: 4),
+                            Text('Auto-generated', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      // Date picker
+                      MouseRegion(
+                        cursor: SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: _pickDate,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(7),
+                              border: Border.all(color: const Color(0xFFE8ECF0)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.calendar_today_rounded, size: 13, color: kPrimary),
+                                const SizedBox(width: 4),
+                                Text(DateFormat('dd MMM yyyy').format(selectedDate),
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface)),
+                                const SizedBox(width: 4),
+                                const Icon(Icons.unfold_more_rounded, size: 14, color: kOnSurfaceVariant),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      // Customer name
+                      Expanded(flex: 3, child: SizedBox(height: 40, child: _buildCustomerSection(context))),
+                      const SizedBox(width: 10),
+                      // Phone
+                      Expanded(flex: 2, child: SizedBox(height: 40, child: _buildPhoneField())),
+                      const SizedBox(width: 10),
+                      _buildMoreCustomerToggle(),
+                      const SizedBox(width: 6),
+                      TextButton.icon(
+                        onPressed: () => setState(() => _webEditingCustomer = false),
+                        icon: const Icon(Icons.check_rounded, size: 15),
+                        label: const Text('Done'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: kPrimary,
+                          textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Container(height: 1, color: const Color(0xFFE8ECF0)),
+        ),
+      ),
+      body: SafeArea(
+        child: Form(
+          key: _formKey,
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1340),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
+                child: itemRows.isEmpty
+                    // ── INITIAL VIEW: customer + add item form only ──
+                    ? _buildWebInitialView(s)
+                    // ── FULL TWO-PANEL LAYOUT ──
+                    : Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // LEFT: customer card + add item form + summary
+                          Expanded(
+                            flex: 45,
+                            child: _buildWebLeftPanel(
+                              s, grandTotal, subtotal, totalDiscount, totalTax,
+                              taxableAmount, cgstAmount, sgstAmount, igstAmount,
+                              amountReceived, balanceDue, totalQty,
+                            ),
+                          ),
+                          const SizedBox(width: 24),
+                          // RIGHT: full items list (scrollable)
+                          Expanded(
+                            flex: 55,
+                            child: _buildWebRightPanel(s),
+                          ),
+                        ],
+                      ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebInitialView(AppStrings s) {
+    return ListView(
+      children: [
+        // Centered card with max width for clean look
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Column(
+              children: [
+                // ── Customer & Invoice Info Card ──
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE8ECF0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Header
+                      Container(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+                        decoration: const BoxDecoration(
+                          border: Border(bottom: BorderSide(color: Color(0xFFF0F2F4))),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 32, height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFEEF2FF),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.person_outline_rounded, size: 18, color: kPrimary),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text('Customer & Invoice', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          ],
+                        ),
+                      ),
+                      // Invoice no + date row
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Invoice No.', style: TextStyle(fontSize: 11, color: kOnSurfaceVariant, fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF7F8FA),
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: const Color(0xFFE8ECF0)),
+                                    ),
+                                    child: const Row(
+                                      children: [
+                                        Icon(Icons.tag, size: 14, color: kPrimary),
+                                        SizedBox(width: 6),
+                                        Text('Auto-generated', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text('Invoice Date', style: TextStyle(fontSize: 11, color: kOnSurfaceVariant, fontWeight: FontWeight.w500)),
+                                  const SizedBox(height: 4),
+                                  MouseRegion(
+                                    cursor: SystemMouseCursors.click,
+                                    child: GestureDetector(
+                                      onTap: _pickDate,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFF7F8FA),
+                                          borderRadius: BorderRadius.circular(8),
+                                          border: Border.all(color: const Color(0xFFE8ECF0)),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            const Icon(Icons.calendar_today_rounded, size: 14, color: kPrimary),
+                                            const SizedBox(width: 6),
+                                            Text(DateFormat('dd MMM yyyy').format(selectedDate),
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface)),
+                                            const Spacer(),
+                                            const Icon(Icons.unfold_more_rounded, size: 16, color: kOnSurfaceVariant),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      // Customer name + phone
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: _buildCustomerSection(context),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              flex: 2,
+                              child: _buildPhoneField(),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildMoreCustomerToggle(),
+                          ],
+                        ),
+                      ),
+                      if (_showMoreCustomerFields)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                          child: Row(
+                            children: [
+                              Expanded(child: _buildCustomerAddressField()),
+                              const SizedBox(width: 12),
+                              Expanded(child: _buildCustomerEmailField()),
+                              const SizedBox(width: 12),
+                              SizedBox(width: 200, child: _buildCustomerGstinField()),
+                            ],
+                          ),
+                        ),
+                      const SizedBox(height: 18),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── Add First Item CTA ──
+                MouseRegion(
+                  cursor: SystemMouseCursors.click,
+                  child: GestureDetector(
+                    onTap: _addItemRow,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: const Color(0xFFBBF7D0), width: 1.5),
+                      ),
+                      child: Column(
+                        children: [
+                          Container(
+                            width: 52, height: 52,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF0FDF4),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: const Color(0xFFBBF7D0)),
+                            ),
+                            child: const Icon(Icons.add_shopping_cart_rounded, color: Color(0xFF16A34A), size: 26),
+                          ),
+                          const SizedBox(height: 14),
+                          const Text(
+                            'Add Your First Item',
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'Tap here to add products or services to this invoice',
+                            style: TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebLeftPanel(
+    AppStrings s,
+    double grandTotal,
+    double subtotal,
+    double totalDiscount,
+    double totalTax,
+    double taxableAmount,
+    double cgstAmount,
+    double sgstAmount,
+    double igstAmount,
+    double amountReceived,
+    double balanceDue,
+    int totalQty,
+  ) {
+    return SingleChildScrollView(
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // ── Add Item Form (always visible) ──
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE8ECF0)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: Color(0xFFF0F2F4))),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28, height: 28,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF0FDF4),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: const Icon(Icons.add_shopping_cart_rounded, size: 15, color: Color(0xFF16A34A)),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _webEditingItemIndex != null ? 'Edit Item' : 'Add New Item',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface),
+                    ),
+                  ],
+                ),
+              ),
+              // The inline form
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: _buildWebAlwaysVisibleItemForm(),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Summary ──
+        _buildWebSummaryPanel(
+          s, grandTotal, subtotal, totalDiscount, totalTax,
+          taxableAmount, cgstAmount, sgstAmount, igstAmount,
+          amountReceived, balanceDue, totalQty,
+        ),
+        const SizedBox(height: 16),
+      ],
+    ),
+    );
+  }
+
+  /// Always-visible item form on web left panel.
+  /// When editing an existing item (_webEditingItemIndex != null), it shows that item.
+  /// Otherwise, it ensures a blank draft row exists at the end for adding a new item.
+  Widget _buildWebAlwaysVisibleItemForm() {
+    // Ensure there's always a blank draft row at the end for "add new"
+    final int editIndex;
+    if (_webEditingItemIndex != null) {
+      editIndex = _webEditingItemIndex!;
+    } else {
+      // Find or create a blank draft row
+      final lastIdx = itemRows.length - 1;
+      final lastIsBlank = lastIdx >= 0 &&
+          itemRows[lastIdx]['desc']!.text.trim().isEmpty &&
+          !_itemConfirmed[lastIdx];
+      if (lastIsBlank) {
+        editIndex = lastIdx;
+      } else {
+        // Add a new blank row
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _addItemRow();
+        });
+        return const SizedBox.shrink();
+      }
+    }
+    return _buildWebInlineItemForm(editIndex);
+  }
+
+  /// Right panel: full scrollable items list
+  Widget _buildWebRightPanel(AppStrings s) {
+    final confirmedCount = _itemConfirmed.where((c) => c).length;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8ECF0)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFF0F2F4))),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 28, height: 28,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: const Icon(Icons.receipt_long_rounded, size: 15, color: Color(0xFF16A34A)),
+                ),
+                const SizedBox(width: 10),
+                const Text('Line Items', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface)),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Text(
+                    '$confirmedCount item${confirmedCount == 1 ? '' : 's'}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xFF16A34A)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Scrollable item rows (only confirmed items)
+          Expanded(
+            child: Builder(
+              builder: (context) {
+                final confirmedIndices = <int>[
+                  for (int i = 0; i < itemRows.length; i++)
+                    if (_itemConfirmed[i]) i,
+                ];
+                if (confirmedIndices.isEmpty) {
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.receipt_long_rounded, size: 40, color: kOnSurfaceVariant.withValues(alpha: 0.3)),
+                          const SizedBox(height: 10),
+                          const Text('Items will appear here', style: TextStyle(fontSize: 13, color: kOnSurfaceVariant)),
+                        ],
+                      ),
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 8),
+                  itemCount: confirmedIndices.length,
+                  itemBuilder: (context, i) => _buildWebItemCard(confirmedIndices[i], s),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebItemCard(int index, AppStrings s) {
+    final row = itemRows[index];
+    final name = row['desc']!.text.trim();
+    final qty = nu.parseDouble(row['qty']!.text) ?? 0;
+    final price = nu.parseDouble(row['price']!.text) ?? 0;
+    final unit = row['unit']!.text.trim().isEmpty ? _defaultItemUnit : row['unit']!.text.trim();
+    final itemDiscountPct = (nu.parseDouble(row['discount']?.text ?? '') ?? 0).clamp(0, 100);
+    final rawTotal = qty * price;
+    final discAmt = rawTotal * itemDiscountPct / 100;
+    final afterDisc = rawTotal - discAmt;
+    final gstRate = nu.parseDouble(row['gstRate']!.text) ?? 0;
+    final gstAmt = afterDisc * gstRate / 100;
+    final lineTotal = afterDisc + gstAmt;
+    final qtyStr = qty == qty.truncateToDouble() ? qty.toInt().toString() : qty.toString();
+    final isEditing = _webEditingItemIndex == index;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: () => _editItem(index),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          padding: const EdgeInsets.fromLTRB(12, 12, 8, 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            color: isEditing ? kPrimary.withValues(alpha: 0.04) : Colors.white,
+            border: Border.all(
+              color: isEditing ? kPrimary.withValues(alpha: 0.3) : const Color(0xFFF0F2F4),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top row: index + name + total + delete
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 26, height: 26,
+                    decoration: BoxDecoration(
+                      color: kPrimary.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text('${index + 1}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: kPrimary)),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name.isEmpty ? 'Unnamed item' : name,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '$qtyStr $unit  ×  ₹${price.toStringAsFixed(price == price.truncateToDouble() ? 0 : 2)}',
+                          style: const TextStyle(fontSize: 11, color: kOnSurfaceVariant),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    _currencyFormat.format(lineTotal),
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kOnSurface),
+                  ),
+                  const SizedBox(width: 6),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: () => _removeItemRow(index),
+                      child: Container(
+                        width: 24, height: 24,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(6),
+                          color: const Color(0xFFFEF2F2),
+                        ),
+                        child: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              // Detail row: price breakdown
+              if (itemDiscountPct > 0 || gstRate > 0)
+                Padding(
+                  padding: const EdgeInsets.only(left: 36, top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF9FAFB),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: const Color(0xFFF0F2F4)),
+                    ),
+                    child: Row(
+                      children: [
+                        // Subtotal
+                        _webItemDetailChip('Subtotal', '₹${rawTotal.toStringAsFixed(0)}', kOnSurfaceVariant),
+                        if (itemDiscountPct > 0) ...[
+                          _webItemDetailDot(),
+                          _webItemDetailChip(
+                            'Disc ${itemDiscountPct.toStringAsFixed(0)}%',
+                            '−₹${discAmt.toStringAsFixed(0)}',
+                            const Color(0xFFE65100),
+                          ),
+                        ],
+                        if (gstRate > 0) ...[
+                          _webItemDetailDot(),
+                          _webItemDetailChip(
+                            'GST ${gstRate.toStringAsFixed(0)}%',
+                            '+₹${gstAmt.toStringAsFixed(0)}',
+                            const Color(0xFF16A34A),
+                          ),
+                        ],
+                        const Spacer(),
+                        Text(
+                          '= ₹${lineTotal.toStringAsFixed(0)}',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _webItemDetailChip(String label, String value, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: TextStyle(fontSize: 10, color: color.withValues(alpha: 0.7))),
+        const SizedBox(width: 3),
+        Text(value, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: color)),
+      ],
+    );
+  }
+
+  Widget _webItemDetailDot() {
+    return const Padding(
+      padding: EdgeInsets.symmetric(horizontal: 6),
+      child: Text('•', style: TextStyle(fontSize: 10, color: Color(0xFFD1D5DB))),
+    );
+  }
+
+  Widget _webItemBadge(String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(text, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
+    );
+  }
+
+  Widget _buildWebInlineItemForm(int index) {
+    final row = itemRows[index];
+    final qty = nu.parseDouble(row['qty']!.text) ?? 0;
+    final price = nu.parseDouble(row['price']!.text) ?? 0;
+    final discPct = (nu.parseDouble(row['discount']?.text ?? '') ?? 0).clamp(0, 100);
+    final rawTotal = qty * price;
+    final discAmt = rawTotal * discPct / 100;
+    final afterDisc = rawTotal - discAmt;
+    final gstPct = nu.parseDouble(row['gstRate']!.text) ?? 0;
+    final gstAmt = afterDisc * gstPct / 100;
+    final lineTotal = afterDisc + gstAmt;
+
+    return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Live total badge
+          if (lineTotal > 0)
+            Align(
+              alignment: Alignment.centerRight,
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDF4),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFBBF7D0)),
+                ),
+                child: Text(
+                  'Total: ${_currencyFormat.format(lineTotal)}',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF16A34A)),
+                ),
+              ),
+            ),
+          // Row 1: Name + HSN
+          Row(
+            children: [
+              Expanded(
+                flex: 3,
+                child: TextFormField(
+                  controller: row['desc'],
+                  autofocus: row['desc']!.text.isEmpty,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: _webInputDecoration('Item Name *', suffixIcon: IconButton(
+                    icon: const Icon(Icons.inventory_2_outlined, size: 18, color: kPrimary),
+                    tooltip: 'Pick from products',
+                    onPressed: () => _pickProduct(index),
+                  )),
+                  style: const TextStyle(fontSize: 14, color: kOnSurface),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextFormField(
+                  controller: row['hsn'],
+                  decoration: _webInputDecoration('HSN / SAC'),
+                  style: const TextStyle(fontSize: 14, color: kOnSurface),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          // Row 2: Qty + Unit + Price + Discount
+          Row(
+            children: [
+              Expanded(
+                child: TextFormField(
+                  controller: row['qty'],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _webInputDecoration('Qty *'),
+                  style: const TextStyle(fontSize: 14, color: kOnSurface),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 110,
+                child: DropdownButtonFormField<String>(
+                  value: _itemUnitOptions.contains(row['unit']!.text.toLowerCase())
+                      ? row['unit']!.text.toLowerCase()
+                      : (row['unit']!.text.trim().isNotEmpty ? _customUnitValue : _defaultItemUnit),
+                  decoration: _webInputDecoration('Unit'),
+                  isExpanded: true,
+                  items: [
+                    ..._itemUnitOptions.map((u) => DropdownMenuItem(value: u, child: Text(u, style: const TextStyle(fontSize: 13)))),
+                    const DropdownMenuItem(value: '__custom__', child: Text('Custom...', style: TextStyle(fontSize: 13, color: kPrimary))),
+                  ],
+                  onChanged: (val) {
+                    if (val == _customUnitValue) {
+                      _showCustomUnitDialog(row);
+                    } else if (val != null) {
+                      setState(() => row['unit']!.text = val);
+                    }
+                  },
+                  style: const TextStyle(fontSize: 13, color: kOnSurface),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextFormField(
+                  controller: row['price'],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _webInputDecoration('Price (₹) *'),
+                  style: const TextStyle(fontSize: 14, color: kOnSurface),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 90,
+                child: TextFormField(
+                  controller: row['discount'],
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  decoration: _webInputDecoration('Disc %'),
+                  style: const TextStyle(fontSize: 14, color: kOnSurface),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ),
+              const SizedBox(width: 10),
+              SizedBox(
+                width: 110,
+                child: DropdownButtonFormField<double>(
+                  value: _clampGstRate(nu.parseDouble(row['gstRate']!.text) ?? 0),
+                  decoration: _webInputDecoration('GST'),
+                  isExpanded: true,
+                  items: _validGstRates.map((r) => DropdownMenuItem(
+                    value: r,
+                    child: Text(r == 0 ? 'No GST' : '${r.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        row['gstRate']!.text = val.toStringAsFixed(0);
+                        if (val > 0) _gstEnabled = true;
+                      });
+                    }
+                  },
+                  style: const TextStyle(fontSize: 13, color: kOnSurface),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Action row
+          Row(
+            children: [
+              // Mini calculation summary
+              if (rawTotal > 0) ...[
+                Text(
+                  '₹${rawTotal.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                ),
+                if (discPct > 0) ...[
+                  Text(' − ${discPct.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, color: Color(0xFFE65100))),
+                ],
+                if (gstPct > 0) ...[
+                  Text(' + GST ${gstPct.toStringAsFixed(0)}%', style: const TextStyle(fontSize: 12, color: Color(0xFF2E7D32))),
+                ],
+                Text(' = ', style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                Text('₹${lineTotal.toStringAsFixed(0)}',
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+              ],
+              const Spacer(),
+              TextButton(
+                onPressed: () {
+                  if (_webEditingItemIndex != null) {
+                    // Editing existing: just cancel edit mode
+                    final name = row['desc']!.text.trim();
+                    final wasNew = name.isEmpty && (nu.parseDouble(row['price']!.text) ?? 0) <= 0;
+                    if (wasNew) _removeItemRow(index);
+                    setState(() => _webEditingItemIndex = null);
+                  } else {
+                    // Adding new: clear the draft fields
+                    row['desc']!.clear();
+                    row['qty']!.text = '1';
+                    row['price']!.clear();
+                    row['hsn']!.clear();
+                    row['unit']!.text = _defaultItemUnit;
+                    row['discount']!.clear();
+                    row['gstRate']!.text = '0';
+                    setState(() {});
+                  }
+                },
+                style: TextButton.styleFrom(
+                  foregroundColor: kOnSurfaceVariant,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                ),
+                child: Text(
+                  _webEditingItemIndex != null ? 'Cancel' : 'Clear',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  final name = row['desc']!.text.trim();
+                  if (name.isEmpty) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Please enter item name')),
+                    );
+                    return;
+                  }
+                  _autoSaveRowAsProduct(row);
+                  setState(() {
+                    _itemConfirmed[index] = true;
+                    _showCustomerFields = false;
+                    final itemGstRate = nu.parseDouble(row['gstRate']!.text) ?? 0;
+                    if (itemGstRate > 0) _gstEnabled = true;
+                    if (_webEditingItemIndex != null) {
+                      // Was editing existing item, go back to add mode
+                      _webEditingItemIndex = null;
+                    }
+                    // A new blank row will be auto-created by _buildWebAlwaysVisibleItemForm
+                  });
+                },
+                icon: const Icon(Icons.check_rounded, size: 16),
+                label: Text(_webEditingItemIndex != null ? 'Update Item' : 'Add to Invoice'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF16A34A),
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ),
+        ],
+    );
+  }
+
+  InputDecoration _webInputDecoration(String label, {String? prefix, Widget? suffixIcon}) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
+      prefixText: prefix,
+      suffixIcon: suffixIcon,
+      filled: true,
+      fillColor: const Color(0xFFFAFBFC),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFE0E4E8)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFE0E4E8)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: kPrimary, width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFEF4444)),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+      ),
+    );
+  }
+
+  Widget _buildWebSummaryPanel(
+    AppStrings s,
+    double grandTotal,
+    double subtotal,
+    double totalDiscount,
+    double totalTax,
+    double taxableAmount,
+    double cgstAmount,
+    double sgstAmount,
+    double igstAmount,
+    double amountReceived,
+    double balanceDue,
+    int totalQty,
+  ) {
+    final statusColor = balanceDue <= 0 && grandTotal > 0
+        ? const Color(0xFF16A34A)
+        : amountReceived > 0
+            ? const Color(0xFFD97706)
+            : const Color(0xFFDC2626);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFE8ECF0)),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+            decoration: const BoxDecoration(
+              border: Border(bottom: BorderSide(color: Color(0xFFF0F2F4))),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32, height: 32,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEEF2FF),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.calculate_outlined, size: 18, color: kPrimary),
+                ),
+                const SizedBox(width: 12),
+                const Text('Summary', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kOnSurface)),
+              ],
+            ),
+          ),
+
+          // Summary rows
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+            child: Column(
+              children: [
+                _webSummaryRow('Subtotal', _currencyFormat.format(subtotal)),
+                if (totalDiscount > 0) ...[
+                  const SizedBox(height: 8),
+                  _webSummaryRow('Discount', '- ${_currencyFormat.format(totalDiscount)}', valueColor: const Color(0xFFE65100)),
+                ],
+                if (_gstEnabled) ...[
+                  const SizedBox(height: 8),
+                  _webSummaryRow('Taxable Amount', _currencyFormat.format(taxableAmount)),
+                  const SizedBox(height: 6),
+                  if (_gstType == 'cgst_sgst') ...[
+                    _webSummaryRow('CGST', _currencyFormat.format(cgstAmount), valueColor: const Color(0xFF546E7A)),
+                    const SizedBox(height: 4),
+                    _webSummaryRow('SGST', _currencyFormat.format(sgstAmount), valueColor: const Color(0xFF546E7A)),
+                  ] else
+                    _webSummaryRow('IGST', _currencyFormat.format(igstAmount), valueColor: const Color(0xFF546E7A)),
+                  const SizedBox(height: 6),
+                  _webSummaryRow('Total Tax', _currencyFormat.format(totalTax), valueColor: const Color(0xFF16A34A)),
+                ],
+              ],
+            ),
+          ),
+
+          // Grand Total
+          Container(
+            margin: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [kPrimary.withValues(alpha: 0.06), kPrimary.withValues(alpha: 0.02)],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: kPrimary.withValues(alpha: 0.12)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Grand Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                    SizedBox(height: 2),
+                    Text('INR', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+                  ],
+                ),
+                Text(
+                  _currencyFormat.format(grandTotal),
+                  style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800, color: kPrimary),
+                ),
+              ],
+            ),
+          ),
+
+          // Divider
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+            child: Divider(height: 1, color: Color(0xFFF0F2F4)),
+          ),
+
+          // Received toggle + amount
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 20, height: 20,
+                  child: Checkbox(
+                    value: _isReceived,
+                    onChanged: (v) {
+                      setState(() {
+                        _isReceived = v ?? false;
+                        if (_isReceived) {
+                          _receivedController.text = grandTotal.toStringAsFixed(2);
+                        } else {
+                          _receivedController.clear();
+                        }
+                      });
+                    },
+                    activeColor: const Color(0xFF16A34A),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('Received', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface)),
+                const Spacer(),
+                SizedBox(
+                  width: 100,
+                  child: TextField(
+                    controller: _receivedController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                      prefixText: '\u20b9 ',
+                      prefixStyle: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(color: Color(0xFFE0E4E8)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(color: Color(0xFFE0E4E8)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(7),
+                        borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                      ),
+                      hintText: '0',
+                      hintStyle: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 13),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        final amt = double.tryParse(val) ?? 0;
+                        _isReceived = amt >= grandTotal && grandTotal > 0;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Status bar
+          () {
+            final isPaid = balanceDue <= 0 && grandTotal > 0;
+            final isPartial = amountReceived > 0 && balanceDue > 0;
+            final sColor = isPaid
+                ? const Color(0xFF16A34A)
+                : isPartial
+                    ? const Color(0xFFD97706)
+                    : const Color(0xFFDC2626);
+            final sBg = isPaid
+                ? const Color(0xFFF0FDF4)
+                : isPartial
+                    ? const Color(0xFFFFFBEB)
+                    : const Color(0xFFFEF2F2);
+            final sLabel = isPaid ? 'Paid' : isPartial ? 'Partial' : 'Unpaid';
+
+            return Container(
+              margin: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: sBg,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: sColor.withValues(alpha: 0.2)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: sColor.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(sLabel, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: sColor)),
+                  ),
+                  const Spacer(),
+                  if (!isPaid) ...[
+                    Text('Balance: ', style: TextStyle(fontSize: 11, color: sColor.withValues(alpha: 0.7))),
+                    Text(_currencyFormat.format(balanceDue), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: sColor)),
+                  ] else
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle_rounded, size: 15, color: sColor),
+                        const SizedBox(width: 4),
+                        Text('Fully Paid', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: sColor)),
+                      ],
+                    ),
+                ],
+              ),
+            );
+          }(),
+
+          // Payment method chips (show when received amount > 0)
+          if (amountReceived > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Mode of Payment', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: _paymentMethods.map((m) => ChoiceChip(
+                      label: Text(m, style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: _selectedPaymentMethod == m ? FontWeight.w700 : FontWeight.w500,
+                        color: _selectedPaymentMethod == m ? Colors.white : kOnSurface,
+                      )),
+                      selected: _selectedPaymentMethod == m,
+                      selectedColor: kPrimary,
+                      backgroundColor: const Color(0xFFF3F4F6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: BorderSide(
+                        color: _selectedPaymentMethod == m ? kPrimary : const Color(0xFFE0E4E8),
+                      ),
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedPaymentMethod = _selectedPaymentMethod == m ? '' : m;
+                        });
+                      },
+                    )).toList(),
+                  ),
+                ],
+              ),
+            ),
+
+          // Save button
+          if (itemRows.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton.icon(
+                  onPressed: _isSaving ? null : _saveInvoice,
+                  icon: _isSaving
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      : const Icon(Icons.check_circle_outline_rounded, size: 18),
+                  label: Text(_isEditing ? 'Update Invoice' : 'Save & Share Invoice'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: kSurfaceDim,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ),
+          if (itemRows.isEmpty)
+            const SizedBox(height: 12),
+        ],
+      ),
+    );
+  }
+
+  Widget _webSummaryRow(String label, String value, {Color? valueColor}) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF6B7280))),
+        Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: valueColor ?? kOnSurface)),
+      ],
+    );
+  }
+
+  // ── Payment method ──
+  String _selectedPaymentMethod = '';
+  static const List<String> _paymentMethods = ['Cash', 'UPI', 'Bank Transfer', 'Cheque', 'Other'];
 
   // ── Khata-style Total Section ──
   bool _isReceived = false;
 
   Widget _buildPinnedTotalStrip(double grandTotal, double amountReceived, double balanceDue) {
+    final isPaid = balanceDue <= 0 && grandTotal > 0;
+    final isPartial = amountReceived > 0 && balanceDue > 0;
+    final statusColor = isPaid
+        ? const Color(0xFF16A34A)
+        : isPartial
+            ? const Color(0xFFD97706)
+            : const Color(0xFFDC2626);
+    final statusBg = isPaid
+        ? const Color(0xFFF0FDF4)
+        : isPartial
+            ? const Color(0xFFFFFBEB)
+            : const Color(0xFFFEF2F2);
+    final statusLabel = isPaid
+        ? 'Paid'
+        : isPartial
+            ? 'Partial'
+            : 'Unpaid';
+
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 16, 12, 0),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFE0E8F0)),
         boxShadow: [
           BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 6, offset: const Offset(0, 2)),
@@ -539,166 +1983,168 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── Total Amount row ──
-          Row(
-            children: [
-              const Text('Total Amount', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: kOnSurface)),
-              const Spacer(),
-              const Text('\u20b9', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
-              const SizedBox(width: 8),
-              Text(
-                _currencyFormat.format(grandTotal),
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: kOnSurface),
-              ),
-            ],
-          ),
-          // Dashed divider
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final dashCount = (constraints.maxWidth / 8).floor();
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(dashCount, (_) =>
-                    const SizedBox(width: 4, height: 1, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFFBDBDBD)))),
-                  ),
-                );
-              },
+          // ── Grand Total + Status badge ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.03),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: Row(
+              children: [
+                const Text('Grand Total', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                const Spacer(),
+                Text(
+                  _currencyFormat.format(grandTotal),
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kOnSurface),
+                ),
+              ],
             ),
           ),
-          // ── Received row with checkbox ──
-          Row(
-            children: [
-              SizedBox(
-                width: 22, height: 22,
-                child: Checkbox(
-                  value: _isReceived,
-                  onChanged: (v) {
-                    setState(() {
-                      _isReceived = v ?? false;
-                      if (_isReceived) {
-                        // Only auto-fill full amount if field is empty/zero
-                        final current = nu.parseDouble(_receivedController.text) ?? 0;
-                        if (current <= 0) {
+          // ── Received toggle ──
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 16, 6),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 22, height: 22,
+                  child: Checkbox(
+                    value: _isReceived,
+                    onChanged: (v) {
+                      setState(() {
+                        _isReceived = v ?? false;
+                        if (_isReceived) {
                           _receivedController.text = grandTotal.toStringAsFixed(2);
+                        } else {
+                          _receivedController.clear();
                         }
-                      } else {
-                        _receivedController.clear();
-                      }
-                    });
-                  },
-                  activeColor: const Color(0xFF1565C0),
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text('Received', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: kOnSurface)),
-              const Spacer(),
-              const Text('\u20b9', style: TextStyle(fontSize: 13, color: kOnSurfaceVariant)),
-              const SizedBox(width: 6),
-              SizedBox(
-                width: 110,
-                child: TextField(
-                  controller: _receivedController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  textAlign: TextAlign.right,
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                    border: InputBorder.none,
-                    hintText: '0.00',
-                    hintStyle: TextStyle(color: Color(0xFFBDBDBD)),
+                      });
+                    },
+                    activeColor: const Color(0xFF16A34A),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
-                  onChanged: (val) {
-                    setState(() {
-                      final amt = double.tryParse(val) ?? 0;
-                      _isReceived = amt >= grandTotal;
-                    });
-                  },
                 ),
-              ),
-            ],
-          ),
-          // Dashed divider
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final dashCount = (constraints.maxWidth / 8).floor();
-                return Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: List.generate(dashCount, (_) =>
-                    const SizedBox(width: 4, height: 1, child: DecoratedBox(decoration: BoxDecoration(color: Color(0xFFBDBDBD)))),
+                const SizedBox(width: 8),
+                const Text('Received', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface)),
+                const Spacer(),
+                SizedBox(
+                  width: 100,
+                  child: TextField(
+                    controller: _receivedController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    textAlign: TextAlign.right,
+                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                    decoration: InputDecoration(
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+                      prefixText: '\u20b9 ',
+                      prefixStyle: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+                      filled: true,
+                      fillColor: const Color(0xFFF9FAFB),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE8ECF0)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: Color(0xFFE8ECF0)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                      ),
+                      hintText: '0',
+                      hintStyle: const TextStyle(color: Color(0xFFBDBDBD), fontSize: 13),
+                    ),
+                    onChanged: (val) {
+                      setState(() {
+                        final amt = double.tryParse(val) ?? 0;
+                        _isReceived = amt >= grandTotal && grandTotal > 0;
+                      });
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
-          // ── Balance Due row ──
-          Row(
-            children: [
-              Text(
-                balanceDue <= 0 ? 'Paid' : balanceDue < grandTotal ? 'Balance Due' : 'Balance Due',
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: balanceDue <= 0
-                      ? const Color(0xFF2E7D32)
-                      : balanceDue < grandTotal
-                          ? const Color(0xFFF57F17)
-                          : const Color(0xFFD32F2F),
-                ),
+          // ── Payment method (shown when received > 0) ──
+          if (amountReceived > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Mode of Payment', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: _paymentMethods.map((m) => ChoiceChip(
+                      label: Text(m, style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: _selectedPaymentMethod == m ? FontWeight.w700 : FontWeight.w500,
+                        color: _selectedPaymentMethod == m ? Colors.white : kOnSurface,
+                      )),
+                      selected: _selectedPaymentMethod == m,
+                      selectedColor: kPrimary,
+                      backgroundColor: const Color(0xFFF3F4F6),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      side: BorderSide(
+                        color: _selectedPaymentMethod == m ? kPrimary : const Color(0xFFE0E4E8),
+                      ),
+                      visualDensity: VisualDensity.compact,
+                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      onSelected: (_) {
+                        setState(() {
+                          _selectedPaymentMethod = _selectedPaymentMethod == m ? '' : m;
+                        });
+                      },
+                    )).toList(),
+                  ),
+                ],
               ),
-              const Spacer(),
-              const Text('\u20b9', style: TextStyle(fontSize: 14, color: kOnSurfaceVariant)),
-              const SizedBox(width: 8),
-              Text(
-                _currencyFormat.format(balanceDue),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: balanceDue <= 0
-                      ? const Color(0xFF2E7D32)
-                      : balanceDue < grandTotal
-                          ? const Color(0xFFF57F17)
-                          : const Color(0xFFD32F2F),
+            ),
+          // ── Status bar ──
+          Container(
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: statusBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: statusColor.withValues(alpha: 0.2)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: statusColor.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    statusLabel,
+                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: statusColor),
+                  ),
                 ),
-              ),
-            ],
+                const Spacer(),
+                if (!isPaid) ...[
+                  Text('Balance: ', style: TextStyle(fontSize: 12, color: statusColor.withValues(alpha: 0.7))),
+                  Text(
+                    _currencyFormat.format(balanceDue),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: statusColor),
+                  ),
+                ] else
+                  Row(
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 16, color: statusColor),
+                      const SizedBox(width: 4),
+                      Text('Fully Paid', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: statusColor)),
+                    ],
+                  ),
+              ],
+            ),
           ),
-          // ── Payment status badge ──
-          if (amountReceived > 0 && balanceDue > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8E1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  'Partially Paid (\u20b9${_currencyFormat.format(amountReceived)} received)',
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFFF57F17)),
-                ),
-              ),
-            ),
-          if (balanceDue <= 0 && grandTotal > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE8F5E9),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  'Fully Paid',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2E7D32)),
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -878,6 +2324,81 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
     );
   }
 
+  // ── More customer fields toggle ────────────────────────────────────────────
+
+  Widget _buildMoreCustomerToggle() {
+    return InkWell(
+      onTap: () => setState(() => _showMoreCustomerFields = !_showMoreCustomerFields),
+      borderRadius: BorderRadius.circular(8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _showMoreCustomerFields ? Icons.expand_less_rounded : Icons.more_horiz_rounded,
+              size: 18,
+              color: kPrimary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _showMoreCustomerFields ? 'Less' : 'More',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomerAddressField() {
+    return TextFormField(
+      controller: _customerAddressController,
+      maxLines: 1,
+      decoration: InputDecoration(
+        labelText: 'Address',
+        labelStyle: const TextStyle(fontSize: 14, color: kTextTertiary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kPrimary, width: 1.5)),
+      ),
+      style: const TextStyle(fontSize: 14, color: kOnSurface),
+    );
+  }
+
+  Widget _buildCustomerEmailField() {
+    return TextFormField(
+      controller: _customerEmailController,
+      keyboardType: TextInputType.emailAddress,
+      decoration: InputDecoration(
+        labelText: 'Email',
+        labelStyle: const TextStyle(fontSize: 14, color: kTextTertiary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kPrimary, width: 1.5)),
+      ),
+      style: const TextStyle(fontSize: 14, color: kOnSurface),
+    );
+  }
+
+  Widget _buildCustomerGstinField() {
+    return TextFormField(
+      controller: _customerGstinController,
+      textCapitalization: TextCapitalization.characters,
+      decoration: InputDecoration(
+        labelText: 'GSTIN',
+        labelStyle: const TextStyle(fontSize: 14, color: kTextTertiary),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE0E4E8))),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: kPrimary, width: 1.5)),
+      ),
+      style: const TextStyle(fontSize: 14, color: kOnSurface),
+    );
+  }
+
   // ── Customer section ──────────────────────────────────────────────────────
 
   Widget _buildCustomerSection(BuildContext context) {
@@ -918,6 +2439,27 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(8),
                 borderSide: const BorderSide(color: kPrimary, width: 1.5),
+              ),
+              suffixIcon: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (!kIsWeb)
+                    IconButton(
+                      icon: const Icon(Icons.contacts_rounded, size: 20, color: kOnSurfaceVariant),
+                      tooltip: 'Pick from phone contacts',
+                      onPressed: _pickPhoneContact,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.person_search_rounded, size: 20, color: kPrimary),
+                    tooltip: 'Pick from saved customers',
+                    onPressed: _pickCustomer,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                  ),
+                  const SizedBox(width: 2),
+                ],
               ),
             ),
             style: const TextStyle(fontSize: 14, color: kOnSurface),
@@ -1172,8 +2714,14 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       _selectedClient = client;
       _customerNameController.text = client.name;
       _customerPhoneController.text = client.phone;
+      _customerAddressController.text = client.address;
+      _customerEmailController.text = client.email;
+      _customerGstinController.text = client.gstin;
       _showCustomerSuggestions = false;
       _showClientValidationError = false;
+      if (client.address.isNotEmpty || client.email.isNotEmpty || client.gstin.isNotEmpty) {
+        _showMoreCustomerFields = true;
+      }
     });
     _customerNameFocus.unfocus();
   }
@@ -1246,7 +2794,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       _selectedClient = selectedClient;
       _customerNameController.text = selectedClient.name;
       _customerPhoneController.text = selectedClient.phone;
+      _customerAddressController.text = selectedClient.address;
+      _customerEmailController.text = selectedClient.email;
+      _customerGstinController.text = selectedClient.gstin;
       _showClientValidationError = false;
+      if (selectedClient.address.isNotEmpty || selectedClient.email.isNotEmpty || selectedClient.gstin.isNotEmpty) {
+        _showMoreCustomerFields = true;
+      }
     });
   }
 
@@ -1264,7 +2818,13 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       _selectedClient = savedClient;
       _customerNameController.text = savedClient.name;
       _customerPhoneController.text = savedClient.phone;
+      _customerAddressController.text = savedClient.address;
+      _customerEmailController.text = savedClient.email;
+      _customerGstinController.text = savedClient.gstin;
       _showClientValidationError = false;
+      if (savedClient.address.isNotEmpty || savedClient.email.isNotEmpty || savedClient.gstin.isNotEmpty) {
+        _showMoreCustomerFields = true;
+      }
     });
   }
 
@@ -1349,6 +2909,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
   }
 
   /// Opens the Add/Edit item as a full page. If [index] is null, adds a new item.
+  /// On web expanded layout, shows inline form instead of navigating.
   Future<void> _openItemPage([int? index]) async {
     final isNew = index == null;
     if (isNew) {
@@ -1356,10 +2917,18 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       final qtyFocusNode = FocusNode();
       itemRows.add(_createItemRowControllers());
       _showAdvanced.add(false);
-      _itemConfirmed.add(true);
+      // On web, new draft rows are unconfirmed until user clicks "Add to Invoice"
+      final isWebExpanded = kIsWeb && windowSizeOf(context) == WindowSize.expanded;
+      _itemConfirmed.add(!isWebExpanded);
       _itemDescFocusNodes.add(focusNode);
       _itemQtyFocusNodes.add(qtyFocusNode);
       index = itemRows.length - 1;
+    }
+
+    // Web expanded layout: show inline form instead of navigating
+    if (kIsWeb && windowSizeOf(context) == WindowSize.expanded) {
+      setState(() => _webEditingItemIndex = index);
+      return;
     }
 
     final row = itemRows[index!];
@@ -1468,6 +3037,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
         hsnCode: row['hsn']!.text.trim(),
         gstRate: gstRate,
         gstApplicable: gstRate > 0,
+        trackInventory: false,
       ));
     } catch (_) {
       // Silent — don't block UI for auto-save failures
@@ -1624,13 +3194,24 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       _saveLastUsedGstSettings(); // fire-and-forget
 
       // Run client save and invoice number reservation in parallel
+      // Update existing client with any changed fields, or create new one
       final clientFuture = (selectedClient == null && customerName.isNotEmpty)
           ? ClientService().saveClient(Client(
               id: '',
               name: customerName,
               phone: _customerPhoneController.text.trim(),
+              address: _customerAddressController.text.trim(),
+              email: _customerEmailController.text.trim(),
+              gstin: _customerGstinController.text.trim(),
             ))
-          : Future.value(selectedClient);
+          : selectedClient != null
+              ? ClientService().saveClient(selectedClient.copyWith(
+                  phone: _customerPhoneController.text.trim(),
+                  address: _customerAddressController.text.trim(),
+                  email: _customerEmailController.text.trim(),
+                  gstin: _customerGstinController.text.trim(),
+                ))
+              : Future.value(selectedClient);
 
       var resolvedClient = await clientFuture;
       if (resolvedClient != null) _selectedClient = resolvedClient;
@@ -1649,7 +3230,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           invoiceNumber: invoiceNumber,
           clientId: resolvedClient?.id ?? editInv.clientId,
           clientName: customerName,
-          customerGstin: resolvedClient?.gstin ?? '',
+          customerGstin: _customerGstinController.text.trim().isNotEmpty ? _customerGstinController.text.trim() : (resolvedClient?.gstin ?? ''),
           items: items,
           createdAt: editInv.createdAt,
           dueDate: dueDate,
@@ -1661,6 +3242,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           gstRate: _gstRate,
           gstType: _gstType,
           amountReceived: received,
+          paymentMethod: _selectedPaymentMethod,
         );
 
         await FirebaseService().updateInvoice(updatedInvoice);
@@ -1709,7 +3291,7 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           invoiceNumber: invoiceNumber,
           clientId: resolvedClient?.id ?? '',
           clientName: customerName,
-          customerGstin: resolvedClient?.gstin ?? '',
+          customerGstin: _customerGstinController.text.trim().isNotEmpty ? _customerGstinController.text.trim() : (resolvedClient?.gstin ?? ''),
           items: items,
           createdAt: invoiceDate,
           dueDate: dueDate,
@@ -1721,10 +3303,12 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
           gstRate: _gstRate,
           gstType: _gstType,
           amountReceived: received,
+          paymentMethod: _selectedPaymentMethod,
         );
 
         invoiceId = await FirebaseService().addInvoice(savedInvoice);
         UsageTrackingService.instance.incrementInvoiceCount(); // fire-and-forget
+        ReviewService.instance.onInvoiceCreated(); // fire-and-forget
 
         // Deduct stock for all items in parallel (fire-and-forget for speed)
         final inventoryService = InventoryService();
@@ -1745,6 +3329,30 @@ class _CreateInvoiceScreenState extends State<CreateInvoiceScreen> {
       }
 
       HapticFeedback.mediumImpact();
+
+      // Let the user know if their save is queued (no network right now)
+      if (ConnectivityService.instance.isOffline && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.cloud_queue_rounded, color: Colors.white, size: 18),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Saved locally — will sync when you reconnect',
+                    style: TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFFB45309),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+        );
+      }
 
       final finalInvoice = Invoice(
         id: invoiceId,
@@ -2140,6 +3748,15 @@ class _ItemFormPageState extends State<_ItemFormPage> {
   late final TextEditingController _gstRate;
   late final TextEditingController _discount;
 
+  // Product autocomplete
+  final FocusNode _descFocusNode = FocusNode();
+  final FocusNode _qtyFocusNode = FocusNode();
+  final LayerLink _descLayerLink = LayerLink();
+  OverlayEntry? _descOverlay;
+  List<Product> _productSuggestions = [];
+  StreamSubscription<List<Product>>? _productSearchSub;
+  Timer? _productSearchTimer;
+
   @override
   void initState() {
     super.initState();
@@ -2152,6 +3769,9 @@ class _ItemFormPageState extends State<_ItemFormPage> {
     _gstRate = TextEditingController(text: row['gstRate']!.text);
     _discount = TextEditingController(text: row['discount']?.text ?? '');
 
+    _desc.addListener(_onDescChanged);
+    _descFocusNode.addListener(_onDescFocusChanged);
+
     // Show advanced if any advanced field has data
     if (_hsn.text.isNotEmpty || _discount.text.isNotEmpty ||
         (nu.parseDouble(row['gstRate']!.text) ?? 0) > 0) {
@@ -2161,6 +3781,13 @@ class _ItemFormPageState extends State<_ItemFormPage> {
 
   @override
   void dispose() {
+    _desc.removeListener(_onDescChanged);
+    _descFocusNode.removeListener(_onDescFocusChanged);
+    _descFocusNode.dispose();
+    _qtyFocusNode.dispose();
+    _productSearchSub?.cancel();
+    _productSearchTimer?.cancel();
+    _removeProductOverlay();
     _desc.dispose();
     _hsn.dispose();
     _qty.dispose();
@@ -2217,6 +3844,142 @@ class _ItemFormPageState extends State<_ItemFormPage> {
     final disc = (nu.parseDouble(_discount.text) ?? 0).clamp(0, 100);
     final raw = qty * price;
     return raw - (raw * disc / 100);
+  }
+
+  void _onDescChanged() {
+    final query = _desc.text.trim();
+    _productSearchTimer?.cancel();
+    if (query.isEmpty) {
+      _removeProductOverlay();
+      _productSearchSub?.cancel();
+      setState(() => _productSuggestions = []);
+      return;
+    }
+    _productSearchTimer = Timer(const Duration(milliseconds: 280), () {
+      _productSearchSub?.cancel();
+      _productSearchSub = ProductService()
+          .getProductsStream(searchQuery: query, limit: 6)
+          .listen((products) {
+        if (!mounted) return;
+        // Filter: only show if not an exact match already selected
+        final filtered = products
+            .where((p) => p.name.trim().toLowerCase() != query.toLowerCase()
+                || _price.text.isEmpty)
+            .toList();
+        setState(() => _productSuggestions = filtered);
+        if (filtered.isNotEmpty && _descFocusNode.hasFocus) {
+          _showProductOverlay();
+        } else {
+          _removeProductOverlay();
+        }
+      });
+    });
+  }
+
+  void _onDescFocusChanged() {
+    if (!_descFocusNode.hasFocus) {
+      Future.delayed(const Duration(milliseconds: 200), () {
+        if (mounted) _removeProductOverlay();
+      });
+    } else if (_productSuggestions.isNotEmpty) {
+      _showProductOverlay();
+    }
+  }
+
+  void _showProductOverlay() {
+    _removeProductOverlay();
+    final overlay = Overlay.of(context);
+    _descOverlay = OverlayEntry(
+      builder: (ctx) => Positioned(
+        width: MediaQuery.of(ctx).size.width - 32,
+        child: CompositedTransformFollower(
+          link: _descLayerLink,
+          showWhenUnlinked: false,
+          offset: const Offset(0, 54),
+          child: Material(
+            elevation: 6,
+            borderRadius: BorderRadius.circular(12),
+            color: Colors.white,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 240),
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                shrinkWrap: true,
+                itemCount: _productSuggestions.length,
+                separatorBuilder: (_, __) => const Divider(height: 1, indent: 12, endIndent: 12),
+                itemBuilder: (ctx, i) {
+                  final p = _productSuggestions[i];
+                  return ListTile(
+                    dense: true,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+                    leading: Container(
+                      width: 32, height: 32,
+                      decoration: BoxDecoration(
+                        color: kPrimaryContainer,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        p.initials,
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: kPrimary),
+                      ),
+                    ),
+                    title: Text(p.name, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: kOnSurface)),
+                    subtitle: Text(
+                      p.priceLabel,
+                      style: const TextStyle(fontSize: 11, color: kOnSurfaceVariant),
+                    ),
+                    trailing: p.gstApplicable
+                        ? Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: kPrimaryContainer,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'GST ${p.gstRate.toStringAsFixed(0)}%',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: kPrimary),
+                            ),
+                          )
+                        : null,
+                    onTap: () => _selectProduct(p),
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    overlay.insert(_descOverlay!);
+  }
+
+  void _removeProductOverlay() {
+    _descOverlay?.remove();
+    _descOverlay = null;
+  }
+
+  void _selectProduct(Product product) {
+    _removeProductOverlay();
+    setState(() {
+      _desc.text = product.name;
+      widget.row['productId']!.text = product.id;
+      if (product.unitPrice > 0) _price.text = product.unitPrice.toString();
+      if (product.unit.isNotEmpty) _unit.text = product.unit;
+      if (product.hsnCode.isNotEmpty) {
+        _hsn.text = product.hsnCode;
+        _showAdvanced = true;
+      }
+      if (product.gstApplicable && product.gstRate > 0) {
+        _gstRate.text = product.gstRate.toStringAsFixed(0);
+        _showAdvanced = true;
+      }
+      _productSuggestions = [];
+    });
+    _descFocusNode.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _qtyFocusNode.requestFocus();
+    });
   }
 
   @override
@@ -2301,51 +4064,59 @@ class _ItemFormPageState extends State<_ItemFormPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Item name
-                  TextField(
-                    controller: _desc,
-                    autofocus: _desc.text.isEmpty,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: InputDecoration(
-                      label: RichText(text: TextSpan(
-                        style: const TextStyle(fontSize: 14, color: kTextTertiary),
-                        children: [
-                          const TextSpan(text: 'Item Name '),
-                          TextSpan(text: '*', style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.w700)),
-                        ],
-                      )),
-                      hintText: 'e.g. Notebook, Rice...',
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFF48FB1))),
-                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFF48FB1))),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        borderSide: const BorderSide(color: kPrimary, width: 1.5),
-                      ),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.inventory_2_rounded, color: kPrimary, size: 20),
-                        tooltip: 'Pick from products',
-                        onPressed: () async {
-                          final product = await Navigator.push<Product>(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const ProductsScreen(selectionMode: true),
+                  CompositedTransformTarget(
+                    link: _descLayerLink,
+                    child: TextField(
+                      controller: _desc,
+                      focusNode: _descFocusNode,
+                      autofocus: _desc.text.isEmpty,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        label: RichText(text: TextSpan(
+                          style: const TextStyle(fontSize: 14, color: kTextTertiary),
+                          children: [
+                            const TextSpan(text: 'Item Name '),
+                            TextSpan(text: '*', style: TextStyle(color: Colors.red.shade600, fontWeight: FontWeight.w700)),
+                          ],
+                        )),
+                        hintText: 'e.g. Notebook, Rice...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFF48FB1))),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: Color(0xFFF48FB1))),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(color: kPrimary, width: 1.5),
+                        ),
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (_productSuggestions.isNotEmpty)
+                              const Padding(
+                                padding: EdgeInsets.only(right: 4),
+                                child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: kOnSurfaceVariant),
+                              ),
+                            IconButton(
+                              icon: const Icon(Icons.inventory_2_rounded, color: kPrimary, size: 20),
+                              tooltip: 'Pick from products',
+                              padding: const EdgeInsets.symmetric(horizontal: 8),
+                              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                              onPressed: () async {
+                                _removeProductOverlay();
+                                final product = await Navigator.push<Product>(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => const ProductsScreen(selectionMode: true),
+                                  ),
+                                );
+                                if (product == null || !mounted) return;
+                                _selectProduct(product);
+                              },
                             ),
-                          );
-                          if (product == null || !mounted) return;
-                          setState(() {
-                            _desc.text = product.name;
-                            _price.text = product.unitPrice > 0 ? product.unitPrice.toString() : '';
-                            _unit.text = product.unit.isNotEmpty ? product.unit : widget.defaultItemUnit;
-                            _hsn.text = product.hsnCode;
-                            if (product.gstApplicable) {
-                              _gstRate.text = product.gstRate.toStringAsFixed(0);
-                              _showAdvanced = true;
-                            }
-                          });
-                        },
+                          ],
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 14),
                   // Qty + Unit + Price in a row
@@ -2357,6 +4128,7 @@ class _ItemFormPageState extends State<_ItemFormPage> {
                         flex: 2,
                         child: TextField(
                           controller: _qty,
+                          focusNode: _qtyFocusNode,
                           keyboardType: const TextInputType.numberWithOptions(decimal: true),
                           decoration: InputDecoration(
                             labelText: 'Qty',

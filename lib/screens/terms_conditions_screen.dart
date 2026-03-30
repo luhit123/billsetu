@@ -72,9 +72,7 @@ class TermsConditionsScreen extends StatelessWidget {
         '3. Subscription Plans & Payments',
         '$appName offers the following subscription tiers:\n\n'
             '  \u2022 Free: Basic features with limited invoices, customers, and products.\n'
-            '  \u2022 Raja: Expanded limits with WhatsApp sharing, purchase orders, and data export.\n'
-            '  \u2022 Maharaja: Advanced features including GST reports and e-way bill integration.\n'
-            '  \u2022 King: Unlimited access to all features.\n\n'
+            '  \u2022 Pro: Unlimited access to all features including WhatsApp sharing, purchase orders, data export, GST reports, and analytics.\n\n'
             'Payment Terms:\n\n'
             '  \u2022 Paid subscriptions are billed monthly or annually through Razorpay.\n'
             '  \u2022 Prices are in Indian Rupees (INR) and include applicable GST.\n'

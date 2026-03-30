@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
@@ -1093,18 +1094,26 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     setState(() => _isGeneratingPdf = true);
     try {
       final bytes = await _generatePdf();
-      final dir = await getTemporaryDirectory();
-      final fileName =
-          'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf';
-      final file = File('${dir.path}/$fileName');
-      await file.writeAsBytes(bytes);
+      final text = 'Hi ${_member.name}, here is your membership invoice for the ${_plan.name} plan. '
+          'Valid till ${_dateFormat.format(_member.endDate)}.';
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text:
-            'Hi ${_member.name}, here is your membership invoice for the ${_plan.name} plan. '
-            'Valid till ${_dateFormat.format(_member.endDate)}.',
-      );
+      if (kIsWeb) {
+        await SharePlus.instance.share(ShareParams(
+          files: [XFile.fromData(bytes, mimeType: 'application/pdf', name: 'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf')],
+          text: text,
+        ));
+      } else {
+        final dir = await getTemporaryDirectory();
+        final fileName =
+            'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf';
+        final file = File('${dir.path}/$fileName');
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: text,
+        );
+      }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)

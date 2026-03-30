@@ -1,4 +1,6 @@
 import 'package:billeasy/l10n/app_strings.dart';
+import 'package:billeasy/screens/business_card_screen.dart';
+import 'package:billeasy/screens/how_to_use_screen.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/screens/customers_screen.dart';
@@ -17,6 +19,7 @@ import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:billeasy/utils/responsive.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -42,9 +45,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       backgroundColor: kSurface,
       appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(
+        title: Text(
+          strings.settingsTitle,
+          style: const TextStyle(
             fontWeight: FontWeight.w600,
             fontSize: 18,
             color: kOnSurface,
@@ -55,7 +58,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         elevation: 0,
         scrolledUnderElevation: 0,
       ),
-      body: ListView(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: kWebFormMaxWidth),
+          child: ListView(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 40),
         children: [
           // ── Profile ──
@@ -162,8 +168,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           const SizedBox(height: 2),
                           Text(
                             planName == 'Free'
-                                ? 'Upgrade for more features'
-                                : 'Manage subscription',
+                                ? strings.settingsUpgradeHint
+                                : strings.settingsManageSubscription,
                             style: const TextStyle(
                               fontSize: 13,
                               color: kOnSurfaceVariant,
@@ -196,9 +202,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
+          // ── Business Card ──
+          const SizedBox(height: 10),
+          _TonalCard(
+            child: _SettingsTile(
+              icon: Icons.contact_page_rounded,
+              iconBg: const Color(0xFF7C3AED),
+              title: 'Business Card',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const BusinessCardScreen()),
+              ),
+            ),
+          ),
+
           // ── Billing ──
           const SizedBox(height: 28),
-          const _SectionLabel(title: 'BILLING'),
+          _SectionLabel(title: strings.settingsBilling),
           const SizedBox(height: 8),
           _TonalCard(
             child: Column(
@@ -206,14 +225,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SettingsTile(
                   icon: Icons.credit_card_outlined,
                   iconBg: const Color(0xFFAF52DE),
-                  title: 'Billing & Payments',
+                  title: strings.settingsBillingPayments,
                   onTap: _openSubscription,
                 ),
                 const _TileDivider(),
                 _SettingsTile(
                   icon: Icons.auto_awesome_outlined,
                   iconBg: const Color(0xFFFF2D55),
-                  title: 'Upgrade Plan',
+                  title: strings.settingsUpgradePlan,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (_) => const UpgradeScreen()),
@@ -236,7 +255,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // ── Legal ──
           const SizedBox(height: 28),
-          const _SectionLabel(title: 'LEGAL'),
+          _SectionLabel(title: strings.settingsLegal),
           const SizedBox(height: 8),
           _TonalCard(
             child: Column(
@@ -244,7 +263,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SettingsTile(
                   icon: Icons.shield_outlined,
                   iconBg: const Color(0xFF007AFF),
-                  title: 'Privacy Policy',
+                  title: strings.settingsPrivacyPolicy,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (_) => const PrivacyPolicyScreen()),
@@ -254,13 +273,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 _SettingsTile(
                   icon: Icons.description_outlined,
                   iconBg: const Color(0xFF5856D6),
-                  title: 'Terms & Conditions',
+                  title: strings.settingsTermsConditions,
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(
                         builder: (_) => const TermsConditionsScreen()),
                   ),
                 ),
               ],
+            ),
+          ),
+
+          // ── Help ──
+          const SizedBox(height: 28),
+          const _SectionLabel(title: 'HELP'),
+          const SizedBox(height: 8),
+          _TonalCard(
+            child: _SettingsTile(
+              icon: Icons.menu_book_rounded,
+              iconBg: const Color(0xFF34C759),
+              title: 'How to Use BillRaja',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const HowToUseScreen()),
+              ),
             ),
           ),
 
@@ -336,11 +370,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 16),
           const Center(
             child: Text(
-              'BillEasy v1.0',
+              'BillRaja v1.0',
               style: TextStyle(fontSize: 12, color: kTextTertiary),
             ),
           ),
         ],
+      ),
+        ),
       ),
     );
   }

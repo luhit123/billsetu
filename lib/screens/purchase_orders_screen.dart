@@ -1,9 +1,12 @@
 import 'dart:async';
 
+import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/create_purchase_order_screen.dart';
 import 'package:billeasy/screens/purchase_order_details_screen.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/screens/upgrade_screen.dart';
+import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:flutter/material.dart';
@@ -116,7 +119,48 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
     final filtered = _filtered;
+
+    if (!PlanService.instance.hasPurchaseOrders) {
+      return Scaffold(
+        backgroundColor: kSurface,
+        appBar: AppBar(
+          title: const Text('Purchase Orders'),
+          backgroundColor: kSurface,
+          foregroundColor: kOnSurface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
+                const SizedBox(height: 16),
+                const Text('Purchase Orders', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
+                const SizedBox(height: 8),
+                const Text('Upgrade to Pro to create and manage purchase orders.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Purchase Orders'))),
+                  icon: const Icon(Icons.workspace_premium),
+                  label: const Text('Upgrade to Pro'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: kPrimary,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: kSurface,
@@ -156,8 +200,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                 SliverFillRemaining(
                   hasScrollBody: false,
                   child: ErrorRetryWidget(
-                    message:
-                        'Could not load purchase orders.\nCheck your connection and try again.',
+                    message: s.poLoadError,
                     onRetry: _subscribe,
                   ),
                 )

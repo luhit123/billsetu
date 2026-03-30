@@ -9,6 +9,7 @@ import 'package:billeasy/screens/customer_form_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/widgets/balance_reminder_sheet.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
@@ -599,10 +600,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => BalanceReminderSheet(
-        client: client,
-        unpaidInvoices: unpaidInvoices,
-        totalOutstanding: outstanding,
+      builder: (_) => FutureBuilder(
+        future: ProfileService().getCurrentProfile(),
+        builder: (ctx, snap) => BalanceReminderSheet(
+          client: client,
+          unpaidInvoices: unpaidInvoices,
+          totalOutstanding: outstanding,
+          upiId: snap.data?.upiId,
+          businessName: snap.data?.storeName,
+        ),
       ),
     );
   }

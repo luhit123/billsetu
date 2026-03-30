@@ -1,49 +1,262 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="BillRaja is a calm billing workspace for invoices, GST, and customers.">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- Primary SEO -->
+  <title>BillRaja — All-in-One Billing & Business Management for Growing Businesses</title>
+  <meta name="description" content="BillRaja is the all-in-one billing workspace for startups, small businesses, and growing enterprises. Create bills, manage inventory, track payments, handle GST — everything your business needs in one place.">
+  <meta name="keywords" content="billing app for small business, business management app India, startup billing software, invoice app for growing business, all in one billing solution, SME billing tool, free billing app, billing software for startups, small business management, inventory billing app, BillRaja">
+  <meta name="author" content="BillRaja">
+  <meta name="theme-color" content="#0057FF">
+  <link rel="canonical" href="https://billeasy-3a6ad.web.app/">
+
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://billeasy-3a6ad.web.app/">
+  <meta property="og:title" content="BillRaja — All-in-One Billing for Growing Businesses">
+  <meta property="og:description" content="From creating your first bill to filing GST — one app for everything. Built for startups, small shops, freelancers, and growing businesses across India.">
+  <meta property="og:image" content="https://billeasy-3a6ad.web.app/icons/Icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:site_name" content="BillRaja">
+  <meta property="og:locale" content="en_IN">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="BillRaja — All-in-One Billing for Growing Businesses">
+  <meta name="twitter:description" content="From creating your first bill to filing GST — one app for everything. Built for startups, shops, and growing businesses.">
+  <meta name="twitter:image" content="https://billeasy-3a6ad.web.app/icons/Icon-512.png">
+
+  <!-- Structured Data — SoftwareApplication -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "BillRaja",
+    "description": "All-in-one billing and business management workspace for startups, small and medium businesses. Create bills, manage customers, track inventory, handle payments, and stay GST-compliant — all from one app.",
+    "url": "https://billeasy-3a6ad.web.app",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Android, iOS, Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "INR",
+      "description": "Free to start — upgrade as you grow"
+    },
+    "author": {
+      "@type": "Organization",
+      "name": "BillRaja",
+      "url": "https://billeasy-3a6ad.web.app"
+    },
+    "featureList": [
+      "Professional bill and invoice creation",
+      "Customer and client management",
+      "Product catalog with inventory tracking",
+      "Payment tracking with UPI and QR code support",
+      "Purchase order management",
+      "GST-compliant billing with CGST, SGST, IGST",
+      "Business reports and analytics dashboard",
+      "Share invoices via SMS, WhatsApp, and email",
+      "20+ invoice templates",
+      "Multi-language support",
+      "Works offline — syncs when connected",
+      "Available on Android, iOS, and Web"
+    ],
+    "screenshot": "https://billeasy-3a6ad.web.app/icons/Icon-512.png",
+    "audience": {
+      "@type": "BusinessAudience",
+      "audienceType": "Small and Medium Businesses, Startups, Freelancers, Shopkeepers"
+    }
+  }
+  </script>
 
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="BillRaja">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <link rel="icon" type="image/png" href="favicon.png">
 
-  <title>BillRaja</title>
   <link rel="manifest" href="manifest.json">
 
   <!-- Razorpay Checkout (web payments) -->
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+  <!-- Preconnect to Firebase -->
+  <link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+  <link rel="preconnect" href="https://www.googleapis.com" crossorigin>
+
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+      background-color: #F9FAFB;
+      overflow: hidden;
+    }
+    .loading {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .loading-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0057FF, #004CE1);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 24px;
+      margin-bottom: 16px;
+    }
+    .loading-text {
+      color: #586064;
+      font-size: 14px;
+      font-weight: 500;
+    }
+    .loading-bar {
+      width: 120px;
+      height: 3px;
+      background: #EAF0F6;
+      border-radius: 3px;
+      margin-top: 12px;
+      overflow: hidden;
+    }
+    .loading-bar::after {
+      content: '';
+      display: block;
+      width: 40px;
+      height: 100%;
+      background: #0057FF;
+      border-radius: 3px;
+      animation: slide 1.2s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0% { transform: translateX(-40px); }
+      100% { transform: translateX(120px); }
+    }
+    /* Hide Firebase Auth reCAPTCHA badge — it overlaps buttons on mobile */
+    .grecaptcha-badge {
+      visibility: hidden !important;
+      opacity: 0 !important;
+      pointer-events: none !important;
+      position: fixed !important;
+      bottom: -100px !important;
+      right: -100px !important;
+      z-index: -1 !important;
+    }
+    .seo-content {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+  </style>
 </head>
 <body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
+  <!-- Crawlable content for search engines (Flutter canvas is invisible to bots) -->
+  <div class="seo-content">
+    <h1>BillRaja — The All-in-One Billing App for Growing Businesses</h1>
+    <p>Whether you're a startup creating your first invoice, a small shop managing daily sales, or a growing business handling hundreds of clients — BillRaja is built for you. One app that takes you from creating your very first bill to handling full GST compliance as you scale.</p>
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
+    <h2>Built for Every Stage of Your Business</h2>
+    <p>BillRaja grows with you. Start simple with quick bills and customer management. As your business expands, unlock inventory tracking, purchase orders, GST reports, and analytics — all without switching tools.</p>
+
+    <h3>For Startups & Freelancers</h3>
+    <p>Create professional invoices in under 60 seconds. Share them instantly via WhatsApp or SMS. Get paid faster with UPI QR codes embedded in every bill. No accounting degree needed.</p>
+
+    <h3>For Small & Medium Businesses</h3>
+    <p>Manage your entire customer base, track who owes you money, send payment reminders, and keep your product catalog organized. Real-time dashboards show you exactly how your business is performing.</p>
+
+    <h3>For Growing Enterprises</h3>
+    <p>Full GST compliance with CGST, SGST, and IGST calculations. Generate GSTR-1 and GSTR-3B reports. Manage purchase orders and supplier relationships. Track inventory with low-stock alerts.</p>
+
+    <h2>Everything You Need, Nothing You Don't</h2>
+    <ul>
+      <li>Create professional bills and invoices in seconds</li>
+      <li>20+ beautiful invoice templates to match your brand</li>
+      <li>Customer management — track every client and their payment history</li>
+      <li>Product catalog with pricing, HSN codes, and stock tracking</li>
+      <li>Payment tracking — paid, partially paid, pending, overdue at a glance</li>
+      <li>UPI payments — collect money with QR codes on every invoice</li>
+      <li>Share bills via SMS, WhatsApp, email, or direct link</li>
+      <li>Purchase order management for supplier relationships</li>
+      <li>Inventory management with low-stock alerts</li>
+      <li>GST-compliant billing with automatic tax calculations</li>
+      <li>Business reports — revenue trends, outstanding amounts, client analytics</li>
+      <li>Works offline — create bills even without internet, syncs automatically</li>
+      <li>Multi-language — English, Hindi, Tamil, Gujarati, Assamese</li>
+      <li>Available on Android, iOS, and Web — use anywhere</li>
+    </ul>
+
+    <h2>Why Businesses Choose BillRaja</h2>
+    <p>Unlike bloated accounting software that takes weeks to learn, BillRaja is designed to be simple from day one. No training, no setup fees, no complexity. Just open the app and start billing. As your business grows, BillRaja grows with you — adding features exactly when you need them.</p>
+
+    <h2>Who Uses BillRaja?</h2>
+    <ul>
+      <li>Shopkeepers and retail store owners</li>
+      <li>Freelancers and independent consultants</li>
+      <li>Startups and new businesses</li>
+      <li>Small manufacturers and traders</li>
+      <li>Service providers and agencies</li>
+      <li>Food and restaurant businesses</li>
+      <li>Wholesale distributors</li>
+      <li>Any business that creates bills</li>
+    </ul>
+
+    <h2>From First Bill to Full Business Management</h2>
+    <p>BillRaja isn't just a billing app — it's your complete business companion. Create your first bill today. Track your first payment. Add your first customer. And as you grow from 10 invoices a month to 10,000, BillRaja handles it all without breaking a sweat.</p>
+
+    <h2>Start Free, Grow Without Limits</h2>
+    <p>Begin with our free plan — unlimited invoices, unlimited customers. When you're ready for more power, upgrade to Pro for inventory management, purchase orders, priority support, and advanced analytics.</p>
+
+    <nav>
+      <a href="/privacy-policy.html">Privacy Policy</a>
+      <a href="/terms-conditions.html">Terms & Conditions</a>
+    </nav>
+  </div>
+
+  <div class="loading" id="loading">
+    <div class="loading-logo">B</div>
+    <div class="loading-text">Loading BillRaja...</div>
+    <div class="loading-bar"></div>
+  </div>
+
   <script src="flutter_bootstrap.js" async></script>
+  <script>
+    window.addEventListener('flutter-first-frame', function() {
+      var el = document.getElementById('loading');
+      if (el) el.remove();
+      // Force multiple resize events so Flutter engine picks up correct
+      // viewport dimensions. Some browsers report 0 on initial load.
+      [0, 50, 150, 500].forEach(function(ms) {
+        setTimeout(function() {
+          window.dispatchEvent(new Event('resize'));
+        }, ms);
+      });
+    });
+    // Also trigger resize when the page finishes loading (fallback).
+    window.addEventListener('load', function() {
+      setTimeout(function() {
+        window.dispatchEvent(new Event('resize'));
+      }, 200);
+    });
+  </script>
 </body>
 </html>

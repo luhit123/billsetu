@@ -4,16 +4,17 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/modals/invoice.dart';
-import 'package:billeasy/screens/eway_bill_screen.dart';
 import 'package:billeasy/screens/template_picker_sheet.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/logo_cache_service.dart';
 import 'package:billeasy/services/invoice_link_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
@@ -31,6 +32,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:billeasy/utils/upi_utils.dart';
+import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
+import 'package:billeasy/services/usage_tracking_service.dart';
+import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
 const _kTemplatePrefsKey = 'invoice_template';
 
@@ -52,14 +59,17 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
   InvoiceTemplate _template = InvoiceTemplate.vyapar;
   BusinessProfile? _profile;
+  Client? _clientDetails;
   Uint8List? _signatureImage;
+  Uint8List? _logoImage;
   Uint8List? _cachedPdfBytes;
   Uint8List? _previewImage; // Rasterized preview for structural templates
   String _termsText = 'Thank you for doing business with us.';
   bool _loading = true;
 
-  /// Templates with structurally different layouts (not just color variants).
+  /// Templates available via arrow cycling — Vyapar first, then structural layouts.
   static const _structuralTemplates = {
+    InvoiceTemplate.vyapar,
     InvoiceTemplate.banner,
     InvoiceTemplate.sidebarLayout,
     InvoiceTemplate.bordered,
@@ -106,13 +116,15 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     // Show preview immediately — don't wait for anything
     if (mounted) setState(() => _loading = false);
 
-    // Load prefs, profile & signature all in parallel
+    // Load prefs, profile, signature & client all in parallel
     try {
       final results = await Future.wait([
         SharedPreferences.getInstance(),
         ProfileService().getCurrentProfile(),
         SignatureService.load(),
-      ]).timeout(const Duration(seconds: 5), onTimeout: () => [null, null, null]);
+        ClientService().getClient(_liveInvoice.clientId),
+        LogoCacheService.load(),
+      ]).timeout(const Duration(seconds: 5), onTimeout: () => [null, null, null, null, null]);
 
       final prefs = results[0] as SharedPreferences?;
       if (prefs != null) {
@@ -127,6 +139,8 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         setState(() {
           _profile = results[1] as BusinessProfile?;
           _signatureImage = results[2] as Uint8List?;
+          _clientDetails = results[3] as Client?;
+          _logoImage = results[4] as Uint8List?;
         });
       }
     } catch (e) {
@@ -142,9 +156,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   Future<Uint8List> _ensurePdfBytes() async {
     if (_cachedPdfBytes != null) return _cachedPdfBytes!;
     _profile ??= await ProfileService().getCurrentProfile();
+    // Fetch client if not loaded yet
+    _clientDetails ??= await ClientService().getClient(_liveInvoice.clientId);
     final bytes = await InvoicePdfService().buildInvoicePdf(
       invoice: _liveInvoice,
       profile: _profile,
+      client: _clientDetails,
       language: AppStrings.of(context).language,
       template: _template,
     );
@@ -376,6 +393,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                           profile: _profile,
                           template: _template,
                           signatureImage: _signatureImage,
+                          logoImage: _logoImage,
                           termsText: _termsText,
                           onSignatureTap: () => _openSignaturePad(context),
                           onTermsTap: () => _editTerms(context),
@@ -403,28 +421,22 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                     ),
                   ),
                 ),
-                // Left arrow
+                // Left arrow — top of invoice
                 Positioned(
                   left: 4,
-                  top: 0,
-                  bottom: 80,
-                  child: Center(
-                    child: _TemplateArrowButton(
-                      icon: Icons.chevron_left_rounded,
-                      onTap: () => _cycleTemplate(-1),
-                    ),
+                  top: 12,
+                  child: _TemplateArrowButton(
+                    icon: Icons.chevron_left_rounded,
+                    onTap: () => _cycleTemplate(-1),
                   ),
                 ),
-                // Right arrow
+                // Right arrow — top of invoice
                 Positioned(
                   right: 4,
-                  top: 0,
-                  bottom: 80,
-                  child: Center(
-                    child: _TemplateArrowButton(
-                      icon: Icons.chevron_right_rounded,
-                      onTap: () => _cycleTemplate(1),
-                    ),
+                  top: 12,
+                  child: _TemplateArrowButton(
+                    icon: Icons.chevron_right_rounded,
+                    onTap: () => _cycleTemplate(1),
                   ),
                 ),
               ],
@@ -568,10 +580,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
     try {
       pdfBytes = await _ensurePdfBytes();
-      final dir = await getTemporaryDirectory();
-      final fileName = InvoicePdfService().fileNameForInvoice(_liveInvoice);
-      pdfFile = File('${dir.path}/$fileName');
-      await pdfFile.writeAsBytes(pdfBytes);
+      if (!kIsWeb) {
+        final dir = await getTemporaryDirectory();
+        final fileName = InvoicePdfService().fileNameForInvoice(_liveInvoice);
+        pdfFile = File('${dir.path}/$fileName');
+        await pdfFile.writeAsBytes(pdfBytes);
+      }
     } catch (e) {
       debugPrint('[InvoiceDetails] PDF write error: $e');
     }
@@ -595,12 +609,38 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         pdfBytes: pdfBytes,
         currencyFormat: _currency,
         clientPhone: clientPhone,
+        upiId: _profile?.upiId,
+        businessName: _profile?.storeName,
+
       ),
     );
   }
 
   /// WhatsApp — show quick "Image or PDF?" choice, then share
   Future<void> _shareViaWhatsApp(BuildContext context) async {
+    // Plan gate — respects global kill switch + monthly quota
+    final shareCount = await UsageTrackingService.instance.getWhatsAppShareCount();
+    if (!PlanService.instance.canShareWhatsApp(shareCount)) {
+      if (!context.mounted) return;
+      final killSwitchOff = !RemoteConfigService.instance.featureWhatsAppShare;
+      final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
+      String msg;
+      if (killSwitchOff) {
+        msg = 'WhatsApp sharing is temporarily unavailable. Please restart the app.';
+      } else if (max == 0) {
+        msg = 'WhatsApp sharing is available on Pro plan.';
+      } else {
+        msg = 'You\'ve used $shareCount/$max WhatsApp shares this month.';
+      }
+      await LimitReachedDialog.show(
+        context,
+        title: 'WhatsApp Share Limit',
+        message: msg,
+        featureName: 'WhatsApp sharing',
+      );
+      return;
+    }
+
     // Fetch client phone
     String? clientPhone;
     String? clientName;
@@ -621,6 +661,49 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     }
     final whatsAppPhone = rawPhone.length == 10 ? '91$rawPhone' : rawPhone;
 
+    // Fetch store name for the message
+    String? storeName;
+    try {
+      final profile = await ProfileService().getCurrentProfile();
+      storeName = profile?.storeName;
+    } catch (_) {}
+
+    final inv = _liveInvoice;
+    final name = clientName ?? inv.clientName;
+    final shop = (storeName != null && storeName.isNotEmpty) ? storeName : 'BillRaja';
+
+    // Add UPI payment link if available (uses balance due)
+    String upiPart = '';
+    if (_profile != null && _profile!.upiId.isNotEmpty && inv.grandTotal > 0) {
+      // Use received amount (what customer is paying now), or grand total if nothing recorded
+      final payAmount = inv.amountReceived > 0 ? inv.amountReceived : inv.grandTotal;
+      final payLink = buildUpiWebPaymentLink(
+        upiId: _profile!.upiId,
+        businessName: _profile!.storeName,
+        amount: payAmount,
+        invoiceNumber: inv.invoiceNumber,
+      );
+      upiPart = '\n\nPay now: $payLink';
+    }
+
+    // On web, skip format popup — just share the download link directly
+    if (kIsWeb) {
+      String? downloadLink;
+      try {
+        downloadLink = await InvoiceLinkService.shareLink(invoice: _liveInvoice);
+      } catch (_) {}
+
+      final webMsg = 'Hi $name, your invoice *#${inv.invoiceNumber}* '
+          'of *${_currency.format(inv.grandTotal)}* from *$shop*.'
+          '${downloadLink != null ? '\n\nDownload: $downloadLink' : ''}'
+          '$upiPart';
+      final waUri = Uri.parse('https://wa.me/$whatsAppPhone?text=${Uri.encodeComponent(webMsg)}');
+      await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+      return;
+    }
+
+    // Native: show PDF vs Image choice
     final choice = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -664,14 +747,14 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
     if (choice == null || !mounted) return;
 
-    // Fetch store name for the message
-    String? storeName;
-    try {
-      final profile = await ProfileService().getCurrentProfile();
-      storeName = profile?.storeName;
-    } catch (_) {}
+    final dueDate = inv.dueDate != null
+        ? DateFormat('dd MMM yyyy').format(inv.dueDate!)
+        : null;
 
-    // Prepare the file
+    final message = 'Hi $name, your invoice *#${inv.invoiceNumber}* '
+        'of *${_currency.format(inv.grandTotal)}* from *$shop*.$upiPart';
+
+    // Prepare the file (native only)
     String? filePath;
     try {
       final pdfBytes = await _ensurePdfBytes();
@@ -721,35 +804,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
     if (filePath == null || !mounted) return;
 
-    // Build the WhatsApp message
-    final inv = _liveInvoice;
-    final dueDate = inv.dueDate != null
-        ? DateFormat('dd MMM yyyy').format(inv.dueDate!)
-        : null;
-    final name = clientName ?? inv.clientName;
-    final shop = (storeName != null && storeName.isNotEmpty) ? storeName : 'BillRaja';
-
-    final msgLines = <String>[
-      '📄 *Invoice ${inv.invoiceNumber}*',
-      'From: *$shop*',
-      '',
-      'Dear *$name*,',
-      '',
-      '💰 Amount: *${_currency.format(inv.grandTotal)}*',
-      if (dueDate != null) '📅 Due Date: $dueDate',
-      if (inv.status == 'paid') '✅ Status: *Paid*'
-      else if (inv.status == 'overdue') '⏳ Status: *Overdue*'
-      else '⏳ Status: *Pending*',
-      '',
-      'Thank you for your business! 🙏',
-      '',
-      '—',
-      '_Powered by *BillRaja* — helping small & medium businesses grow digitally._',
-      '_Start your digital billing journey today!_',
-      '🌐 www.billraja.com',
-    ];
-    final message = msgLines.join('\n');
-
     // Send file + pre-filled text via WhatsApp native intent
     if (Platform.isAndroid) {
       try {
@@ -759,6 +813,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
           'filePath': filePath,
           'text': message,
         });
+        await UsageTrackingService.instance.incrementWhatsAppShareCount();
         return;
       } on PlatformException catch (e) {
         if (e.code != 'NO_WA') return;
@@ -770,6 +825,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     // Fallback (iOS / no WhatsApp): open wa.me with message only
     final waUri = Uri.parse('https://wa.me/$whatsAppPhone?text=${Uri.encodeComponent(message)}');
     await launchUrl(waUri, mode: LaunchMode.externalApplication);
+    await UsageTrackingService.instance.incrementWhatsAppShareCount();
   }
 
   /// SMS — open SMS app directly with invoice link
@@ -810,10 +866,10 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         _showRecordPaymentSheet(context, invoice);
       case 'payment_history':
         _showPaymentHistory(context, invoice);
-      case 'eway':
-        Navigator.push(context, MaterialPageRoute(
-          builder: (_) => EWayBillScreen(invoice: invoice),
-        ));
+      case 'show_qr':
+        _showFullScreenQR(context, invoice);
+      case 'send_reminder':
+        _sendPaymentReminder(context, invoice);
       case 'delete':
         _confirmDelete(context);
     }
@@ -882,47 +938,101 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
               maxLines: 1,
             ),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: kPrimary,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            Row(
+              children: [
+                // Send UPI payment link with entered amount
+                if (_profile != null && _profile!.upiId.isNotEmpty)
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        side: const BorderSide(color: kPrimary),
+                      ),
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: const Text('Send UPI Link', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                      onPressed: () async {
+                        final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                        if (amount <= 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Enter an amount first')),
+                          );
+                          return;
+                        }
+                        Navigator.pop(ctx);
+                        final payLink = buildUpiWebPaymentLink(
+                          upiId: _profile!.upiId,
+                          businessName: _profile!.storeName,
+                          amount: amount,
+                          invoiceNumber: invoice.invoiceNumber,
+                        );
+                        final name = invoice.clientName.trim().isNotEmpty ? invoice.clientName.trim() : 'Customer';
+                        final msg = 'Hi $name, please pay *${_currency.format(amount)}* for invoice *#${invoice.invoiceNumber}*.\n\nPay now: $payLink';
+
+                        // Try to get customer phone
+                        String phone = '';
+                        try {
+                          final client = await ClientService().getClient(invoice.clientId);
+                          if (client != null && client.phone.isNotEmpty) {
+                            final digits = client.phone.replaceAll(RegExp(r'\D'), '');
+                            phone = digits.length == 12 && digits.startsWith('91') ? digits : '91$digits';
+                          }
+                        } catch (_) {}
+
+                        final waUri = Uri.parse(
+                          phone.isNotEmpty
+                              ? 'https://wa.me/$phone?text=${Uri.encodeComponent(msg)}'
+                              : 'https://wa.me/?text=${Uri.encodeComponent(msg)}',
+                        );
+                        await launchUrl(waUri, mode: LaunchMode.externalApplication);
+                      },
+                    ),
+                  ),
+                if (_profile != null && _profile!.upiId.isNotEmpty)
+                  const SizedBox(width: 10),
+                // Save payment locally
+                Expanded(
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: kPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () async {
+                      final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
+                      if (amount <= 0) return;
+                      final newTotalReceived = ((invoice.amountReceived + amount) * 100).roundToDouble() / 100;
+                      final capped = newTotalReceived > invoice.grandTotal ? invoice.grandTotal : newTotalReceived;
+                      Navigator.pop(ctx);
+                      try {
+                        await FirebaseService().recordPayment(
+                          invoice.id, amount, capped, invoice.grandTotal,
+                          method: selectedMethod.toLowerCase(),
+                          note: noteCtrl.text.trim(),
+                        );
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Payment of \u20b9${_currency.format(amount)} recorded'),
+                              backgroundColor: Colors.green,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Failed to record payment: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Save Payment', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
+                  ),
                 ),
-                onPressed: () async {
-                  final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                  if (amount <= 0) return;
-                  final newTotalReceived = ((invoice.amountReceived + amount) * 100).roundToDouble() / 100;
-                  final capped = newTotalReceived > invoice.grandTotal ? invoice.grandTotal : newTotalReceived;
-                  Navigator.pop(ctx);
-                  try {
-                    await FirebaseService().recordPayment(
-                      invoice.id, amount, capped, invoice.grandTotal,
-                      method: selectedMethod.toLowerCase(),
-                      note: noteCtrl.text.trim(),
-                    );
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Payment of \u20b9${_currency.format(amount)} recorded'),
-                          backgroundColor: Colors.green,
-                        ),
-                      );
-                    }
-                  } catch (e) {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Failed to record payment: $e'),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
-                child: const Text('Save Payment', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
-              ),
+              ],
             ),
           ],
         ),
@@ -1068,17 +1178,171 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         Icon(Icons.history, size: 18, color: Color(0xFF546E7A)),
         SizedBox(width: 10), Text('Payment History'),
       ])),
-      if (invoice.grandTotal > 50000 && invoice.gstEnabled)
-        const PopupMenuItem(value: 'eway', child: Row(children: [
-          Icon(Icons.local_shipping_outlined, size: 18, color: kPrimary),
-          SizedBox(width: 10), Text('E-Way Bill'),
+      if (_profile != null && _profile!.upiId.isNotEmpty && invoice.grandTotal > 0) ...[
+        const PopupMenuItem(value: 'show_qr', child: Row(children: [
+          Icon(Icons.qr_code_rounded, size: 18, color: Color(0xFF1B7A3D)),
+          SizedBox(width: 10), Text('Show Payment QR'),
         ])),
+        if (invoice.effectiveStatus != InvoiceStatus.paid)
+          const PopupMenuItem(value: 'send_reminder', child: Row(children: [
+            Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFFF57C00)),
+            SizedBox(width: 10), Text('Send Reminder'),
+          ])),
+      ],
       const PopupMenuDivider(),
       const PopupMenuItem(value: 'delete', child: Row(children: [
         Icon(Icons.delete_outline, size: 18, color: kOverdue),
         SizedBox(width: 10), Text('Delete', style: TextStyle(color: kOverdue)),
       ])),
     ];
+  }
+
+  // ── Full-Screen Payment QR ────────────────────────────────────────────────
+
+  void _showFullScreenQR(BuildContext context, Invoice invoice) {
+    if (_profile == null || _profile!.upiId.isEmpty) return;
+    final upiLink = buildUpiPaymentLink(
+      upiId: _profile!.upiId,
+      businessName: _profile!.storeName,
+      amount: invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal,
+      invoiceNumber: invoice.invoiceNumber,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Handle bar
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(color: kSurfaceContainerHigh, borderRadius: BorderRadius.circular(2)),
+              ),
+              const SizedBox(height: 20),
+              // Title
+              const Text('Scan to Pay', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kOnSurface)),
+              const SizedBox(height: 4),
+              Text(
+                _currency.format(invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal),
+                style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: kPrimary),
+              ),
+              const SizedBox(height: 4),
+              Text(invoice.invoiceNumber, style: const TextStyle(fontSize: 13, color: kTextTertiary)),
+              const SizedBox(height: 20),
+              // QR Code
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: kSurfaceContainerHigh, width: 1.5),
+                ),
+                child: QrImageView(
+                  data: upiLink,
+                  version: QrVersions.auto,
+                  size: 240,
+                  backgroundColor: Colors.white,
+                  eyeStyle: const QrEyeStyle(
+                    eyeShape: QrEyeShape.square,
+                    color: Color(0xFF1B7A3D),
+                  ),
+                  dataModuleStyle: const QrDataModuleStyle(
+                    dataModuleShape: QrDataModuleShape.square,
+                    color: Color(0xFF1A1A1A),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'UPI: ${_profile!.upiId}',
+                style: const TextStyle(fontSize: 12, color: kTextTertiary),
+              ),
+              const SizedBox(height: 16),
+              // Open UPI app button (mobile only)
+              if (!kIsWeb)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () async {
+                      final uri = Uri.parse(upiLink);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri, mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    label: const Text('Open UPI App'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1B7A3D),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              Text(
+                'Works with GPay, PhonePe, Paytm, BHIM & all UPI apps',
+                style: TextStyle(fontSize: 11, color: kTextTertiary.withValues(alpha: 0.7)),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Send Payment Reminder ───────────────────────────────────────────────
+
+  Future<void> _sendPaymentReminder(BuildContext context, Invoice invoice) async {
+    if (_profile == null || _profile!.upiId.isEmpty) return;
+
+    final payLink = buildUpiWebPaymentLink(
+      upiId: _profile!.upiId,
+      businessName: _profile!.storeName,
+      amount: invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal,
+      invoiceNumber: invoice.invoiceNumber,
+    );
+
+    final shopName = _profile!.storeName.isNotEmpty ? _profile!.storeName : 'us';
+    final amount = _currency.format(invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal);
+    final name = invoice.clientName.trim().isNotEmpty ? invoice.clientName.trim() : 'Customer';
+
+    final message = 'Hi $name, friendly reminder for invoice *#${invoice.invoiceNumber}* '
+        'of *$amount* from *$shopName*.\n\nPay now: $payLink';
+
+    // Try to get customer phone for direct WhatsApp
+    String phone = '';
+    try {
+      final client = await ClientService().getClient(invoice.clientId);
+      if (client != null && client.phone.isNotEmpty) {
+        final digits = client.phone.replaceAll(RegExp(r'\D'), '');
+        phone = digits.length == 12 && digits.startsWith('91') ? digits : '91$digits';
+      }
+    } catch (_) {}
+
+    final waUri = Uri.parse(
+      phone.isNotEmpty
+          ? 'https://wa.me/$phone?text=${Uri.encodeComponent(message)}'
+          : 'https://wa.me/?text=${Uri.encodeComponent(message)}',
+    );
+
+    if (await canLaunchUrl(waUri)) {
+      await launchUrl(waUri, mode: LaunchMode.externalApplication);
+    } else {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open WhatsApp')),
+      );
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context) async {

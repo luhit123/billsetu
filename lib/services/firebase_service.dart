@@ -265,8 +265,14 @@ class FirebaseService {
   }
 
   /// Record a payment and auto-resolve status.
+  /// Uses a transaction to prevent duplicate payments on network retry.
   Future<void> recordPayment(String id, double paymentAmount, double newTotalReceived, double grandTotal, {String method = 'cash', String note = ''}) async {
     final invoiceRef = await _resolveOwnedInvoiceRef(id);
+
+    // Generate a deterministic payment ID from amount + timestamp to detect retries.
+    // Using a subcollection doc with a known ID makes the write idempotent.
+    final paymentId = '${DateTime.now().millisecondsSinceEpoch}_${paymentAmount.toStringAsFixed(2)}';
+
     final balanceDue = ((grandTotal - newTotalReceived) * 100).roundToDouble() / 100;
     String status;
     if (newTotalReceived >= grandTotal && grandTotal > 0) {
@@ -276,26 +282,53 @@ class FirebaseService {
     } else {
       status = InvoiceStatus.pending.name;
     }
-    debugPrint('[RecordPayment] id=$id payment=$paymentAmount total=$newTotalReceived grand=$grandTotal balance=$balanceDue status=$status');
+
+    if (kDebugMode) {
+      debugPrint('[RecordPayment] id=$id payment=$paymentAmount total=$newTotalReceived grand=$grandTotal balance=$balanceDue status=$status');
+    }
+
     try {
-      // 1. Log payment in subcollection
-      await invoiceRef.collection('payments').add({
-        'amount': paymentAmount,
-        'method': method,
-        'note': note,
-        'date': FieldValue.serverTimestamp(),
-        'runningTotal': newTotalReceived,
-        'balanceAfter': balanceDue,
+      await _firestore.runTransaction((txn) async {
+        // Read invoice inside transaction for consistency
+        final invoiceSnap = await txn.get(invoiceRef);
+        if (!invoiceSnap.exists) {
+          throw StateError('Invoice $id not found');
+        }
+
+        // Check if this payment already exists (idempotency guard)
+        final paymentRef = invoiceRef.collection('payments').doc(paymentId);
+        final existingPayment = await txn.get(paymentRef);
+        if (existingPayment.exists) {
+          if (kDebugMode) {
+            debugPrint('[RecordPayment] Duplicate detected, skipping: $paymentId');
+          }
+          return;
+        }
+
+        // 1. Log payment in subcollection with deterministic ID
+        txn.set(paymentRef, {
+          'amount': paymentAmount,
+          'method': method,
+          'note': note,
+          'date': FieldValue.serverTimestamp(),
+          'runningTotal': newTotalReceived,
+          'balanceAfter': balanceDue,
+        });
+
+        // 2. Update invoice totals
+        txn.update(invoiceRef, {
+          'amountReceived': newTotalReceived,
+          'balanceDue': balanceDue,
+          'status': status,
+        });
       });
-      // 2. Update invoice totals
-      await invoiceRef.update({
-        'amountReceived': newTotalReceived,
-        'balanceDue': balanceDue,
-        'status': status,
-      });
-      debugPrint('[RecordPayment] SUCCESS');
+      if (kDebugMode) {
+        debugPrint('[RecordPayment] SUCCESS');
+      }
     } catch (e) {
-      debugPrint('[RecordPayment] FAILED: $e');
+      if (kDebugMode) {
+        debugPrint('[RecordPayment] FAILED: $e');
+      }
       rethrow;
     }
   }
