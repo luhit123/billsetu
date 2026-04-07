@@ -780,7 +780,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     // Use the same template system as regular invoices
     final invoice = _toInvoice();
     final pdfService = InvoicePdfService();
-    return pdfService.buildInvoicePdf(
+    return pdfService.buildInvoicePdfBackground(
       invoice: invoice,
       profile: _profile,
       template: _template,

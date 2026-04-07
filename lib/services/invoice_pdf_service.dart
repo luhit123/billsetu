@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/services/logo_cache_service.dart';
 import 'package:billeasy/services/signature_service.dart';
@@ -404,6 +405,91 @@ class InvoicePdfService {
       _loadedLanguage = null;
       return builder();
     }
+  }
+
+  /// Load raw font bytes for a language — returns null for built-in Helvetica.
+  /// Must be called on the main thread (uses rootBundle).
+  Future<Uint8List?> _loadRawFontBytes(AppLanguage language) async {
+    switch (language) {
+      case AppLanguage.hindi:
+        return (await rootBundle.load('assets/fonts/NotoSansDevanagari.ttf'))
+            .buffer
+            .asUint8List();
+      case AppLanguage.assamese:
+        return (await rootBundle.load('assets/fonts/NotoSansBengali.ttf'))
+            .buffer
+            .asUint8List();
+      case AppLanguage.gujarati:
+        return (await rootBundle.load('assets/fonts/NotoSansGujarati.ttf'))
+            .buffer
+            .asUint8List();
+      case AppLanguage.tamil:
+        return (await rootBundle.load('assets/fonts/NotoSansTamil.ttf'))
+            .buffer
+            .asUint8List();
+      default:
+        return null; // Helvetica is built-in — no asset needed
+    }
+  }
+
+  /// Builds the PDF on a background isolate so the main/UI thread stays free.
+  ///
+  /// Font bytes are loaded on the main thread (requires rootBundle), then
+  /// the CPU-heavy PDF layout is performed in a separate Dart isolate.
+  Future<Uint8List> buildInvoicePdfBackground({
+    required Invoice invoice,
+    BusinessProfile? profile,
+    AppLanguage language = AppLanguage.english,
+    InvoiceTemplate template = InvoiceTemplate.vyapar,
+    bool includePayment = true,
+  }) async {
+    if (invoice.items.isEmpty) {
+      throw ArgumentError('Cannot generate PDF for invoice with no items');
+    }
+    // Load font asset bytes on the main thread.
+    final fontBytes = await _loadRawFontBytes(language);
+
+    // Serialize models to Maps (isolate-sendable).
+    final invoiceMap = invoice.toMap();
+    final profileMap = profile?.toMap();
+
+    return Isolate.run(() async {
+      // Reconstruct font inside the isolate.
+      final pw.Font regularFont;
+      final pw.Font boldFont;
+      if (fontBytes != null) {
+        regularFont = pw.Font.ttf(fontBytes.buffer.asByteData());
+        boldFont = regularFont;
+      } else {
+        regularFont = pw.Font.helvetica();
+        boldFont = pw.Font.helveticaBold();
+      }
+
+      // Deserialize models.
+      final inv = Invoice.fromMap(invoiceMap, docId: invoiceMap['id'] as String?);
+      final prof = profileMap != null
+          ? BusinessProfile.fromMap(profileMap)
+          : null;
+
+      // Build PDF with pre-loaded fonts.
+      final svc = InvoicePdfService()
+        .._fontRegular = regularFont
+        .._fontBold = boldFont;
+      const s = AppStrings(AppLanguage.english);
+
+      switch (template) {
+        case InvoiceTemplate.classic:
+          return svc._buildClassicPdf(inv, prof, s, includePayment: includePayment);
+        case InvoiceTemplate.modern:
+          return svc._buildModernPdf(inv, prof, s, includePayment: includePayment);
+        case InvoiceTemplate.compact:
+          return svc._buildCompactPdf(inv, prof, s, includePayment: includePayment);
+        case InvoiceTemplate.vyapar:
+          return svc._buildVyaparPdf(inv, prof, s, includePayment: includePayment);
+        default:
+          return svc._buildStyledPdf(inv, prof, s, _templateStyles[template]!, includePayment: includePayment);
+      }
+    });
   }
 
   // ── Template style presets ───────────────────────────────────────────────
