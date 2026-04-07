@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:billeasy/l10n/app_strings.dart';
@@ -9,9 +8,10 @@ import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:billeasy/utils/responsive.dart';
+import 'package:billeasy/widgets/aurora_app_backdrop.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart' show DateFormat, NumberFormat;
 import 'package:share_plus/share_plus.dart';
@@ -48,6 +48,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final _firebaseService = FirebaseService();
+  final _purchaseOrderService = PurchaseOrderService();
   final _currencyFmt = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '₹',
@@ -56,26 +57,27 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // ── Revenue tab state ──────────────────────────────────────────────────────
   _ReportPeriod _period = _ReportPeriod.thisMonth;
-  StreamSubscription<List<Invoice>>? _revenueSub;
   List<Invoice> _revenueInvoices = [];
   bool _revenueLoading = true;
   Object? _revenueError;
+  int _revenueRequestId = 0;
 
   // ── Receivables tab state ──────────────────────────────────────────────────
-  StreamSubscription<List<Invoice>>? _receivablesSub;
   List<Invoice> _receivablesInvoices = [];
   bool _receivablesLoading = true;
   Object? _receivablesError;
+  int _receivablesRequestId = 0;
 
   // ── Products tab state ─────────────────────────────────────────────────────
-  StreamSubscription<List<Invoice>>? _productsSub;
   List<Invoice> _productsInvoices = [];
   bool _productsLoading = true;
   Object? _productsError;
+  int _productsRequestId = 0;
 
   // ── Profit & Loss tab state ───────────────────────────────────────────────
   List<PurchaseOrder> _purchaseOrders = [];
   bool _purchaseOrdersLoading = true;
+  int _purchaseOrderRequestId = 0;
 
   @override
   void initState() {
@@ -90,9 +92,6 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   void dispose() {
     _tabController.dispose();
-    _revenueSub?.cancel();
-    _receivablesSub?.cancel();
-    _productsSub?.cancel();
     super.dispose();
   }
 
@@ -120,120 +119,107 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // ── Subscriptions ──────────────────────────────────────────────────────────
 
-  void _subscribeRevenue() {
-    _revenueSub?.cancel();
+  Future<void> _subscribeRevenue() async {
+    final requestId = ++_revenueRequestId;
     final (start, end) = _dateRange;
     setState(() {
       _revenueLoading = true;
       _revenueError = null;
     });
-    _revenueSub = _firebaseService
-        .getInvoicesStream(
-          startDate: start,
-          endDateExclusive: end,
-          limit: 500,
-        )
-        .listen(
-          (invoices) {
-            if (!mounted) return;
-            setState(() {
-              _revenueInvoices = invoices;
-              _revenueLoading = false;
-            });
-          },
-          onError: (Object e) {
-            if (!mounted) return;
-            setState(() {
-              _revenueError = e;
-              _revenueLoading = false;
-            });
-          },
-        );
+    try {
+      final invoices = await _firebaseService.getAllInvoices(
+        startDate: start,
+        endDateExclusive: end,
+        pageSize: 250,
+        maxResults: 10000,
+      );
+      if (!mounted || requestId != _revenueRequestId) return;
+      setState(() {
+        _revenueInvoices = invoices;
+        _revenueLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _revenueRequestId) return;
+      setState(() {
+        _revenueError = e;
+        _revenueLoading = false;
+      });
+    }
   }
 
-  void _subscribeReceivables() {
-    _receivablesSub?.cancel();
+  Future<void> _subscribeReceivables() async {
+    final requestId = ++_receivablesRequestId;
     setState(() {
       _receivablesLoading = true;
       _receivablesError = null;
     });
-    _receivablesSub = _firebaseService
-        .getInvoicesStream(status: InvoiceStatus.pending, limit: 100)
-        .listen(
-          (invoices) {
-            if (!mounted) return;
-            setState(() {
-              _receivablesInvoices = invoices
-                ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-              _receivablesLoading = false;
-            });
-          },
-          onError: (Object e) {
-            if (!mounted) return;
-            setState(() {
-              _receivablesError = e;
-              _receivablesLoading = false;
-            });
-          },
-        );
+    try {
+      final invoices = await _firebaseService.getAllInvoices(
+        status: InvoiceStatus.pending,
+        pageSize: 200,
+        maxResults: 5000,
+      );
+      if (!mounted || requestId != _receivablesRequestId) return;
+      invoices.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      setState(() {
+        _receivablesInvoices = invoices;
+        _receivablesLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _receivablesRequestId) return;
+      setState(() {
+        _receivablesError = e;
+        _receivablesLoading = false;
+      });
+    }
   }
 
-  void _subscribeProducts() {
-    _productsSub?.cancel();
+  Future<void> _subscribeProducts() async {
+    final requestId = ++_productsRequestId;
     setState(() {
       _productsLoading = true;
       _productsError = null;
     });
-    _productsSub = _firebaseService
-        .getInvoicesStream(limit: 200)
-        .listen(
-          (invoices) {
-            if (!mounted) return;
-            setState(() {
-              _productsInvoices = invoices;
-              _productsLoading = false;
-            });
-          },
-          onError: (Object e) {
-            if (!mounted) return;
-            setState(() {
-              _productsError = e;
-              _productsLoading = false;
-            });
-          },
-        );
+    try {
+      final invoices = await _firebaseService.getAllInvoices(
+        pageSize: 250,
+        maxResults: 10000,
+      );
+      if (!mounted || requestId != _productsRequestId) return;
+      setState(() {
+        _productsInvoices = invoices;
+        _productsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || requestId != _productsRequestId) return;
+      setState(() {
+        _productsError = e;
+        _productsLoading = false;
+      });
+    }
   }
 
   // ── Purchase orders for Profit & Loss ──────────────────────────────────────
 
   Future<void> _loadPurchaseOrders() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
     final (start, end) = _dateRange;
+    final requestId = ++_purchaseOrderRequestId;
+    setState(() => _purchaseOrdersLoading = true);
     try {
-      Query<Map<String, dynamic>> q = FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('purchaseOrders')
-          .orderBy('createdAt', descending: true);
-      if (start != null) {
-        q = q.where('createdAt', isGreaterThanOrEqualTo: Timestamp.fromDate(start));
-      }
-      if (end != null) {
-        q = q.where('createdAt', isLessThan: Timestamp.fromDate(end));
-      }
-      final snap = await q.limit(500).get();
-      if (!mounted) return;
+      final orders = await _purchaseOrderService.getPurchaseOrders(
+        startDate: start,
+        endDateExclusive: end,
+        status: PurchaseOrderStatus.received,
+        pageSize: 250,
+        maxResults: 5000,
+      );
+      if (!mounted || requestId != _purchaseOrderRequestId) return;
       setState(() {
-        _purchaseOrders = snap.docs
-            .map((d) => PurchaseOrder.fromMap(d.data(), docId: d.id))
-            .where((po) => po.status == PurchaseOrderStatus.received)
-            .toList();
+        _purchaseOrders = orders;
         _purchaseOrdersLoading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || requestId != _purchaseOrderRequestId) return;
       setState(() => _purchaseOrdersLoading = false);
     }
   }
@@ -297,13 +283,35 @@ class _ReportsScreenState extends State<ReportsScreen>
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    if (!PlanService.instance.hasReports) {
+    if (!TeamService.instance.can.canViewReports) {
       return Scaffold(
-        backgroundColor: kSurface,
+        backgroundColor: context.cs.surface,
         appBar: AppBar(
           title: Text(s.reportsTitle),
-          backgroundColor: kSurface,
-          foregroundColor: kOnSurface,
+          backgroundColor: context.cs.surface,
+          foregroundColor: context.cs.onSurface,
+          elevation: 0,
+          scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(32),
+            child: Text(
+              'You do not have permission to view reports.\nAsk your team owner for access.',
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      );
+    }
+    if (!PlanService.instance.hasReports) {
+      return Scaffold(
+        backgroundColor: context.cs.surface,
+        appBar: AppBar(
+          title: Text(s.reportsTitle),
+          backgroundColor: context.cs.surface,
+          foregroundColor: context.cs.onSurface,
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
@@ -314,22 +322,47 @@ class _ReportsScreenState extends State<ReportsScreen>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
+                Icon(
+                  Icons.lock_outline,
+                  size: 64,
+                  color: context.cs.surfaceContainerHighest,
+                ),
                 const SizedBox(height: 16),
-                const Text('Reports & Analytics', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
-                const SizedBox(height: 8),
-                Text(s.reportsUpgradeHint, textAlign: TextAlign.center, style: const TextStyle(color: kOnSurfaceVariant)),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Reports'))),
-                  icon: const Icon(Icons.workspace_premium),
-                  label: Text(s.reportsUpgradeNow),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
+                Text(
+                  'Reports & Analytics',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: context.cs.onSurface,
                   ),
                 ),
+                const SizedBox(height: 8),
+                Text(
+                  TeamService.instance.isTeamMember
+                      ? 'This feature is not available. Contact your team owner.'
+                      : 'This feature is currently unavailable. Please check back later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
+                if (!TeamService.instance.isTeamMember) ...[
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            const UpgradeScreen(featureName: 'Reports'),
+                      ),
+                    ),
+                    icon: const Icon(Icons.workspace_premium),
+                    label: Text(s.reportsUpgradeNow),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.cs.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -338,60 +371,92 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: context.cs.surface,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 0.6,
         surfaceTintColor: Colors.transparent,
-        title: const Text(
+        toolbarHeight: 74,
+        titleSpacing: 18,
+        title: Text(
           'Financial Reports',
           style: TextStyle(
-            color: kOnSurface,
+            color: context.cs.onSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
         ),
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: kPrimary,
-          indicatorWeight: 3,
-          labelColor: kOnSurface,
-          unselectedLabelColor: kOnSurfaceVariant,
-          labelStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w700,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(68),
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: context.cs.outlineVariant.withValues(alpha: 0.35),
+                ),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: TabBar(
+                controller: _tabController,
+                indicatorSize: TabBarIndicatorSize.tab,
+                dividerColor: Colors.transparent,
+                indicator: BoxDecoration(
+                  color: context.cs.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [kSubtleShadow],
+                ),
+                labelColor: context.cs.onSurface,
+                unselectedLabelColor: context.cs.onSurfaceVariant,
+                labelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+                splashBorderRadius: BorderRadius.circular(12),
+                padding: const EdgeInsets.all(4),
+                labelPadding: const EdgeInsets.symmetric(horizontal: 14),
+                isScrollable: true,
+                tabAlignment: TabAlignment.start,
+                tabs: const [
+                  Tab(text: 'Revenue'),
+                  Tab(text: 'Receivables'),
+                  Tab(text: 'Party-wise'),
+                  Tab(text: 'Products'),
+                  Tab(text: 'Profit & Loss'),
+                  Tab(text: 'Sales Trend'),
+                  Tab(text: 'Top Sellers'),
+                  Tab(text: 'Cash Flow'),
+                ],
+              ),
+            ),
           ),
-          unselectedLabelStyle: const TextStyle(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: const [
-            Tab(text: 'Revenue'),
-            Tab(text: 'Receivables'),
-            Tab(text: 'Party-wise'),
-            Tab(text: 'Products'),
-            Tab(text: 'Profit & Loss'),
-            Tab(text: 'Sales Trend'),
-            Tab(text: 'Top Sellers'),
-            Tab(text: 'Cash Flow'),
-          ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Stack(
         children: [
-          _buildRevenueTab(),
-          _buildReceivablesTab(),
-          _buildPartyWiseTab(),
-          _buildProductsTab(),
-          _buildProfitLossTab(),
-          _buildSalesTrendTab(),
-          _buildTopSellersTab(),
-          _buildCashFlowTab(),
+          const Positioned.fill(child: AuroraAppBackdrop()),
+          TabBarView(
+            controller: _tabController,
+            children: [
+              _buildRevenueTab(),
+              _buildReceivablesTab(),
+              _buildPartyWiseTab(),
+              _buildProductsTab(),
+              _buildProfitLossTab(),
+              _buildSalesTrendTab(),
+              _buildTopSellersTab(),
+              _buildCashFlowTab(),
+            ],
+          ),
         ],
       ),
     );
@@ -408,18 +473,20 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     final invoices = _revenueInvoices;
-    final totalRevenue =
-        invoices.fold<double>(0, (acc, inv) => acc + inv.grandTotal);
+    final totalRevenue = invoices.fold<double>(
+      0,
+      (acc, inv) => acc + inv.grandTotal,
+    );
     final collected = invoices
         .where((inv) => inv.status == InvoiceStatus.paid)
         .fold<double>(0, (acc, inv) => acc + inv.grandTotal);
     final outstanding = totalRevenue - collected;
     final top5 = _top5Customers();
-    final maxTop5 =
-        top5.isEmpty ? 1.0 : top5.first.value.clamp(1.0, double.infinity);
+    final maxTop5 = top5.isEmpty
+        ? 1.0
+        : top5.first.value.clamp(1.0, double.infinity);
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         // Period picker
         _buildPeriodPicker(),
@@ -483,16 +550,14 @@ class _ReportsScreenState extends State<ReportsScreen>
           _sectionLabel('Top Customers'),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: _cardDeco(),
+            decoration: _cardDeco(context),
             child: Column(
               children: top5.asMap().entries.map((e) {
                 final rank = e.key + 1;
                 final entry = e.value;
                 final barFraction = entry.value / maxTop5;
                 return Padding(
-                  padding: EdgeInsets.only(
-                    bottom: rank < top5.length ? 14 : 0,
-                  ),
+                  padding: EdgeInsets.only(bottom: rank < top5.length ? 14 : 0),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -504,7 +569,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                             decoration: BoxDecoration(
                               color: rank == 1
                                   ? kPrimary
-                                  : kSurfaceContainerLow,
+                                  : context.cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Center(
@@ -515,7 +580,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                                   fontWeight: FontWeight.w700,
                                   color: rank == 1
                                       ? Colors.white
-                                      : kOnSurfaceVariant,
+                                      : context.cs.onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -524,10 +589,10 @@ class _ReportsScreenState extends State<ReportsScreen>
                           Expanded(
                             child: Text(
                               entry.key,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: kOnSurface,
+                                color: context.cs.onSurface,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -548,9 +613,8 @@ class _ReportsScreenState extends State<ReportsScreen>
                         child: LinearProgressIndicator(
                           value: barFraction,
                           minHeight: 5,
-                          backgroundColor: kSurfaceContainerLow,
-                          valueColor:
-                              const AlwaysStoppedAnimation(kPrimary),
+                          backgroundColor: context.cs.surfaceContainerLow,
+                          valueColor: const AlwaysStoppedAnimation(kPrimary),
                         ),
                       ),
                     ],
@@ -585,43 +649,51 @@ class _ReportsScreenState extends State<ReportsScreen>
       (_ReportPeriod.allTime, 'All Time'),
     ];
 
+    final chips = periods.map((entry) {
+      final (period, label) = entry;
+      final selected = _period == period;
+      return GestureDetector(
+        onTap: () {
+          if (_period == period) return;
+          setState(() => _period = period);
+          _subscribeRevenue();
+          _loadPurchaseOrders();
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: selected ? kPrimary : context.cs.surfaceContainerLowest,
+            borderRadius: BorderRadius.circular(50),
+            boxShadow: selected ? const [kSubtleShadow] : null,
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : context.cs.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }).toList();
+
+    if (windowSizeOf(context) == WindowSize.expanded) {
+      return Wrap(spacing: 8, runSpacing: 8, children: chips);
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: periods.map((entry) {
-          final (period, label) = entry;
-          final selected = _period == period;
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () {
-                if (_period == period) return;
-                setState(() => _period = period);
-                _subscribeRevenue();
-                _loadPurchaseOrders();
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: selected ? kPrimary : kSurfaceLowest,
-                  borderRadius: BorderRadius.circular(50),
-                ),
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: selected ? Colors.white : kOnSurfaceVariant,
-                  ),
-                ),
+        children: chips
+            .map(
+              (chip) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: chip,
               ),
-            ),
-          );
-        }).toList(),
+            )
+            .toList(),
       ),
     );
   }
@@ -637,8 +709,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     final invoices = _receivablesInvoices;
-    final total =
-        invoices.fold<double>(0, (acc, inv) => acc + inv.grandTotal);
+    final total = invoices.fold<double>(0, (acc, inv) => acc + inv.grandTotal);
 
     // Age buckets
     final buckets = <String, double>{
@@ -653,8 +724,7 @@ class _ReportsScreenState extends State<ReportsScreen>
       buckets[key] = (buckets[key] ?? 0) + inv.grandTotal;
     }
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         // Summary
         _heroCard(
@@ -672,19 +742,17 @@ class _ReportsScreenState extends State<ReportsScreen>
           _sectionLabel('Age Analysis'),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: _cardDeco(),
+            decoration: _cardDeco(context),
             child: Column(
               children: buckets.entries.toList().asMap().entries.map((e) {
                 final i = e.key;
                 final bucket = e.value;
-                final color = _ageBucketColor(
-                  switch (bucket.key) {
-                    '0–30 days' => 15,
-                    '31–60 days' => 45,
-                    '61–90 days' => 75,
-                    _ => 100,
-                  },
-                );
+                final color = _ageBucketColor(switch (bucket.key) {
+                  '0–30 days' => 15,
+                  '31–60 days' => 45,
+                  '61–90 days' => 75,
+                  _ => 100,
+                });
                 return Padding(
                   padding: EdgeInsets.only(
                     bottom: i < buckets.length - 1 ? 14 : 0,
@@ -703,9 +771,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                       Expanded(
                         child: Text(
                           bucket.key,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -715,8 +783,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w700,
-                          color:
-                              bucket.value > 0 ? color : kOnSurfaceVariant,
+                          color: bucket.value > 0
+                              ? color
+                              : context.cs.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -752,16 +821,14 @@ class _ReportsScreenState extends State<ReportsScreen>
       onTap: () {
         Navigator.push(
           context,
-          MaterialPageRoute(
-            builder: (_) => InvoiceDetailsScreen(invoice: inv),
-          ),
+          MaterialPageRoute(builder: (_) => InvoiceDetailsScreen(invoice: inv)),
         );
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [kSubtleShadow],
         ),
@@ -774,19 +841,19 @@ class _ReportsScreenState extends State<ReportsScreen>
                 children: [
                   Text(
                     inv.clientName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
-                      color: kOnSurface,
+                      color: context.cs.onSurface,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 3),
                   Text(
                     inv.invoiceNumber,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: kOnSurfaceVariant,
+                      color: context.cs.onSurfaceVariant,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -827,10 +894,10 @@ class _ReportsScreenState extends State<ReportsScreen>
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Icon(
+                Icon(
                   Icons.chevron_right_rounded,
                   size: 18,
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                 ),
               ],
             ),
@@ -861,12 +928,11 @@ class _ReportsScreenState extends State<ReportsScreen>
       );
     }
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         _sectionLabel('Products by Revenue'),
         Container(
-          decoration: _cardDeco(),
+          decoration: _cardDeco(context),
           child: Column(
             children: stats.asMap().entries.map((e) {
               final i = e.key;
@@ -888,7 +954,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                           decoration: BoxDecoration(
                             color: i == 0
                                 ? kPrimary
-                                : kSurfaceContainerLow,
+                                : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Center(
@@ -899,7 +965,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                                 fontWeight: FontWeight.w700,
                                 color: i == 0
                                     ? Colors.white
-                                    : kOnSurfaceVariant,
+                                    : context.cs.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -911,23 +977,27 @@ class _ReportsScreenState extends State<ReportsScreen>
                             children: [
                               Text(
                                 stat.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: kOnSurface,
+                                  color: context.cs.onSurface,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const SizedBox(height: 4),
                               Row(
                                 children: [
-                                  Flexible(child: _statPill(
-                                    '${stat.timesInvoiced}x invoiced',
-                                  )),
+                                  Flexible(
+                                    child: _statPill(
+                                      '${stat.timesInvoiced}x invoiced',
+                                    ),
+                                  ),
                                   const SizedBox(width: 6),
-                                  Flexible(child: _statPill(
-                                    'Qty: ${_formatQty(stat.totalQty)}',
-                                  )),
+                                  Flexible(
+                                    child: _statPill(
+                                      'Qty: ${_formatQty(stat.totalQty)}',
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -948,7 +1018,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                   if (!isLast)
                     Container(
                       height: 1,
-                      color: kSurfaceContainerLow,
+                      color: context.cs.surfaceContainerLow,
                       margin: const EdgeInsets.symmetric(horizontal: 16),
                     ),
                 ],
@@ -995,17 +1065,20 @@ class _ReportsScreenState extends State<ReportsScreen>
       );
     }
 
-    final grandTotal = parties.fold<double>(0, (s, p) => s + p.totalOutstanding);
+    final grandTotal = parties.fold<double>(
+      0,
+      (s, p) => s + p.totalOutstanding,
+    );
     final maxParty = parties.first.totalOutstanding.clamp(1.0, double.infinity);
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         _heroCard(
           label: 'Total Receivables',
           value: grandTotal,
           icon: Icons.people_outline_rounded,
-          subtitle: '${parties.length} customer${parties.length == 1 ? '' : 's'} with dues',
+          subtitle:
+              '${parties.length} customer${parties.length == 1 ? '' : 's'} with dues',
           color: _kAmber,
         ),
         const SizedBox(height: 16),
@@ -1015,13 +1088,13 @@ class _ReportsScreenState extends State<ReportsScreen>
           final urgencyColor = party.oldestDays > 90
               ? _kRed
               : party.oldestDays > 30
-                  ? _kAmber
-                  : kPrimary;
+              ? _kAmber
+              : kPrimary;
           return Container(
             margin: const EdgeInsets.only(bottom: 10),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [kSubtleShadow],
             ),
@@ -1033,13 +1106,21 @@ class _ReportsScreenState extends State<ReportsScreen>
                     Expanded(
                       child: Text(
                         party.name,
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface),
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: context.cs.onSurface,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
                     Text(
                       _currencyFmt.format(party.totalOutstanding),
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: urgencyColor),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: urgencyColor,
+                      ),
                     ),
                   ],
                 ),
@@ -1049,14 +1130,16 @@ class _ReportsScreenState extends State<ReportsScreen>
                   child: LinearProgressIndicator(
                     value: barFraction,
                     minHeight: 5,
-                    backgroundColor: kSurfaceContainerLow,
+                    backgroundColor: context.cs.surfaceContainerLow,
                     valueColor: AlwaysStoppedAnimation(urgencyColor),
                   ),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _statPill('${party.invoiceCount} invoice${party.invoiceCount == 1 ? '' : 's'}'),
+                    _statPill(
+                      '${party.invoiceCount} invoice${party.invoiceCount == 1 ? '' : 's'}',
+                    ),
                     const SizedBox(width: 6),
                     _statPill('Oldest: ${party.oldestDays}d'),
                   ],
@@ -1077,13 +1160,18 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget _buildProfitLossTab() {
     if (_revenueLoading || _purchaseOrdersLoading) return _loadingWidget();
 
-    final totalSales = _revenueInvoices.fold<double>(0, (s, inv) => s + inv.grandTotal);
-    final totalPurchases = _purchaseOrders.fold<double>(0, (s, po) => s + po.grandTotal);
+    final totalSales = _revenueInvoices.fold<double>(
+      0,
+      (s, inv) => s + inv.grandTotal,
+    );
+    final totalPurchases = _purchaseOrders.fold<double>(
+      0,
+      (s, po) => s + po.grandTotal,
+    );
     final grossProfit = totalSales - totalPurchases;
     final margin = totalSales > 0 ? (grossProfit / totalSales * 100) : 0.0;
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         _buildPeriodPicker(),
         const SizedBox(height: 16),
@@ -1092,7 +1180,11 @@ class _ReportsScreenState extends State<ReportsScreen>
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            gradient: grossProfit >= 0 ? kSignatureGradient : const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+            gradient: grossProfit >= 0
+                ? kSignatureGradient
+                : const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                  ),
             borderRadius: BorderRadius.circular(18),
             boxShadow: const [kWhisperShadow],
           ),
@@ -1104,23 +1196,38 @@ class _ReportsScreenState extends State<ReportsScreen>
                   children: [
                     Text(
                       grossProfit >= 0 ? 'Gross Profit' : 'Net Loss',
-                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white70,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       _currencyFmt.format(grossProfit.abs()),
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         '${margin.toStringAsFixed(1)}% margin',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -1133,8 +1240,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  grossProfit >= 0 ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  size: 30, color: Colors.white,
+                  grossProfit >= 0
+                      ? Icons.trending_up_rounded
+                      : Icons.trending_down_rounded,
+                  size: 30,
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -1146,21 +1256,38 @@ class _ReportsScreenState extends State<ReportsScreen>
         _sectionLabel('Breakdown'),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _cardDeco(),
+          decoration: _cardDeco(context),
           child: Column(
             children: [
-              _plRow('Total Sales (Revenue)', totalSales, kPrimary, Icons.arrow_upward_rounded),
+              _plRow(
+                'Total Sales (Revenue)',
+                totalSales,
+                kPrimary,
+                Icons.arrow_upward_rounded,
+              ),
               const SizedBox(height: 14),
-              _plRow('Total Purchases (Cost)', totalPurchases, const Color(0xFFEF4444), Icons.arrow_downward_rounded),
+              _plRow(
+                'Total Purchases (Cost)',
+                totalPurchases,
+                const Color(0xFFEF4444),
+                Icons.arrow_downward_rounded,
+              ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Container(height: 1, color: kSurfaceContainerLow),
+                child: Container(
+                  height: 1,
+                  color: context.cs.surfaceContainerLow,
+                ),
               ),
               _plRow(
                 grossProfit >= 0 ? 'Gross Profit' : 'Net Loss',
                 grossProfit.abs(),
-                grossProfit >= 0 ? const Color(0xFF22C55E) : const Color(0xFFEF4444),
-                grossProfit >= 0 ? Icons.check_circle_outline_rounded : Icons.warning_amber_rounded,
+                grossProfit >= 0
+                    ? const Color(0xFF22C55E)
+                    : const Color(0xFFEF4444),
+                grossProfit >= 0
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.warning_amber_rounded,
                 bold: true,
               ),
             ],
@@ -1173,12 +1300,24 @@ class _ReportsScreenState extends State<ReportsScreen>
           _sectionLabel('Visual Comparison'),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: _cardDeco(),
+            decoration: _cardDeco(context),
             child: Column(
               children: [
-                _visualBar('Sales', totalSales, kPrimary, totalSales, totalPurchases),
+                _visualBar(
+                  'Sales',
+                  totalSales,
+                  kPrimary,
+                  totalSales,
+                  totalPurchases,
+                ),
                 const SizedBox(height: 12),
-                _visualBar('Purchases', totalPurchases, const Color(0xFFEF4444), totalSales, totalPurchases),
+                _visualBar(
+                  'Purchases',
+                  totalPurchases,
+                  const Color(0xFFEF4444),
+                  totalSales,
+                  totalPurchases,
+                ),
               ],
             ),
           ),
@@ -1193,7 +1332,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 label: 'Invoices',
                 value: _revenueInvoices.length.toDouble(),
                 color: kPrimary,
-                bgColor: kPrimaryContainer,
+                bgColor: context.cs.primaryContainer,
                 icon: Icons.receipt_long_rounded,
                 isCount: true,
               ),
@@ -1216,7 +1355,13 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _plRow(String label, double value, Color color, IconData icon, {bool bold = false}) {
+  Widget _plRow(
+    String label,
+    double value,
+    Color color,
+    IconData icon, {
+    bool bold = false,
+  }) {
     return Row(
       children: [
         Container(
@@ -1234,7 +1379,7 @@ class _ReportsScreenState extends State<ReportsScreen>
             style: TextStyle(
               fontSize: 13,
               fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
         ),
@@ -1250,7 +1395,13 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
-  Widget _visualBar(String label, double value, Color color, double sales, double purchases) {
+  Widget _visualBar(
+    String label,
+    double value,
+    Color color,
+    double sales,
+    double purchases,
+  ) {
     final maxVal = math.max(sales, purchases).clamp(1.0, double.infinity);
     final fraction = value / maxVal;
     return Column(
@@ -1258,9 +1409,23 @@ class _ReportsScreenState extends State<ReportsScreen>
       children: [
         Row(
           children: [
-            Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurfaceVariant,
+              ),
+            ),
             const Spacer(),
-            Text(_currencyFmt.format(value), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: color)),
+            Text(
+              _currencyFmt.format(value),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: color,
+              ),
+            ),
           ],
         ),
         const SizedBox(height: 6),
@@ -1269,7 +1434,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           child: LinearProgressIndicator(
             value: fraction,
             minHeight: 12,
-            backgroundColor: kSurfaceContainerLow,
+            backgroundColor: context.cs.surfaceContainerLow,
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ),
@@ -1283,13 +1448,17 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   Widget _buildPaymentStatusChart(List<Invoice> invoices) {
     final paid = invoices.where((i) => i.status == InvoiceStatus.paid).length;
-    final pending = invoices.where((i) => i.status == InvoiceStatus.pending).length;
-    final overdue = invoices.where((i) => i.status == InvoiceStatus.overdue).length;
+    final pending = invoices
+        .where((i) => i.status == InvoiceStatus.pending)
+        .length;
+    final overdue = invoices
+        .where((i) => i.status == InvoiceStatus.overdue)
+        .length;
     final total = invoices.length;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Row(
         children: [
           SizedBox(
@@ -1302,11 +1471,16 @@ class _ReportsScreenState extends State<ReportsScreen>
                   _DonutSegment(pending / total, _kAmber),
                   _DonutSegment(overdue / total, _kRed),
                 ],
+                bgColor: context.cs.surfaceContainerLow,
               ),
               child: Center(
                 child: Text(
                   '$total',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kOnSurface),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: context.cs.onSurface,
+                  ),
                 ),
               ),
             ),
@@ -1332,11 +1506,29 @@ class _ReportsScreenState extends State<ReportsScreen>
   Widget _legendRow(String label, int count, Color color) {
     return Row(
       children: [
-        Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
         const SizedBox(width: 8),
-        Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
         const Spacer(),
-        Text('$count', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+        Text(
+          '$count',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
       ],
     );
   }
@@ -1345,19 +1537,35 @@ class _ReportsScreenState extends State<ReportsScreen>
     // Group invoices by month
     final monthMap = <String, double>{};
     for (final inv in invoices) {
-      final key = '${inv.createdAt.year}-${inv.createdAt.month.toString().padLeft(2, '0')}';
+      final key =
+          '${inv.createdAt.year}-${inv.createdAt.month.toString().padLeft(2, '0')}';
       monthMap[key] = (monthMap[key] ?? 0) + inv.grandTotal;
     }
 
     if (monthMap.isEmpty) return const SizedBox.shrink();
 
     final sortedKeys = monthMap.keys.toList()..sort();
-    final maxVal = monthMap.values.fold<double>(0, (a, b) => math.max(a, b)).clamp(1.0, double.infinity);
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final maxVal = monthMap.values
+        .fold<double>(0, (a, b) => math.max(a, b))
+        .clamp(1.0, double.infinity);
+    const monthNames = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         children: sortedKeys.map((key) {
           final parts = key.split('-');
@@ -1375,7 +1583,14 @@ class _ReportsScreenState extends State<ReportsScreen>
                   children: [
                     SizedBox(
                       width: 50,
-                      child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
                     ),
                     Expanded(
                       child: ClipRRect(
@@ -1383,7 +1598,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                         child: LinearProgressIndicator(
                           value: fraction,
                           minHeight: 16,
-                          backgroundColor: kSurfaceContainerLow,
+                          backgroundColor: context.cs.surfaceContainerLow,
                           valueColor: const AlwaysStoppedAnimation(kPrimary),
                         ),
                       ),
@@ -1394,7 +1609,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                       child: Text(
                         _currencyFmt.format(value),
                         textAlign: TextAlign.right,
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: context.cs.onSurface,
+                        ),
                       ),
                     ),
                   ],
@@ -1409,11 +1628,15 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   Widget _buildCollectionRateCard(double collected, double total) {
     final rate = total > 0 ? (collected / total * 100) : 0.0;
-    final rateColor = rate >= 80 ? _kPaid : rate >= 50 ? _kAmber : _kRed;
+    final rateColor = rate >= 80
+        ? _kPaid
+        : rate >= 50
+        ? _kAmber
+        : _kRed;
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Row(
         children: [
           SizedBox(
@@ -1428,7 +1651,11 @@ class _ReportsScreenState extends State<ReportsScreen>
               child: Center(
                 child: Text(
                   '${rate.toStringAsFixed(0)}%',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: rateColor),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: rateColor,
+                  ),
                 ),
               ),
             ),
@@ -1438,16 +1665,34 @@ class _ReportsScreenState extends State<ReportsScreen>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Collection Rate', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface)),
+                Text(
+                  'Collection Rate',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: context.cs.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   '${_currencyFmt.format(collected)} of ${_currencyFmt.format(total)} collected',
-                  style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.cs.onSurfaceVariant,
+                  ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  rate >= 80 ? 'Excellent collection!' : rate >= 50 ? 'Follow up on pending invoices' : 'Needs attention — many unpaid invoices',
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: rateColor),
+                  rate >= 80
+                      ? 'Excellent collection!'
+                      : rate >= 50
+                      ? 'Follow up on pending invoices'
+                      : 'Needs attention — many unpaid invoices',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: rateColor,
+                  ),
                 ),
               ],
             ),
@@ -1461,14 +1706,14 @@ class _ReportsScreenState extends State<ReportsScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
+        color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
-          color: kOnSurfaceVariant,
+          color: context.cs.onSurfaceVariant,
           fontWeight: FontWeight.w500,
         ),
       ),
@@ -1631,6 +1876,26 @@ class _ReportsScreenState extends State<ReportsScreen>
     );
   }
 
+  Widget _buildReportList({
+    required List<Widget> children,
+    EdgeInsetsGeometry padding = const EdgeInsets.symmetric(
+      horizontal: 16,
+      vertical: 20,
+    ),
+  }) {
+    final size = windowSizeOf(context);
+    if (size == WindowSize.compact) {
+      return ListView(padding: padding, children: children);
+    }
+
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+        child: ListView(padding: padding, children: children),
+      ),
+    );
+  }
+
   Widget _errorWidget(String message, VoidCallback onRetry) {
     return Center(
       child: Padding(
@@ -1638,25 +1903,24 @@ class _ReportsScreenState extends State<ReportsScreen>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.error_outline_rounded,
-              size: 48,
-              color: _kRed,
-            ),
+            const Icon(Icons.error_outline_rounded, size: 48, color: _kRed),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'Failed to load data',
               style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
@@ -1664,7 +1928,7 @@ class _ReportsScreenState extends State<ReportsScreen>
               icon: const Icon(Icons.refresh_rounded, size: 18),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.cs.primary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
@@ -1712,12 +1976,12 @@ class _ReportsScreenState extends State<ReportsScreen>
     // Group by week
     final weekMap = <String, double>{};
     for (final inv in invoices) {
-      final weekStart = inv.createdAt.subtract(Duration(days: inv.createdAt.weekday - 1));
+      final weekStart = inv.createdAt.subtract(
+        Duration(days: inv.createdAt.weekday - 1),
+      );
       final key = DateFormat('dd MMM').format(weekStart);
       weekMap[key] = (weekMap[key] ?? 0) + inv.grandTotal;
     }
-    final sortedWeeks = weekMap.keys.toList();
-
     // Group by month
     final monthMap = <String, double>{};
     for (final inv in invoices) {
@@ -1727,10 +1991,11 @@ class _ReportsScreenState extends State<ReportsScreen>
 
     // Calculate growth
     final totalRevenue = invoices.fold<double>(0, (s, i) => s + i.grandTotal);
-    final avgDaily = sortedDays.isNotEmpty ? totalRevenue / sortedDays.length : 0.0;
+    final avgDaily = sortedDays.isNotEmpty
+        ? totalRevenue / sortedDays.length
+        : 0.0;
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         _buildPeriodPicker(),
         const SizedBox(height: 16),
@@ -1743,7 +2008,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                 label: 'Total Revenue',
                 value: totalRevenue,
                 color: kPrimary,
-                bgColor: kPrimaryContainer,
+                bgColor: context.cs.primaryContainer,
                 icon: Icons.trending_up_rounded,
               ),
             ),
@@ -1765,11 +2030,15 @@ class _ReportsScreenState extends State<ReportsScreen>
         _sectionLabel('Daily Revenue'),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _cardDeco(),
+          decoration: _cardDeco(context),
           child: Column(
             children: () {
-              final maxVal = dayMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
-              final recentDays = sortedDays.length > 14 ? sortedDays.sublist(sortedDays.length - 14) : sortedDays;
+              final maxVal = dayMap.values
+                  .fold<double>(0, (a, b) => a > b ? a : b)
+                  .clamp(1.0, double.infinity);
+              final recentDays = sortedDays.length > 14
+                  ? sortedDays.sublist(sortedDays.length - 14)
+                  : sortedDays;
               return recentDays.map((key) {
                 final value = dayMap[key]!;
                 final fraction = value / maxVal;
@@ -1780,7 +2049,14 @@ class _ReportsScreenState extends State<ReportsScreen>
                     children: [
                       SizedBox(
                         width: 52,
-                        child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
                       ),
                       Expanded(
                         child: ClipRRect(
@@ -1788,8 +2064,10 @@ class _ReportsScreenState extends State<ReportsScreen>
                           child: LinearProgressIndicator(
                             value: fraction,
                             minHeight: 14,
-                            backgroundColor: kSurfaceContainerLow,
-                            valueColor: const AlwaysStoppedAnimation(Color(0xFF3B82F6)),
+                            backgroundColor: context.cs.surfaceContainerLow,
+                            valueColor: const AlwaysStoppedAnimation(
+                              Color(0xFF3B82F6),
+                            ),
                           ),
                         ),
                       ),
@@ -1799,7 +2077,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                         child: Text(
                           _currencyFmt.format(value),
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: kOnSurface),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: context.cs.onSurface,
+                          ),
                         ),
                       ),
                     ],
@@ -1816,10 +2098,12 @@ class _ReportsScreenState extends State<ReportsScreen>
           _sectionLabel('Monthly Trend'),
           Container(
             padding: const EdgeInsets.all(16),
-            decoration: _cardDeco(),
+            decoration: _cardDeco(context),
             child: Column(
               children: () {
-                final maxVal = monthMap.values.fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+                final maxVal = monthMap.values
+                    .fold<double>(0, (a, b) => a > b ? a : b)
+                    .clamp(1.0, double.infinity);
                 return monthMap.entries.map((e) {
                   final fraction = e.value / maxVal;
                   return Padding(
@@ -1828,7 +2112,14 @@ class _ReportsScreenState extends State<ReportsScreen>
                       children: [
                         SizedBox(
                           width: 52,
-                          child: Text(e.key, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                          child: Text(
+                            e.key,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: context.cs.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                         Expanded(
                           child: ClipRRect(
@@ -1836,8 +2127,10 @@ class _ReportsScreenState extends State<ReportsScreen>
                             child: LinearProgressIndicator(
                               value: fraction,
                               minHeight: 16,
-                              backgroundColor: kSurfaceContainerLow,
-                              valueColor: const AlwaysStoppedAnimation(kPrimary),
+                              backgroundColor: context.cs.surfaceContainerLow,
+                              valueColor: const AlwaysStoppedAnimation(
+                                kPrimary,
+                              ),
                             ),
                           ),
                         ),
@@ -1847,7 +2140,11 @@ class _ReportsScreenState extends State<ReportsScreen>
                           child: Text(
                             _currencyFmt.format(e.value),
                             textAlign: TextAlign.right,
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurface),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: context.cs.onSurface,
+                            ),
                           ),
                         ),
                       ],
@@ -1884,19 +2181,23 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
 
     final topSellers = stats.take(10).toList();
-    final slowMovers = stats.length > 5 ? stats.reversed.take(5).toList() : <_ProductStat>[];
+    final slowMovers = stats.length > 5
+        ? stats.reversed.take(5).toList()
+        : <_ProductStat>[];
     final totalRevenue = stats.fold<double>(0, (s, p) => s + p.totalRevenue);
-    final maxRev = topSellers.isNotEmpty ? topSellers.first.totalRevenue.clamp(1.0, double.infinity) : 1.0;
+    final maxRev = topSellers.isNotEmpty
+        ? topSellers.first.totalRevenue.clamp(1.0, double.infinity)
+        : 1.0;
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         // Top sellers header
         _heroCard(
           label: 'Product Revenue',
           value: totalRevenue,
           icon: Icons.star_rounded,
-          subtitle: '${stats.length} product${stats.length == 1 ? '' : 's'} sold',
+          subtitle:
+              '${stats.length} product${stats.length == 1 ? '' : 's'} sold',
         ),
         const SizedBox(height: 16),
 
@@ -1904,16 +2205,20 @@ class _ReportsScreenState extends State<ReportsScreen>
         _sectionLabel('Best Sellers'),
         Container(
           padding: const EdgeInsets.all(14),
-          decoration: _cardDeco(),
+          decoration: _cardDeco(context),
           child: Column(
             children: topSellers.asMap().entries.map((e) {
               final rank = e.key + 1;
               final p = e.value;
               final barFraction = p.totalRevenue / maxRev;
-              final share = totalRevenue > 0 ? (p.totalRevenue / totalRevenue * 100) : 0.0;
+              final share = totalRevenue > 0
+                  ? (p.totalRevenue / totalRevenue * 100)
+                  : 0.0;
 
               return Padding(
-                padding: EdgeInsets.only(bottom: rank < topSellers.length ? 12 : 0),
+                padding: EdgeInsets.only(
+                  bottom: rank < topSellers.length ? 12 : 0,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -1923,25 +2228,54 @@ class _ReportsScreenState extends State<ReportsScreen>
                           width: 24,
                           height: 24,
                           decoration: BoxDecoration(
-                            color: rank <= 3 ? kPrimary : kSurfaceContainerLow,
+                            color: rank <= 3
+                                ? kPrimary
+                                : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Center(
                             child: Text(
                               '$rank',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: rank <= 3 ? Colors.white : kOnSurfaceVariant),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: rank <= 3
+                                    ? Colors.white
+                                    : context.cs.onSurfaceVariant,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
-                          child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                          child: Text(
+                            p.name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: context.cs.onSurface,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                         Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
-                            Text('${share.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                            Text(
+                              _currencyFmt.format(p.totalRevenue),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: kPrimary,
+                              ),
+                            ),
+                            Text(
+                              '${share.toStringAsFixed(1)}%',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: context.cs.onSurfaceVariant,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -1952,7 +2286,7 @@ class _ReportsScreenState extends State<ReportsScreen>
                       child: LinearProgressIndicator(
                         value: barFraction,
                         minHeight: 4,
-                        backgroundColor: kSurfaceContainerLow,
+                        backgroundColor: context.cs.surfaceContainerLow,
                         valueColor: const AlwaysStoppedAnimation(kPrimary),
                       ),
                     ),
@@ -1990,16 +2324,41 @@ class _ReportsScreenState extends State<ReportsScreen>
                   padding: EdgeInsets.only(bottom: isLast ? 0 : 10),
                   child: Row(
                     children: [
-                      const Icon(Icons.trending_down_rounded, size: 16, color: _kRed),
+                      const Icon(
+                        Icons.trending_down_rounded,
+                        size: 16,
+                        color: _kRed,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(p.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface), overflow: TextOverflow.ellipsis),
+                        child: Text(
+                          p.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: context.cs.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text(_currencyFmt.format(p.totalRevenue), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: _kRed)),
-                          Text('${p.timesInvoiced}x sold', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                          Text(
+                            _currencyFmt.format(p.totalRevenue),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: _kRed,
+                            ),
+                          ),
+                          Text(
+                            '${p.timesInvoiced}x sold',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: context.cs.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -2017,12 +2376,16 @@ class _ReportsScreenState extends State<ReportsScreen>
           for (var i = 0; i < topSellers.length; i++) {
             final p = topSellers[i];
             buf.writeln('${i + 1}. ${p.name}');
-            buf.writeln('   Revenue: ${_currencyFmt.format(p.totalRevenue)}  |  Qty: ${_formatQty(p.totalQty)}');
+            buf.writeln(
+              '   Revenue: ${_currencyFmt.format(p.totalRevenue)}  |  Qty: ${_formatQty(p.totalQty)}',
+            );
           }
           if (slowMovers.isNotEmpty) {
             buf.writeln('\n*Slow Movers:*');
             for (final p in slowMovers) {
-              buf.writeln('- ${p.name}: ${_currencyFmt.format(p.totalRevenue)}');
+              buf.writeln(
+                '- ${p.name}: ${_currencyFmt.format(p.totalRevenue)}',
+              );
             }
           }
           return buf.toString();
@@ -2064,8 +2427,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     }
     final allMonths = {...monthlyIn.keys, ...monthlyOut.keys}.toList()..sort();
 
-    return ListView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+    return _buildReportList(
       children: [
         _buildPeriodPicker(),
         const SizedBox(height: 16),
@@ -2076,7 +2438,9 @@ class _ReportsScreenState extends State<ReportsScreen>
           decoration: BoxDecoration(
             gradient: netCashFlow >= 0
                 ? kSignatureGradient
-                : const LinearGradient(colors: [Color(0xFFEF4444), Color(0xFFDC2626)]),
+                : const LinearGradient(
+                    colors: [Color(0xFFEF4444), Color(0xFFDC2626)],
+                  ),
             borderRadius: BorderRadius.circular(18),
             boxShadow: const [kWhisperShadow],
           ),
@@ -2086,22 +2450,42 @@ class _ReportsScreenState extends State<ReportsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Net Cash Flow', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70)),
+                    const Text(
+                      'Net Cash Flow',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white70,
+                      ),
+                    ),
                     const SizedBox(height: 8),
                     Text(
                       _currencyFmt.format(netCashFlow.abs()),
-                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        netCashFlow >= 0 ? 'Positive Cash Flow' : 'Negative Cash Flow',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
+                        netCashFlow >= 0
+                            ? 'Positive Cash Flow'
+                            : 'Negative Cash Flow',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
                     ),
                   ],
@@ -2114,7 +2498,9 @@ class _ReportsScreenState extends State<ReportsScreen>
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  netCashFlow >= 0 ? Icons.account_balance_wallet_rounded : Icons.warning_rounded,
+                  netCashFlow >= 0
+                      ? Icons.account_balance_wallet_rounded
+                      : Icons.warning_rounded,
                   size: 30,
                   color: Colors.white,
                 ),
@@ -2163,7 +2549,7 @@ class _ReportsScreenState extends State<ReportsScreen>
           _sectionLabel('Monthly Cash Flow'),
           Container(
             padding: const EdgeInsets.all(14),
-            decoration: _cardDeco(),
+            decoration: _cardDeco(context),
             child: Column(
               children: allMonths.map((month) {
                 final inVal = monthlyIn[month] ?? 0;
@@ -2176,17 +2562,31 @@ class _ReportsScreenState extends State<ReportsScreen>
                     children: [
                       Row(
                         children: [
-                          Text(month, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
+                          Text(
+                            month,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: context.cs.onSurface,
+                            ),
+                          ),
                           const Spacer(),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: net >= 0 ? _kPaidBg : _kRedBg,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${net >= 0 ? '+' : ''}${_currencyFmt.format(net)}',
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: net >= 0 ? _kPaid : _kRed),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: net >= 0 ? _kPaid : _kRed,
+                              ),
                             ),
                           ),
                         ],
@@ -2198,8 +2598,21 @@ class _ReportsScreenState extends State<ReportsScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('In', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                                Text(_currencyFmt.format(inVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kPaid)),
+                                Text(
+                                  'In',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: context.cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  _currencyFmt.format(inVal),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _kPaid,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -2207,8 +2620,21 @@ class _ReportsScreenState extends State<ReportsScreen>
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                const Text('Out', style: TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                                Text(_currencyFmt.format(outVal), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: _kRed)),
+                                Text(
+                                  'Out',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: context.cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  _currencyFmt.format(outVal),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _kRed,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -2235,7 +2661,9 @@ class _ReportsScreenState extends State<ReportsScreen>
             for (final month in allMonths) {
               final inVal = monthlyIn[month] ?? 0;
               final outVal = monthlyOut[month] ?? 0;
-              buf.writeln('$month: In ${_currencyFmt.format(inVal)} | Out ${_currencyFmt.format(outVal)}');
+              buf.writeln(
+                '$month: In ${_currencyFmt.format(inVal)} | Out ${_currencyFmt.format(outVal)}',
+              );
             }
           }
           return buf.toString();
@@ -2247,7 +2675,10 @@ class _ReportsScreenState extends State<ReportsScreen>
 
   // ── WhatsApp Share Button ──────────────────────────────────────────────────
 
-  Widget _buildWhatsAppShareButton(String reportName, String Function() contentBuilder) {
+  Widget _buildWhatsAppShareButton(
+    String reportName,
+    String Function() contentBuilder,
+  ) {
     return Row(
       children: [
         Expanded(
@@ -2269,7 +2700,14 @@ class _ReportsScreenState extends State<ReportsScreen>
                 children: [
                   Icon(Icons.chat_rounded, size: 18, color: Colors.white),
                   SizedBox(width: 8),
-                  Text('Share via WhatsApp', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.white)),
+                  Text(
+                    'Share via WhatsApp',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2279,15 +2717,21 @@ class _ReportsScreenState extends State<ReportsScreen>
         GestureDetector(
           onTap: () {
             final text = contentBuilder();
-            SharePlus.instance.share(ShareParams(text: text, subject: reportName));
+            SharePlus.instance.share(
+              ShareParams(text: text, subject: reportName),
+            );
           },
           child: Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
+              color: context.cs.surfaceContainerLow,
               borderRadius: BorderRadius.circular(14),
             ),
-            child: const Icon(Icons.share_rounded, size: 18, color: kOnSurfaceVariant),
+            child: Icon(
+              Icons.share_rounded,
+              size: 18,
+              color: context.cs.onSurfaceVariant,
+            ),
           ),
         ),
       ],
@@ -2302,7 +2746,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     required String subtitle,
     Color? iconColor,
   }) {
-    final effectiveColor = iconColor ?? kOnSurfaceVariant;
+    final effectiveColor = iconColor ?? context.cs.onSurfaceVariant;
     return Center(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 60, horizontal: 32),
@@ -2322,17 +2766,20 @@ class _ReportsScreenState extends State<ReportsScreen>
             Text(
               title,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -2351,11 +2798,11 @@ class _PartyOutstanding {
   final List<Invoice> invoices = [];
 }
 
-BoxDecoration _cardDeco() => BoxDecoration(
-      color: kSurfaceLowest,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: const [kSubtleShadow],
-    );
+BoxDecoration _cardDeco(BuildContext context) => BoxDecoration(
+  color: context.cs.surfaceContainerLowest,
+  borderRadius: BorderRadius.circular(16),
+  boxShadow: const [kSubtleShadow],
+);
 
 // ── Donut Chart Painter ─────────────────────────────────────────────────────
 
@@ -2366,8 +2813,9 @@ class _DonutSegment {
 }
 
 class _DonutChartPainter extends CustomPainter {
-  _DonutChartPainter({required this.segments});
+  _DonutChartPainter({required this.segments, required this.bgColor});
   final List<_DonutSegment> segments;
+  final Color bgColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -2378,7 +2826,7 @@ class _DonutChartPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     // Background ring
-    paint.color = kSurfaceContainerLow;
+    paint.color = bgColor;
     canvas.drawArc(rect.deflate(7), 0, 2 * math.pi, false, paint);
 
     // Segments
@@ -2399,7 +2847,11 @@ class _DonutChartPainter extends CustomPainter {
 // ── Ring Chart Painter ──────────────────────────────────────────────────────
 
 class _RingChartPainter extends CustomPainter {
-  _RingChartPainter({required this.fraction, required this.color, required this.bgColor});
+  _RingChartPainter({
+    required this.fraction,
+    required this.color,
+    required this.bgColor,
+  });
   final double fraction;
   final Color color;
   final Color bgColor;
@@ -2416,7 +2868,13 @@ class _RingChartPainter extends CustomPainter {
     canvas.drawArc(rect.deflate(4), 0, 2 * math.pi, false, paint);
 
     paint.color = color;
-    canvas.drawArc(rect.deflate(4), -math.pi / 2, fraction.clamp(0, 1) * 2 * math.pi, false, paint);
+    canvas.drawArc(
+      rect.deflate(4),
+      -math.pi / 2,
+      fraction.clamp(0, 1) * 2 * math.pi,
+      false,
+      paint,
+    );
   }
 
   @override

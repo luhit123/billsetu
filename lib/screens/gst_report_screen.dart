@@ -9,9 +9,9 @@ import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/purchase_order_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,13 +19,11 @@ import 'package:share_plus/share_plus.dart';
 // ─── Status colours (kept as semantic) ──────────────────────────────────────
 const _kPaid = Color(0xFF22C55E);
 const _kPaidBg = Color(0xFFDCFCE7);
-const _kPending = Color(0xFFF59E0B);
-const _kPendingBg = Color(0xFFFEF3C7);
 const _kOverdue = Color(0xFFEF4444);
 const _kOverdueBg = Color(0xFFFEE2E2);
 
 // ─── Period enum ───────────────────────────────────────────────────────────────
-enum _Period { monthly, quarterly, yearly }
+enum _Period { monthly, quarterly, yearly, financialYear }
 
 // ─── Tab enum ──────────────────────────────────────────────────────────────────
 enum _GstTab { output, input, net, hsn, gstr3b, taxRate }
@@ -55,6 +53,7 @@ class GstReportScreen extends StatefulWidget {
 class _GstReportScreenState extends State<GstReportScreen> {
   final AnalyticsService _analyticsService = AnalyticsService();
   final FirebaseService _firebaseService = FirebaseService();
+  final PurchaseOrderService _purchaseOrderService = PurchaseOrderService();
   final _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
     symbol: 'Rs. ',
@@ -106,6 +105,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
         return DateTime(_selectedYear, startMonth, 1);
       case _Period.yearly:
         return DateTime(_selectedYear, 1, 1);
+      case _Period.financialYear:
+        // Indian Financial Year: April 1 of selected year
+        return DateTime(_selectedYear, 4, 1);
     }
   }
 
@@ -121,6 +123,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
         return DateTime(_selectedYear, endMonth + 1, 1);
       case _Period.yearly:
         return DateTime(_selectedYear + 1, 1, 1);
+      case _Period.financialYear:
+        // Indian Financial Year: March 31 of next year (exclusive = April 1)
+        return DateTime(_selectedYear + 1, 4, 1);
     }
   }
 
@@ -135,6 +140,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
       _Period.monthly => 'monthly',
       _Period.quarterly => 'quarterly',
       _Period.yearly => 'yearly',
+      _Period.financialYear => 'financialYear',
     };
   }
 
@@ -144,6 +150,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
         '$_selectedYear-${_selectedMonth.toString().padLeft(2, '0')}',
       _Period.quarterly => '$_selectedYear-Q$_selectedQuarter',
       _Period.yearly => '$_selectedYear',
+      _Period.financialYear => 'FY-$_selectedYear-${_selectedYear + 1}',
     };
   }
 
@@ -237,9 +244,6 @@ class _GstReportScreenState extends State<GstReportScreen> {
   // ─── Load purchase orders (Input GST) ─────────────────────────────────────
 
   Future<void> _loadPurchaseOrders() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-
     setState(() {
       _isLoadingPurchaseOrders = true;
       _poLoadError = null;
@@ -247,28 +251,15 @@ class _GstReportScreenState extends State<GstReportScreen> {
     });
 
     try {
-      final startTimestamp = Timestamp.fromDate(_startDate);
-      final endTimestamp = Timestamp.fromDate(_endDate);
-
-      // Simple query by createdAt range — filter client-side to avoid
-      // needing a Firestore composite index on status+gstEnabled+receivedAt.
-      final snapshot = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .collection('purchaseOrders')
-          .where('createdAt', isGreaterThanOrEqualTo: startTimestamp)
-          .where('createdAt', isLessThan: endTimestamp)
-          .orderBy('createdAt', descending: true)
-          .get();
-
+      final orders = await _purchaseOrderService.getPurchaseOrders(
+        startDate: _startDate,
+        endDateExclusive: _endDate,
+        status: PurchaseOrderStatus.received,
+        gstEnabledOnly: true,
+        pageSize: 250,
+        maxResults: 5000,
+      );
       if (!mounted) return;
-
-      final orders = snapshot.docs
-          .map((doc) => PurchaseOrder.fromMap(doc.data(), docId: doc.id))
-          .where((po) =>
-              po.status == PurchaseOrderStatus.received &&
-              po.gstEnabled)
-          .toList();
 
       setState(() {
         _purchaseOrders.addAll(orders);
@@ -298,121 +289,15 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
   // ─── Share/export ────────────────────────────────────────────────────────────
 
-  void _shareReport(List<Invoice> invoices, AppStrings s) {
-    final buf = StringBuffer();
-    buf.writeln('${s.gstReportTitle} — $_periodLabel');
-    buf.writeln('=' * 40);
-
-    // ── Output GST (Sales) ──
-    buf.writeln();
-    buf.writeln(s.gstReportOutputGst);
-    buf.writeln(s.gstReportInvoicesWithGst(invoices.length));
-    buf.writeln();
-
+  /// PDF Summary — comprehensive totals, no individual invoices
+  void _sharePdfSummary(List<Invoice> invoices) {
+    final s = AppStrings.of(context);
     double totalTaxable = 0,
         totalCgst = 0,
         totalSgst = 0,
         totalIgst = 0,
-        totalTax = 0;
-    for (final inv in invoices) {
-      totalTaxable += inv.taxableAmount;
-      totalCgst += inv.cgstAmount;
-      totalSgst += inv.sgstAmount;
-      totalIgst += inv.igstAmount;
-      totalTax += inv.totalTax;
-    }
-
-    buf.writeln('Taxable Amount : ${_currencyFormat.format(totalTaxable)}');
-    buf.writeln('Total CGST     : ${_currencyFormat.format(totalCgst)}');
-    buf.writeln('Total SGST     : ${_currencyFormat.format(totalSgst)}');
-    buf.writeln('Total IGST     : ${_currencyFormat.format(totalIgst)}');
-    buf.writeln('Total Tax      : ${_currencyFormat.format(totalTax)}');
-
-    // ── Input GST (Purchases) ──
-    buf.writeln();
-    buf.writeln(s.gstReportInputGst);
-    buf.writeln(s.gstReportPosWithGst(_purchaseOrders.length));
-    buf.writeln();
-
-    double inputTaxable = 0,
-        inputCgst = 0,
-        inputSgst = 0,
-        inputIgst = 0,
-        inputTax = 0;
-    for (final po in _purchaseOrders) {
-      inputTaxable += po.taxableAmount;
-      inputCgst += po.cgstAmount;
-      inputSgst += po.sgstAmount;
-      inputIgst += po.igstAmount;
-      inputTax += po.totalTax;
-    }
-
-    buf.writeln('Taxable Amount : ${_currencyFormat.format(inputTaxable)}');
-    buf.writeln('Total CGST     : ${_currencyFormat.format(inputCgst)}');
-    buf.writeln('Total SGST     : ${_currencyFormat.format(inputSgst)}');
-    buf.writeln('Total IGST     : ${_currencyFormat.format(inputIgst)}');
-    buf.writeln('Total Tax      : ${_currencyFormat.format(inputTax)}');
-
-    // ── Net GST ──
-    final netPayable = totalTax - inputTax;
-    buf.writeln();
-    buf.writeln(s.gstReportNetGstHeader);
-    buf.writeln(
-        netPayable >= 0
-            ? '${s.gstReportNetPayable}    : ${_currencyFormat.format(netPayable)}'
-            : '${s.gstReportItcCredit}     : ${_currencyFormat.format(netPayable.abs())}');
-
-    // ── Invoice breakdown ──
-    buf.writeln();
-    buf.writeln('${s.gstReportInvoiceBreakdown}:');
-    buf.writeln('-' * 40);
-
-    for (final inv in invoices) {
-      buf.writeln('${inv.invoiceNumber}  ${inv.clientName}');
-      buf.writeln('  Date    : ${_dateFormat.format(inv.createdAt)}');
-      buf.writeln('  Taxable : ${_currencyFormat.format(inv.taxableAmount)}');
-      if (inv.gstType == 'igst') {
-        buf.writeln('  IGST    : ${_currencyFormat.format(inv.igstAmount)}');
-      } else {
-        buf.writeln(
-          '  CGST    : ${_currencyFormat.format(inv.cgstAmount)}  SGST: ${_currencyFormat.format(inv.sgstAmount)}',
-        );
-      }
-      buf.writeln('  Tax     : ${_currencyFormat.format(inv.totalTax)}');
-      buf.writeln('  Status  : ${inv.status.name}');
-      buf.writeln();
-    }
-
-    // ── PO breakdown ──
-    if (_purchaseOrders.isNotEmpty) {
-      buf.writeln('${s.gstReportPoBreakdown}:');
-      buf.writeln('-' * 40);
-
-      for (final po in _purchaseOrders) {
-        buf.writeln('${po.orderNumber}  ${po.supplierName}');
-        buf.writeln('  Date    : ${_dateFormat.format(po.createdAt)}');
-        buf.writeln('  Taxable : ${_currencyFormat.format(po.taxableAmount)}');
-        if (po.gstType == 'igst') {
-          buf.writeln('  IGST    : ${_currencyFormat.format(po.igstAmount)}');
-        } else {
-          buf.writeln(
-            '  CGST    : ${_currencyFormat.format(po.cgstAmount)}  SGST: ${_currencyFormat.format(po.sgstAmount)}',
-          );
-        }
-        buf.writeln('  Tax     : ${_currencyFormat.format(po.totalTax)}');
-        buf.writeln();
-      }
-    }
-
-    SharePlus.instance.share(
-      ShareParams(text: buf.toString(), subject: 'GST Report — $_periodLabel'),
-    );
-  }
-
-  /// PDF Summary — comprehensive totals, no individual invoices
-  void _sharePdfSummary(List<Invoice> invoices) {
-    final s = AppStrings.of(context);
-    double totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalTax = 0, totalGrand = 0;
+        totalTax = 0,
+        totalGrand = 0;
     for (final inv in invoices) {
       totalTaxable += inv.taxableAmount;
       totalCgst += inv.cgstAmount;
@@ -422,7 +307,11 @@ class _GstReportScreenState extends State<GstReportScreen> {
       totalGrand += inv.grandTotal;
     }
 
-    double inputTaxable = 0, inputCgst = 0, inputSgst = 0, inputIgst = 0, inputTax = 0;
+    double inputTaxable = 0,
+        inputCgst = 0,
+        inputSgst = 0,
+        inputIgst = 0,
+        inputTax = 0;
     for (final po in _purchaseOrders) {
       inputTaxable += po.taxableAmount;
       inputCgst += po.cgstAmount;
@@ -454,30 +343,47 @@ class _GstReportScreenState extends State<GstReportScreen> {
     buf.writeln('  Total Tax        : ${_currencyFormat.format(inputTax)}');
     buf.writeln();
     buf.writeln(s.gstReportNetGstLiability);
-    buf.writeln(netPayable >= 0
-        ? '  ${s.gstReportNetPayable}      : ${_currencyFormat.format(netPayable)}'
-        : '  ${s.gstReportItcCredit}       : ${_currencyFormat.format(netPayable.abs())}');
+    buf.writeln(
+      netPayable >= 0
+          ? '  ${s.gstReportNetPayable}      : ${_currencyFormat.format(netPayable)}'
+          : '  ${s.gstReportItcCredit}       : ${_currencyFormat.format(netPayable.abs())}',
+    );
     buf.writeln();
     buf.writeln(s.gstReportGeneratedBy);
 
     SharePlus.instance.share(
-      ShareParams(text: buf.toString(), subject: 'GST Report Summary — $_periodLabel'),
+      ShareParams(
+        text: buf.toString(),
+        subject: 'GST Report Summary — $_periodLabel',
+      ),
     );
   }
 
   /// CSV export — all invoices with full GST breakdown
+  /// RFC 4180-compliant CSV field escaping:
+  /// wraps in double quotes, escapes internal quotes by doubling them.
+  static String _csvField(String value) {
+    final escaped = value.replaceAll('"', '""');
+    return '"$escaped"';
+  }
+
+  /// CSV export — all invoices with full GST breakdown (RFC 4180 compliant)
   Future<void> _shareCsv(List<Invoice> invoices) async {
     final buf = StringBuffer();
+    // UTF-8 BOM for Excel compatibility
+    buf.write('\uFEFF');
+
     // Header
-    buf.writeln('Invoice No,Date,Customer,GSTIN,Taxable Amount,CGST,SGST,IGST,Total Tax,Grand Total,Status,GST Type,GST Rate');
+    buf.writeln(
+      'Invoice No,Date,Customer,GSTIN,B2B/B2C,Taxable Amount,CGST,SGST,IGST,Total Tax,Grand Total,Status,GST Type,GST Rate',
+    );
 
     // Data rows
     for (final inv in invoices) {
       final date = _dateFormat.format(inv.createdAt);
-      final name = inv.clientName.replaceAll(',', ' '); // escape commas
-      final gstin = inv.customerGstin;
+      final b2bType = inv.customerGstin.isNotEmpty ? 'B2B' : 'B2C';
       buf.writeln(
-        '${inv.invoiceNumber},$date,$name,$gstin,'
+        '${_csvField(inv.invoiceNumber)},$date,${_csvField(inv.clientName)},${_csvField(inv.customerGstin)},$b2bType,'
         '${inv.taxableAmount.toStringAsFixed(2)},'
         '${inv.cgstAmount.toStringAsFixed(2)},'
         '${inv.sgstAmount.toStringAsFixed(2)},'
@@ -494,12 +400,13 @@ class _GstReportScreenState extends State<GstReportScreen> {
     if (_purchaseOrders.isNotEmpty) {
       buf.writeln();
       buf.writeln('Purchase Orders');
-      buf.writeln('PO No,Date,Supplier,Taxable Amount,CGST,SGST,IGST,Total Tax,Grand Total,GST Type');
+      buf.writeln(
+        'PO No,Date,Supplier,Taxable Amount,CGST,SGST,IGST,Total Tax,Grand Total,GST Type',
+      );
       for (final po in _purchaseOrders) {
         final date = _dateFormat.format(po.createdAt);
-        final name = po.supplierName.replaceAll(',', ' ');
         buf.writeln(
-          '${po.orderNumber},$date,$name,'
+          '${_csvField(po.orderNumber)},$date,${_csvField(po.supplierName)},'
           '${po.taxableAmount.toStringAsFixed(2)},'
           '${po.cgstAmount.toStringAsFixed(2)},'
           '${po.sgstAmount.toStringAsFixed(2)},'
@@ -519,24 +426,35 @@ class _GstReportScreenState extends State<GstReportScreen> {
       totalGrand += inv.grandTotal;
     }
     buf.writeln();
-    buf.writeln('TOTALS,,,'
-        '${totalTaxable.toStringAsFixed(2)},,,,${totalTax.toStringAsFixed(2)},${totalGrand.toStringAsFixed(2)}');
+    buf.writeln(
+      'TOTALS,,,,,${totalTaxable.toStringAsFixed(2)},,,,'
+      '${totalTax.toStringAsFixed(2)},${totalGrand.toStringAsFixed(2)}',
+    );
 
     // Write to temp file and share
     if (kIsWeb) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File export is not available on web. Use the mobile app to export reports.')),
+          const SnackBar(
+            content: Text(
+              'File export is not available on web. Use the mobile app to export reports.',
+            ),
+          ),
         );
       }
       return;
     }
     final dir = await Directory.systemTemp.createTemp('gst_report');
-    final file = File('${dir.path}/GST_Report_${_periodLabel.replaceAll(' ', '_')}.csv');
+    final file = File(
+      '${dir.path}/GST_Report_${_periodLabel.replaceAll(' ', '_')}.csv',
+    );
     await file.writeAsString(buf.toString());
 
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: 'GST Report — $_periodLabel'),
+      ShareParams(
+        files: [XFile(file.path)],
+        subject: 'GST Report — $_periodLabel',
+      ),
     );
   }
 
@@ -555,24 +473,61 @@ class _GstReportScreenState extends State<GstReportScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(2))),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: context.cs.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
               const SizedBox(height: 16),
-              Text(s.gstReportExportTitle, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
+              Text(
+                s.gstReportExportTitle,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               const SizedBox(height: 16),
               ListTile(
-                leading: const Icon(Icons.picture_as_pdf, color: Color(0xFFE53935), size: 28),
-                title: Text(s.gstReportPdfSummary, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(s.gstReportPdfSubtitle, style: const TextStyle(fontSize: 12)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: const Icon(
+                  Icons.picture_as_pdf,
+                  color: Color(0xFFE53935),
+                  size: 28,
+                ),
+                title: Text(
+                  s.gstReportPdfSummary,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  s.gstReportPdfSubtitle,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 tileColor: const Color(0xFFFFF5F5),
                 onTap: () => Navigator.pop(ctx, 'pdf'),
               ),
               const SizedBox(height: 10),
               ListTile(
-                leading: const Icon(Icons.table_chart, color: Color(0xFF2E7D32), size: 28),
-                title: Text(s.gstReportCsvAll, style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(s.gstReportCsvSubtitle, style: const TextStyle(fontSize: 12)),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                leading: const Icon(
+                  Icons.table_chart,
+                  color: Color(0xFF2E7D32),
+                  size: 28,
+                ),
+                title: Text(
+                  s.gstReportCsvAll,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  s.gstReportCsvSubtitle,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 tileColor: const Color(0xFFF0FDF4),
                 onTap: () => Navigator.pop(ctx, 'csv'),
               ),
@@ -598,7 +553,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
       final gstInvoices = invoices.where((invoice) => invoice.hasGst).toList();
       if (gstInvoices.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(s.gstReportNoInvoices)));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(s.gstReportNoInvoices)));
         return;
       }
 
@@ -669,7 +626,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           vertical: compact ? 6 : 9,
         ),
         decoration: BoxDecoration(
-          color: selected ? kPrimary : kSurfaceLowest,
+          color: selected ? kPrimary : context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(50),
         ),
         child: Text(
@@ -677,7 +634,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           style: TextStyle(
             fontSize: compact ? 12 : 13,
             fontWeight: FontWeight.w600,
-            color: selected ? Colors.white : kTextSecondary,
+            color: selected ? Colors.white : context.cs.onSurfaceVariant,
           ),
         ),
       ),
@@ -708,7 +665,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kSubtleShadow],
       ),
@@ -742,6 +699,15 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   selected: _selectedPeriod == _Period.yearly,
                   onTap: () =>
                       _changePeriod(() => _selectedPeriod = _Period.yearly),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _chip(
+                  label: 'FY',
+                  selected: _selectedPeriod == _Period.financialYear,
+                  onTap: () => _changePeriod(
+                      () => _selectedPeriod = _Period.financialYear),
                 ),
               ),
             ],
@@ -795,6 +761,33 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 ),
               ],
             )
+          else if (_selectedPeriod == _Period.financialYear)
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                _chip(
+                  label: 'FY ${now.year - 2}–${now.year - 1}',
+                  selected: _selectedYear == now.year - 2,
+                  compact: true,
+                  onTap: () =>
+                      _changePeriod(() => _selectedYear = now.year - 2),
+                ),
+                _chip(
+                  label: 'FY ${now.year - 1}–${now.year}',
+                  selected: _selectedYear == now.year - 1,
+                  compact: true,
+                  onTap: () =>
+                      _changePeriod(() => _selectedYear = now.year - 1),
+                ),
+                _chip(
+                  label: 'FY ${now.year}–${now.year + 1}',
+                  selected: _selectedYear == now.year,
+                  compact: true,
+                  onTap: () => _changePeriod(() => _selectedYear = now.year),
+                ),
+              ],
+            )
           else
             Wrap(
               spacing: 8,
@@ -829,7 +822,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
             decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
+              color: context.cs.surfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -839,10 +832,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 const SizedBox(width: 6),
                 Text(
                   _periodLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
               ],
@@ -862,7 +855,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -885,10 +878,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -1012,7 +1005,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
+        color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
       ),
       child: SingleChildScrollView(
@@ -1039,7 +1032,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
         decoration: BoxDecoration(
-          color: selected ? kSurfaceLowest : Colors.transparent,
+          color: selected
+              ? context.cs.surfaceContainerLowest
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(10),
           boxShadow: selected ? const [kSubtleShadow] : null,
         ),
@@ -1049,7 +1044,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? kPrimary : kOnSurfaceVariant,
+            color: selected ? kPrimary : context.cs.onSurfaceVariant,
           ),
         ),
       ),
@@ -1095,7 +1090,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: kPrimaryContainer,
+        color: context.cs.primaryContainer,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -1116,7 +1111,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -1135,19 +1130,19 @@ class _GstReportScreenState extends State<GstReportScreen> {
                     children: [
                       Text(
                         inv.invoiceNumber,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         inv.clientName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1156,9 +1151,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 ),
                 Text(
                   _dateFormat.format(inv.createdAt),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1171,12 +1166,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 children: [
-                  _amountRow(s.gstLabelTaxable, inv.taxableAmount, kOnSurface),
+                  _amountRow(
+                    s.gstLabelTaxable,
+                    inv.taxableAmount,
+                    context.cs.onSurface,
+                  ),
                   if (isIgst) ...[
                     const SizedBox(height: 4),
                     _amountRow('IGST', inv.igstAmount, kPrimary),
@@ -1188,9 +1187,17 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   ],
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Divider(height: 1, color: kSurfaceDim),
+                    child: Divider(
+                      height: 1,
+                      color: context.cs.surfaceContainerHighest,
+                    ),
                   ),
-                  _amountRow(s.gstLabelTotalTax, inv.totalTax, kOnSurface, bold: true),
+                  _amountRow(
+                    s.gstLabelTotalTax,
+                    inv.totalTax,
+                    context.cs.onSurface,
+                    bold: true,
+                  ),
                 ],
               ),
             ),
@@ -1206,9 +1213,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 const Spacer(),
                 Text(
                   isIgst ? 'Interstate' : 'Intrastate',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1228,7 +1235,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -1247,19 +1254,19 @@ class _GstReportScreenState extends State<GstReportScreen> {
                     children: [
                       Text(
                         po.orderNumber,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         po.supplierName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -1268,9 +1275,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 ),
                 Text(
                   _dateFormat.format(receivedDate),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1283,12 +1290,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Column(
                 children: [
-                  _amountRow(s.gstLabelTaxable, po.taxableAmount, kOnSurface),
+                  _amountRow(
+                    s.gstLabelTaxable,
+                    po.taxableAmount,
+                    context.cs.onSurface,
+                  ),
                   if (isIgst) ...[
                     const SizedBox(height: 4),
                     _amountRow('IGST', po.igstAmount, kPrimary),
@@ -1300,9 +1311,17 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   ],
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Divider(height: 1, color: kSurfaceDim),
+                    child: Divider(
+                      height: 1,
+                      color: context.cs.surfaceContainerHighest,
+                    ),
                   ),
-                  _amountRow(s.gstLabelTotalTax, po.totalTax, kOnSurface, bold: true),
+                  _amountRow(
+                    s.gstLabelTotalTax,
+                    po.totalTax,
+                    context.cs.onSurface,
+                    bold: true,
+                  ),
                 ],
               ),
             ),
@@ -1335,9 +1354,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 const Spacer(),
                 Text(
                   isIgst ? 'Interstate' : 'Intrastate',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -1362,7 +1381,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
-            color: kOnSurfaceVariant,
+            color: context.cs.onSurfaceVariant,
           ),
         ),
         const Spacer(),
@@ -1389,30 +1408,33 @@ class _GstReportScreenState extends State<GstReportScreen> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.receipt_long_outlined,
                 size: 36,
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               s.gstReportNoInvoices,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _periodLabel,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -1430,31 +1452,34 @@ class _GstReportScreenState extends State<GstReportScreen> {
             Container(
               width: 80,
               height: 80,
-              decoration: const BoxDecoration(
-                color: kSurfaceContainerLow,
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLow,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.inventory_2_outlined,
                 size: 36,
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 20),
             Text(
               AppStrings.of(context).gstReportNoPurchaseOrders,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w600,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _periodLabel,
               textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ],
         ),
@@ -1551,9 +1576,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                       const SizedBox(height: 2),
                       Text(
                         s.gstReportOutputMinusInput,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -1564,9 +1589,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: netPayable >= 0
-                        ? kPrimary
-                        : const Color(0xFF16A34A),
+                    color: netPayable >= 0 ? kPrimary : const Color(0xFF16A34A),
                   ),
                 ),
               ],
@@ -1587,7 +1610,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: highlight ? kSurfaceContainerLow : kSurfaceLowest,
+        color: highlight
+            ? context.cs.surfaceContainerLow
+            : context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(12),
         boxShadow: const [kSubtleShadow],
       ),
@@ -1599,7 +1624,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: highlight ? FontWeight.w700 : FontWeight.w600,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 8),
@@ -1611,10 +1636,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   children: [
                     Text(
                       AppStrings.of(context).gstReportOutputSales,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w500,
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -1622,7 +1647,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
                       _currencyFormat.format(outputValue),
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: highlight ? FontWeight.w800 : FontWeight.w600,
+                        fontWeight: highlight
+                            ? FontWeight.w800
+                            : FontWeight.w600,
                         color: kPrimary,
                       ),
                     ),
@@ -1632,7 +1659,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
               Container(
                 width: 1,
                 height: 30,
-                color: kSurfaceDim,
+                color: context.cs.surfaceContainerHighest,
               ),
               Expanded(
                 child: Padding(
@@ -1642,10 +1669,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
                     children: [
                       Text(
                         AppStrings.of(context).gstReportInputPurchases,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w500,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -1678,11 +1705,11 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
     if (!PlanService.instance.hasReports) {
       return Scaffold(
-        backgroundColor: kSurface,
+        backgroundColor: context.cs.surface,
         appBar: AppBar(
           title: const Text('GST Report'),
-          backgroundColor: kSurface,
-          foregroundColor: kOnSurface,
+          backgroundColor: context.cs.surface,
+          foregroundColor: context.cs.onSurface,
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
@@ -1693,18 +1720,39 @@ class _GstReportScreenState extends State<GstReportScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
+                Icon(
+                  Icons.lock_outline,
+                  size: 64,
+                  color: context.cs.surfaceContainerHighest,
+                ),
                 const SizedBox(height: 16),
-                const Text('GST Reports', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
+                Text(
+                  'GST Reports',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: context.cs.onSurface,
+                  ),
+                ),
                 const SizedBox(height: 8),
-                const Text('Upgrade to Pro to access GST reports, GSTR-3B, and tax summaries.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
+                Text(
+                  'This feature is currently unavailable. Please check back later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
+                ),
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'GST Reports'))),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          const UpgradeScreen(featureName: 'GST Reports'),
+                    ),
+                  ),
                   icon: const Icon(Icons.workspace_premium),
-                  label: const Text('Upgrade to Pro'),
+                  label: const Text('View Plans'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
                   ),
@@ -1765,23 +1813,23 @@ class _GstReportScreenState extends State<GstReportScreen> {
         final netPayable = totalTax - inputTax;
 
         return Scaffold(
-          backgroundColor: kSurface,
+          backgroundColor: context.cs.surface,
           appBar: AppBar(
             elevation: 0,
-            backgroundColor: kSurface,
-            foregroundColor: kOnSurface,
+            backgroundColor: context.cs.surface,
+            foregroundColor: context.cs.onSurface,
             scrolledUnderElevation: 0,
             surfaceTintColor: Colors.transparent,
             title: Text(
               s.gstReportTitle,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             centerTitle: false,
-            iconTheme: const IconThemeData(color: kOnSurface),
+            iconTheme: IconThemeData(color: context.cs.onSurface),
           ),
           body: Column(
             children: [
@@ -1852,17 +1900,18 @@ class _GstReportScreenState extends State<GstReportScreen> {
                                     label: netPayable >= 0
                                         ? s.gstReportNetPayable
                                         : s.gstReportNetCredit,
-                                    value: _currencyFormat
-                                        .format(netPayable.abs()),
+                                    value: _currencyFormat.format(
+                                      netPayable.abs(),
+                                    ),
                                     color: netPayable >= 0
-                                        ? kOnSurface
+                                        ? context.cs.onSurface
                                         : const Color(0xFF16A34A),
                                     icon: Icons.account_balance_rounded,
                                   ),
                                   _summaryCard(
                                     label: 'Invoices / POs',
                                     value: '$invoiceCount / $poCount',
-                                    color: kOnSurface,
+                                    color: context.cs.onSurface,
                                     icon: Icons.description_outlined,
                                   ),
                                 ],
@@ -1931,7 +1980,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         ? null
                         : kSignatureGradient,
                     color: invoices.isEmpty || _isSharingReport
-                        ? kSurfaceDim
+                        ? context.cs.surfaceContainerHighest
                         : null,
                     borderRadius: BorderRadius.circular(14),
                     boxShadow: invoices.isEmpty || _isSharingReport
@@ -1952,7 +2001,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                           Icons.share_rounded,
                           size: 20,
                           color: invoices.isEmpty
-                              ? kOnSurfaceVariant
+                              ? context.cs.onSurfaceVariant
                               : Colors.white,
                         ),
                       const SizedBox(width: 10),
@@ -1962,7 +2011,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                           fontSize: 15,
                           fontWeight: FontWeight.w700,
                           color: invoices.isEmpty || _isSharingReport
-                              ? kOnSurfaceVariant
+                              ? context.cs.onSurfaceVariant
                               : Colors.white,
                         ),
                       ),
@@ -1984,7 +2033,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
     final hsnMap = <String, _HsnAggregate>{};
     for (final inv in invoices) {
       for (final item in inv.items) {
-        final code = item.hsnCode.trim().isEmpty ? AppStrings.of(context).gstNoHsn : item.hsnCode.trim();
+        final code = item.hsnCode.trim().isEmpty
+            ? AppStrings.of(context).gstNoHsn
+            : item.hsnCode.trim();
         final agg = hsnMap.putIfAbsent(code, () => _HsnAggregate(code));
         agg.description = item.description;
         agg.totalQuantity += item.quantity;
@@ -2030,12 +2081,20 @@ class _GstReportScreenState extends State<GstReportScreen> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.info_outline_rounded, size: 16, color: kPrimary),
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: kPrimary,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     AppStrings.of(context).gstHsnFilingNote(hsnList.length),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimary,
+                    ),
                   ),
                 ),
               ],
@@ -2047,14 +2106,48 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+              color: context.cs.surfaceContainerLow,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(12),
+              ),
             ),
             child: Row(
               children: [
-                Expanded(flex: 3, child: Text(AppStrings.of(context).gstHsnCode, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
-                Expanded(flex: 2, child: Text(AppStrings.of(context).gstLabelTaxable, textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
-                Expanded(flex: 2, child: Text(AppStrings.of(context).gstLabelTax, textAlign: TextAlign.right, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: kOnSurfaceVariant))),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    AppStrings.of(context).gstHsnCode,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    AppStrings.of(context).gstLabelTaxable,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    AppStrings.of(context).gstLabelTax,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -2062,8 +2155,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
           // HSN rows
           Container(
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
-              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+              color: context.cs.surfaceContainerLowest,
+              borderRadius: const BorderRadius.vertical(
+                bottom: Radius.circular(12),
+              ),
               boxShadow: const [kSubtleShadow],
             ),
             child: Column(
@@ -2075,22 +2170,63 @@ class _GstReportScreenState extends State<GstReportScreen> {
                     children: [
                       _hsnRow(h),
                       if (i < hsnList.length - 1)
-                        Container(height: 1, color: kSurfaceContainerLow, margin: const EdgeInsets.symmetric(horizontal: 12)),
+                        Container(
+                          height: 1,
+                          color: context.cs.surfaceContainerLow,
+                          margin: EdgeInsets.symmetric(horizontal: 12),
+                        ),
                     ],
                   );
                 }),
                 // Total row
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: kSurfaceContainerLow,
-                    borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),
+                    color: context.cs.surfaceContainerLow,
+                    borderRadius: const BorderRadius.vertical(
+                      bottom: Radius.circular(12),
+                    ),
                   ),
                   child: Row(
                     children: [
-                      Expanded(flex: 3, child: Text(AppStrings.of(context).gstLabelTotal.toUpperCase(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
-                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTaxable), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kOnSurface))),
-                      Expanded(flex: 2, child: Text(_currencyFormat.format(totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: kPrimary))),
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          AppStrings.of(context).gstLabelTotal.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: context.cs.onSurface,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _currencyFormat.format(totalTaxable),
+                          textAlign: TextAlign.right,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: context.cs.onSurface,
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          _currencyFormat.format(totalTax),
+                          textAlign: TextAlign.right,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: kPrimary,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2118,18 +2254,48 @@ class _GstReportScreenState extends State<GstReportScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kOnSurface)),
-                Text(h.description, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant), overflow: TextOverflow.ellipsis),
+                Text(
+                  h.hsnCode,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: context.cs.onSurface,
+                  ),
+                ),
+                Text(
+                  h.description,
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ],
             ),
           ),
           Expanded(
             flex: 2,
-            child: Text(_currencyFormat.format(h.taxableAmount), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurface)),
+            child: Text(
+              _currencyFormat.format(h.taxableAmount),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+            ),
           ),
           Expanded(
             flex: 2,
-            child: Text(_currencyFormat.format(h.totalTax), textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kPrimary)),
+            child: Text(
+              _currencyFormat.format(h.totalTax),
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: kPrimary,
+              ),
+            ),
           ),
         ],
       ),
@@ -2143,7 +2309,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -2153,28 +2319,59 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: kPrimaryContainer, borderRadius: BorderRadius.circular(20)),
-                child: Text(h.hsnCode, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: kPrimary)),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: context.cs.primaryContainer,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  h.hsnCode,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: kPrimary,
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               _gstRateBadge(h.gstRate),
               const Spacer(),
               Text(
                 '${_formatQty(h.totalQuantity)}${h.unit.isNotEmpty ? ' ${h.unit}' : ''}',
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: context.cs.onSurfaceVariant,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(h.description, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurfaceVariant)),
+          Text(
+            h.description,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
           const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: kSurfaceContainerLow, borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(
+              color: context.cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(10),
+            ),
             child: Column(
               children: [
-                _amountRow(s.gstLabelTaxable, h.taxableAmount, kOnSurface),
+                _amountRow(
+                  s.gstLabelTaxable,
+                  h.taxableAmount,
+                  context.cs.onSurface,
+                ),
                 if (isIgst) ...[
                   const SizedBox(height: 4),
                   _amountRow('IGST', h.igstAmount, kPrimary),
@@ -2184,8 +2381,19 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   const SizedBox(height: 4),
                   _amountRow('SGST', h.sgstAmount, kPrimary),
                 ],
-                Padding(padding: const EdgeInsets.symmetric(vertical: 6), child: Divider(height: 1, color: kSurfaceDim)),
-                _amountRow(s.gstLabelTotalTax, h.totalTax, kOnSurface, bold: true),
+                Padding(
+                  padding: EdgeInsets.symmetric(vertical: 6),
+                  child: Divider(
+                    height: 1,
+                    color: context.cs.surfaceContainerHighest,
+                  ),
+                ),
+                _amountRow(
+                  s.gstLabelTotalTax,
+                  h.totalTax,
+                  context.cs.onSurface,
+                  bold: true,
+                ),
               ],
             ),
           ),
@@ -2255,16 +2463,26 @@ class _GstReportScreenState extends State<GstReportScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFF7C3AED).withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.15)),
+              border: Border.all(
+                color: const Color(0xFF7C3AED).withValues(alpha: 0.15),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.description_outlined, size: 16, color: Color(0xFF7C3AED)),
+                const Icon(
+                  Icons.description_outlined,
+                  size: 16,
+                  color: Color(0xFF7C3AED),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     AppStrings.of(context).gstGstrSummaryFor(_periodLabel),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF7C3AED)),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF7C3AED),
+                    ),
                   ),
                 ),
               ],
@@ -2277,19 +2495,29 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [kSubtleShadow],
             ),
             child: Column(
               children: [
-                _gstr3bRow(AppStrings.of(context).gstrOutwardSuppliesLabel, outputTaxable, outputTax),
+                _gstr3bRow(
+                  AppStrings.of(context).gstrOutwardSuppliesLabel,
+                  outputTaxable,
+                  outputTax,
+                ),
                 const SizedBox(height: 8),
-                Container(height: 1, color: kSurfaceContainerLow),
+                Container(height: 1, color: context.cs.surfaceContainerLow),
                 const SizedBox(height: 8),
                 _gstr3bSubRow('Intrastate', intraTaxable, intraCgst, intraSgst),
                 const SizedBox(height: 6),
-                _gstr3bSubRow('Interstate', interTaxable, 0, 0, igst: interIgst),
+                _gstr3bSubRow(
+                  'Interstate',
+                  interTaxable,
+                  0,
+                  0,
+                  igst: interIgst,
+                ),
               ],
             ),
           ),
@@ -2300,15 +2528,19 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [kSubtleShadow],
             ),
             child: Column(
               children: [
-                _gstr3bRow(AppStrings.of(context).gstrItcAvailable, inputTaxable, inputTax),
+                _gstr3bRow(
+                  AppStrings.of(context).gstrItcAvailable,
+                  inputTaxable,
+                  inputTax,
+                ),
                 const SizedBox(height: 8),
-                Container(height: 1, color: kSurfaceContainerLow),
+                Container(height: 1, color: context.cs.surfaceContainerLow),
                 const SizedBox(height: 8),
                 _gstr3bITCRow('CGST', inputIntraCgst, const Color(0xFF16A34A)),
                 const SizedBox(height: 6),
@@ -2316,9 +2548,14 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 const SizedBox(height: 6),
                 _gstr3bITCRow('IGST', inputInterIgst, const Color(0xFF16A34A)),
                 const SizedBox(height: 8),
-                Container(height: 1, color: kSurfaceContainerLow),
+                Container(height: 1, color: context.cs.surfaceContainerLow),
                 const SizedBox(height: 8),
-                _gstr3bITCRow(AppStrings.of(context).gstrTotalItc, inputTax, const Color(0xFF16A34A), bold: true),
+                _gstr3bITCRow(
+                  AppStrings.of(context).gstrTotalItc,
+                  inputTax,
+                  const Color(0xFF16A34A),
+                  bold: true,
+                ),
               ],
             ),
           ),
@@ -2330,7 +2567,9 @@ class _GstReportScreenState extends State<GstReportScreen> {
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               gradient: isCredit
-                  ? const LinearGradient(colors: [Color(0xFF16A34A), Color(0xFF15803D)])
+                  ? const LinearGradient(
+                      colors: [Color(0xFF16A34A), Color(0xFF15803D)],
+                    )
                   : kSignatureGradient,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [kWhisperShadow],
@@ -2339,18 +2578,30 @@ class _GstReportScreenState extends State<GstReportScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isCredit ? AppStrings.of(context).gstReportItcCreditBalance : AppStrings.of(context).gstReportNetTaxPayable,
-                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Colors.white70),
+                  isCredit
+                      ? AppStrings.of(context).gstReportItcCreditBalance
+                      : AppStrings.of(context).gstReportNetTaxPayable,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.white70,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   _currencyFormat.format(netPayable.abs()),
-                  style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white),
+                  style: const TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    _bannerBadge('Output: ${_currencyFormat.format(outputTax)}'),
+                    _bannerBadge(
+                      'Output: ${_currencyFormat.format(outputTax)}',
+                    ),
                     const SizedBox(width: 8),
                     _bannerBadge('ITC: ${_currencyFormat.format(inputTax)}'),
                   ],
@@ -2373,7 +2624,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(14),
               boxShadow: const [kSubtleShadow],
             ),
@@ -2397,7 +2648,14 @@ class _GstReportScreenState extends State<GstReportScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: context.cs.onSurfaceVariant,
+          ),
+        ),
         const SizedBox(height: 6),
         Row(
           children: [
@@ -2405,8 +2663,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(AppStrings.of(context).gstLabelTaxableValue, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                  Text(_currencyFormat.format(taxable), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kOnSurface)),
+                  Text(
+                    AppStrings.of(context).gstLabelTaxableValue,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _currencyFormat.format(taxable),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: context.cs.onSurface,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2414,8 +2685,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(AppStrings.of(context).gstLabelTaxAmount, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                  Text(_currencyFormat.format(tax), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: kPrimary)),
+                  Text(
+                    AppStrings.of(context).gstLabelTaxAmount,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
+                  Text(
+                    _currencyFormat.format(tax),
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: kPrimary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2425,37 +2709,111 @@ class _GstReportScreenState extends State<GstReportScreen> {
     );
   }
 
-  Widget _gstr3bSubRow(String label, double taxable, double cgst, double sgst, {double igst = 0}) {
+  Widget _gstr3bSubRow(
+    String label,
+    double taxable,
+    double cgst,
+    double sgst, {
+    double igst = 0,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(left: 12),
       child: Row(
         children: [
-          Container(width: 6, height: 6, decoration: BoxDecoration(color: kPrimary.withValues(alpha: 0.4), shape: BoxShape.circle)),
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: kPrimary.withValues(alpha: 0.4),
+              shape: BoxShape.circle,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(flex: 3, child: Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: kOnSurfaceVariant), maxLines: 1, overflow: TextOverflow.ellipsis)),
+          Expanded(
+            flex: 3,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w500,
+                color: context.cs.onSurfaceVariant,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
           const SizedBox(width: 4),
-          Expanded(flex: 2, child: Text(_currencyFormat.format(taxable), style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kOnSurface), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right)),
+          Expanded(
+            flex: 2,
+            child: Text(
+              _currencyFormat.format(taxable),
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurface,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+            ),
+          ),
           const SizedBox(width: 4),
           Expanded(
             flex: 3,
             child: igst > 0
-              ? Text('IGST: ${_currencyFormat.format(igst)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimary), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right)
-              : Text('C: ${_currencyFormat.format(cgst)} S: ${_currencyFormat.format(sgst)}', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: kPrimary), maxLines: 1, overflow: TextOverflow.ellipsis, textAlign: TextAlign.right),
+                ? Text(
+                    'IGST: ${_currencyFormat.format(igst)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                  )
+                : Text(
+                    'C: ${_currencyFormat.format(cgst)} S: ${_currencyFormat.format(sgst)}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _gstr3bITCRow(String label, double value, Color color, {bool bold = false}) {
+  Widget _gstr3bITCRow(
+    String label,
+    double value,
+    Color color, {
+    bool bold = false,
+  }) {
     return Row(
       children: [
         Expanded(
-          child: Text(label, style: TextStyle(fontSize: 12, fontWeight: bold ? FontWeight.w700 : FontWeight.w500, color: kOnSurfaceVariant)),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: bold ? FontWeight.w700 : FontWeight.w500,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
         ),
         Text(
           _currencyFormat.format(value),
-          style: TextStyle(fontSize: bold ? 15 : 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: color),
+          style: TextStyle(
+            fontSize: bold ? 15 : 13,
+            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+            color: color,
+          ),
         ),
       ],
     );
@@ -2466,20 +2824,41 @@ class _GstReportScreenState extends State<GstReportScreen> {
     final isCredit = net < 0;
     return Row(
       children: [
-        SizedBox(width: 50, child: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: kOnSurfaceVariant))),
+        SizedBox(
+          width: 50,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.cs.onSurfaceVariant,
+            ),
+          ),
+        ),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text('Out: ${_currencyFormat.format(output)}', style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-              Text('In: ${_currencyFormat.format(input)}', style: const TextStyle(fontSize: 10, color: Color(0xFF16A34A))),
+              Text(
+                'Out: ${_currencyFormat.format(output)}',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: context.cs.onSurfaceVariant,
+                ),
+              ),
+              Text(
+                'In: ${_currencyFormat.format(input)}',
+                style: const TextStyle(fontSize: 10, color: Color(0xFF16A34A)),
+              ),
             ],
           ),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
-            color: isCredit ? const Color(0xFF16A34A).withValues(alpha: 0.1) : kPrimary.withValues(alpha: 0.1),
+            color: isCredit
+                ? const Color(0xFF16A34A).withValues(alpha: 0.1)
+                : kPrimary.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
           ),
           child: Text(
@@ -2512,7 +2891,8 @@ class _GstReportScreenState extends State<GstReportScreen> {
       }
     }
 
-    final rates = rateMap.values.toList()..sort((a, b) => a.rate.compareTo(b.rate));
+    final rates = rateMap.values.toList()
+      ..sort((a, b) => a.rate.compareTo(b.rate));
 
     if (rates.isEmpty) {
       return _emptyState(AppStrings.of(context));
@@ -2520,7 +2900,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
     final totalTaxable = rates.fold<double>(0, (s, r) => s + r.taxableAmount);
     final totalTax = rates.fold<double>(0, (s, r) => s + r.taxAmount);
-    final maxTaxable = rates.map((r) => r.taxableAmount).fold<double>(0, (a, b) => a > b ? a : b).clamp(1.0, double.infinity);
+    final maxTaxable = rates
+        .map((r) => r.taxableAmount)
+        .fold<double>(0, (a, b) => a > b ? a : b)
+        .clamp(1.0, double.infinity);
 
     // Colors for each rate
     final rateColors = <double, Color>{
@@ -2543,16 +2926,26 @@ class _GstReportScreenState extends State<GstReportScreen> {
             decoration: BoxDecoration(
               color: const Color(0xFFF59E0B).withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.15)),
+              border: Border.all(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+              ),
             ),
             child: Row(
               children: [
-                const Icon(Icons.pie_chart_outline_rounded, size: 16, color: Color(0xFFF59E0B)),
+                const Icon(
+                  Icons.pie_chart_outline_rounded,
+                  size: 16,
+                  color: Color(0xFFF59E0B),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     AppStrings.of(context).gstTaxRateNote(rates.length),
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFFB45309)),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFB45309),
+                    ),
                   ),
                 ),
               ],
@@ -2569,16 +2962,34 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 child: CustomPaint(
                   painter: _DonutChartPainter(
                     segments: rates.map((r) {
-                      final fraction = totalTaxable > 0 ? r.taxableAmount / totalTaxable : 0.0;
-                      return _DonutSegment(fraction, rateColors[r.rate] ?? kPrimary);
+                      final fraction = totalTaxable > 0
+                          ? r.taxableAmount / totalTaxable
+                          : 0.0;
+                      return _DonutSegment(
+                        fraction,
+                        rateColors[r.rate] ?? kPrimary,
+                      );
                     }).toList(),
                   ),
                   child: Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('${rates.length}', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: kOnSurface)),
-                        Text(AppStrings.of(context).gstRates, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
+                        Text(
+                          '${rates.length}',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: context.cs.onSurface,
+                          ),
+                        ),
+                        Text(
+                          AppStrings.of(context).gstRates,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -2596,7 +3007,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: kSurfaceLowest,
+                color: context.cs.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: const [kSubtleShadow],
               ),
@@ -2606,20 +3017,31 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
+                        ),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
                           '${r.rate.toStringAsFixed(r.rate.truncateToDouble() == r.rate ? 0 : 1)}% GST',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: color,
+                          ),
                         ),
                       ),
                       const Spacer(),
                       Text(
                         '${r.invoiceCount} item${r.invoiceCount == 1 ? '' : 's'}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: kOnSurfaceVariant),
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: context.cs.onSurfaceVariant,
+                        ),
                       ),
                     ],
                   ),
@@ -2629,7 +3051,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                     child: LinearProgressIndicator(
                       value: barFraction,
                       minHeight: 6,
-                      backgroundColor: kSurfaceContainerLow,
+                      backgroundColor: context.cs.surfaceContainerLow,
                       valueColor: AlwaysStoppedAnimation(color),
                     ),
                   ),
@@ -2640,8 +3062,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(AppStrings.of(context).gstLabelTaxable, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                            Text(_currencyFormat.format(r.taxableAmount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface)),
+                            Text(
+                              AppStrings.of(context).gstLabelTaxable,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: context.cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              _currencyFormat.format(r.taxableAmount),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: context.cs.onSurface,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2649,8 +3084,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            Text(AppStrings.of(context).gstLabelTax, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                            Text(_currencyFormat.format(r.taxAmount), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+                            Text(
+                              AppStrings.of(context).gstLabelTax,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: context.cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              _currencyFormat.format(r.taxAmount),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: color,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2658,8 +3106,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Text(AppStrings.of(context).gstLabelTotal, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                            Text(_currencyFormat.format(r.totalAmount), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: kOnSurface)),
+                            Text(
+                              AppStrings.of(context).gstLabelTotal,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: context.cs.onSurfaceVariant,
+                              ),
+                            ),
+                            Text(
+                              _currencyFormat.format(r.totalAmount),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: context.cs.onSurface,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -2685,8 +3146,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(AppStrings.of(context).gstLabelTotalTaxable, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                      Text(_currencyFormat.format(totalTaxable), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kOnSurface)),
+                      Text(
+                        AppStrings.of(context).gstLabelTotalTaxable,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _currencyFormat.format(totalTaxable),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: context.cs.onSurface,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2694,8 +3168,21 @@ class _GstReportScreenState extends State<GstReportScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(AppStrings.of(context).gstLabelTotalTax, style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant)),
-                      Text(_currencyFormat.format(totalTax), style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: kPrimary)),
+                      Text(
+                        AppStrings.of(context).gstLabelTotalTax,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: context.cs.onSurfaceVariant,
+                        ),
+                      ),
+                      Text(
+                        _currencyFormat.format(totalTax),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          color: kPrimary,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -2725,23 +3212,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
           child: SizedBox(
             width: double.infinity,
             child: OutlinedButton(
-              onPressed:
-                  _hasMoreInvoices && !_isLoadingMoreInvoices
-                      ? () => _loadInvoices(reset: false)
-                      : null,
+              onPressed: _hasMoreInvoices && !_isLoadingMoreInvoices
+                  ? () => _loadInvoices(reset: false)
+                  : null,
               child: _isLoadingMoreInvoices
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                      ),
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : Text(
-                      _hasMoreInvoices
-                          ? s.gstLoadMore
-                          : s.gstNoMore,
-                    ),
+                  : Text(_hasMoreInvoices ? s.gstLoadMore : s.gstNoMore),
             ),
           ),
         ),

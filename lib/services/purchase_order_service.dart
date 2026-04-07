@@ -1,19 +1,19 @@
 import 'dart:async';
 import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/modals/stock_movement.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'firestore_page.dart';
+
 class PurchaseOrderService {
-  PurchaseOrderService({FirebaseFirestore? firestore, FirebaseAuth? auth})
-      : _db = firestore ?? FirebaseFirestore.instance,
-        _auth = auth ?? FirebaseAuth.instance;
+  PurchaseOrderService({FirebaseFirestore? firestore})
+    : _db = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _db;
-  final FirebaseAuth _auth;
 
   // Collections
   CollectionReference<Map<String, dynamic>> _poCol(String ownerId) =>
@@ -35,16 +35,78 @@ class PurchaseOrderService {
     int limit = 50,
   }) {
     final ownerId = _requireOwnerId();
-    Query<Map<String, dynamic>> q =
-        _poCol(ownerId).orderBy('createdAt', descending: true);
+    Query<Map<String, dynamic>> q = _poCol(
+      ownerId,
+    ).orderBy('createdAt', descending: true);
     if (status != null) {
       q = q.where('status', isEqualTo: status.name);
     }
-    return q.limit(limit).snapshots().map(
+    return q
+        .limit(limit)
+        .snapshots()
+        .map(
           (snap) => snap.docs
               .map((d) => PurchaseOrder.fromMap(d.data(), docId: d.id))
               .toList(),
         );
+  }
+
+  Future<List<PurchaseOrder>> getPurchaseOrders({
+    DateTime? startDate,
+    DateTime? endDateExclusive,
+    PurchaseOrderStatus? status,
+    bool gstEnabledOnly = false,
+    int pageSize = 200,
+    int maxResults = 5000,
+  }) async {
+    final ownerId = _requireOwnerId();
+    Query<Map<String, dynamic>> query = _poCol(
+      ownerId,
+    ).orderBy('createdAt', descending: true);
+
+    if (startDate != null) {
+      query = query.where(
+        'createdAt',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+    if (endDateExclusive != null) {
+      query = query.where(
+        'createdAt',
+        isLessThan: Timestamp.fromDate(endDateExclusive),
+      );
+    }
+
+    final orders = <PurchaseOrder>[];
+    QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
+    var hasMore = true;
+
+    while (hasMore && orders.length < maxResults) {
+      final page = await query.fetchPage<PurchaseOrder>(
+        limit: pageSize,
+        startAfterDocument: cursor,
+        fromMap: (data, docId) => PurchaseOrder.fromMap(data, docId: docId),
+      );
+
+      final filtered = page.items.where((order) {
+        if (status != null && order.status != status) {
+          return false;
+        }
+        if (gstEnabledOnly && !order.gstEnabled) {
+          return false;
+        }
+        return true;
+      });
+      orders.addAll(filtered);
+
+      cursor = page.cursor;
+      hasMore = page.hasMore && page.items.isNotEmpty;
+    }
+
+    if (orders.length > maxResults) {
+      return orders.sublist(0, maxResults);
+    }
+    return orders;
   }
 
   // ── CRUD ────────────────────────────────────────────────────────────────
@@ -75,13 +137,28 @@ class PurchaseOrderService {
 
   /// Mark a PO as received. Updates stock for all items with productId.
   /// Uses a Firestore batch for atomicity.
+  /// Includes an idempotency check to prevent double stock entry.
   Future<void> markAsReceived(PurchaseOrder order) async {
     final ownerId = _requireOwnerId();
     final now = DateTime.now();
+
+    // Idempotency guard: re-read the PO to ensure it hasn't already been received
+    final poRef = _poCol(ownerId).doc(order.id);
+    final currentDoc = await poRef.get();
+    final currentData = currentDoc.data();
+    if (currentData == null) return;
+    final currentStatus = currentData['status'] as String? ?? '';
+    if (currentStatus == PurchaseOrderStatus.received.name ||
+        currentStatus == PurchaseOrderStatus.cancelled.name) {
+      debugPrint(
+        '[PurchaseOrderService] PO ${order.id} already $currentStatus — skipping',
+      );
+      return;
+    }
+
     final batch = _db.batch();
 
     // 1. Update PO status
-    final poRef = _poCol(ownerId).doc(order.id);
     batch.update(poRef, {
       'status': PurchaseOrderStatus.received.name,
       'receivedAt': Timestamp.fromDate(now),
@@ -108,7 +185,8 @@ class PurchaseOrderService {
         productName: item.productName,
         type: StockMovementType.purchaseIn,
         quantity: item.quantity,
-        balanceAfter: 0, // Will be corrected by Firestore increment - approximate
+        balanceAfter:
+            0, // Will be corrected by Firestore increment - approximate
         referenceId: order.id,
         referenceNumber: order.orderNumber,
         unitPrice: item.unitPrice,
@@ -123,9 +201,9 @@ class PurchaseOrderService {
 
   Future<void> cancelPurchaseOrder(String orderId) async {
     final ownerId = _requireOwnerId();
-    await _poCol(ownerId).doc(orderId).update({
-      'status': PurchaseOrderStatus.cancelled.name,
-    });
+    await _poCol(
+      ownerId,
+    ).doc(orderId).update({'status': PurchaseOrderStatus.cancelled.name});
   }
 
   Future<void> deletePurchaseOrder(String orderId) async {
@@ -144,16 +222,18 @@ class PurchaseOrderService {
       final counterRef = _counterCol(ownerId).doc(year.toString());
       int sequence = 1;
 
-      await _db.runTransaction((tx) async {
-        final snap = await tx.get(counterRef);
-        sequence =
-            snap.exists ? ((snap.data()?['nextSequence'] as int?) ?? 1) : 1;
-        tx.set(
-          counterRef,
-          {'nextSequence': sequence + 1, 'year': year},
-          SetOptions(merge: true),
-        );
-      }).timeout(const Duration(seconds: 5));
+      await _db
+          .runTransaction((tx) async {
+            final snap = await tx.get(counterRef);
+            sequence = snap.exists
+                ? ((snap.data()?['nextSequence'] as int?) ?? 1)
+                : 1;
+            tx.set(counterRef, {
+              'nextSequence': sequence + 1,
+              'year': year,
+            }, SetOptions(merge: true));
+          })
+          .timeout(const Duration(seconds: 5));
 
       // Cache for offline fallback.
       final prefs = await SharedPreferences.getInstance();
@@ -181,11 +261,5 @@ class PurchaseOrderService {
 
   // ── Auth guard ─────────────────────────────────────────────────────────
 
-  String _requireOwnerId() {
-    final uid = _auth.currentUser?.uid;
-    if (uid == null) {
-      throw StateError('Sign in required to manage purchase orders.');
-    }
-    return uid;
-  }
+  String _requireOwnerId() => TeamService.instance.getEffectiveOwnerId();
 }

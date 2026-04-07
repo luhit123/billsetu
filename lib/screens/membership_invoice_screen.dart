@@ -10,21 +10,20 @@ import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/screens/template_picker_sheet.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/profile_service.dart';
+import 'package:billeasy/utils/error_helpers.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:pdf/pdf.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-BoxDecoration _cardDeco() => const BoxDecoration(
-      color: kSurfaceLowest,
-      borderRadius: BorderRadius.all(Radius.circular(20)),
-      boxShadow: [kWhisperShadow],
-    );
+BoxDecoration _cardDeco(BuildContext context) => BoxDecoration(
+  color: context.cs.surfaceContainerLowest,
+  borderRadius: const BorderRadius.all(Radius.circular(20)),
+  boxShadow: const [kWhisperShadow],
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,12 +47,6 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   final NumberFormat _currencyFormat = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '\u20b9',
-    decimalDigits: 0,
-  );
-  // PDF-safe formatter (default fonts don't support ₹ glyph)
-  final NumberFormat _pdfCurrencyFormat = NumberFormat.currency(
-    locale: 'en_IN',
-    symbol: 'Rs. ',
     decimalDigits: 0,
   );
 
@@ -97,12 +90,15 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     return total;
   }
 
-  int get _totalDuration => _member.endDate.difference(_member.startDate).inDays;
+  int get _totalDuration =>
+      _member.endDate.difference(_member.startDate).inDays;
 
   double get _progressFraction {
     if (_totalDuration <= 0) return 1.0;
-    final elapsed =
-        DateTime.now().difference(_member.startDate).inDays.clamp(0, _totalDuration);
+    final elapsed = DateTime.now()
+        .difference(_member.startDate)
+        .inDays
+        .clamp(0, _totalDuration);
     return elapsed / _totalDuration;
   }
 
@@ -117,7 +113,9 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     try {
       final profile = await ProfileService().getCurrentProfile();
       if (mounted) setState(() => _profile = profile);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[MembershipInvoice] Profile load failed: $e');
+    }
   }
 
   Future<void> _loadTemplate() async {
@@ -147,17 +145,20 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   Invoice _toInvoice() {
     final items = <LineItem>[
       LineItem(
-        description: '${_plan.name} (${_plan.durationLabel}${_isRecurring ? ' - Recurring' : ' - Package'})',
+        description:
+            '${_plan.name} (${_plan.durationLabel}${_isRecurring ? ' - Recurring' : ' - Package'})',
         quantity: 1,
         unitPrice: _plan.price,
       ),
     ];
     if (_isRecurring && _member.joiningFeePaid > 0) {
-      items.add(LineItem(
-        description: 'Joining Fee (one-time)',
-        quantity: 1,
-        unitPrice: _member.joiningFeePaid,
-      ));
+      items.add(
+        LineItem(
+          description: 'Joining Fee (one-time)',
+          quantity: 1,
+          unitPrice: _member.joiningFeePaid,
+        ),
+      );
     }
     return Invoice(
       id: _invoiceNumber,
@@ -169,7 +170,9 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       createdAt: _member.startDate,
       status: InvoiceStatus.paid,
       dueDate: _member.endDate,
-      discountType: _plan.discountPercent > 0 ? InvoiceDiscountType.percentage : null,
+      discountType: _plan.discountPercent > 0
+          ? InvoiceDiscountType.percentage
+          : null,
       discountValue: _plan.discountPercent,
     );
   }
@@ -179,7 +182,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: kBuildGradientAppBar(
         titleText: 'Membership Invoice',
         actions: [
@@ -212,8 +215,8 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
 
   Widget _buildBottomBar() {
     return Container(
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         boxShadow: [kWhisperShadow],
       ),
       child: SafeArea(
@@ -232,8 +235,8 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     : const Icon(Icons.picture_as_pdf_outlined, size: 18),
                 label: const Text('Download PDF'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: kOnSurface,
-                  side: const BorderSide(color: kOutlineVariant),
+                  foregroundColor: context.cs.onSurface,
+                  side: BorderSide(color: context.cs.outlineVariant),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
@@ -248,7 +251,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                 icon: const Icon(Icons.share_outlined, size: 18),
                 label: const Text('Share'),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
+                  backgroundColor: context.cs.primary,
                   foregroundColor: Colors.white,
                   elevation: 0,
                   padding: const EdgeInsets.symmetric(vertical: 14),
@@ -334,10 +337,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Container(
-            height: 1,
-            color: Colors.white.withOpacity(0.2),
-          ),
+          Container(height: 1, color: Colors.white.withOpacity(0.2)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -363,22 +363,22 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
 
   Widget _buildMemberDetailsCard() {
     return Container(
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
+          Padding(
             padding: EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Text(
               'Member Details',
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
           ),
-          Container(height: 1, color: kSurfaceContainer),
+          Container(height: 1, color: context.cs.surfaceContainer),
           _InfoRow(label: 'Name', value: _member.name),
           if (_member.phone.trim().isNotEmpty)
             _InfoRow(label: 'Phone', value: _member.phone),
@@ -402,7 +402,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     final totalDays = _totalDuration;
 
     return Container(
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -410,18 +410,20 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
             child: Row(
               children: [
-                const Text(
+                Text(
                   'Plan Details',
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
                 const Spacer(),
                 Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: planColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(20),
@@ -438,7 +440,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
               ],
             ),
           ),
-          Container(height: 1, color: kSurfaceContainer),
+          Container(height: 1, color: context.cs.surfaceContainer),
           // Plan name
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -464,19 +466,19 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     children: [
                       Text(
                         _plan.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w800,
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         _plan.durationLabel,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                     ],
@@ -493,7 +495,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
             child: Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -502,10 +504,10 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
+                        Text(
                           'Start Date',
                           style: TextStyle(
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -513,8 +515,8 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _dateFormat.format(_member.startDate),
-                          style: const TextStyle(
-                            color: kOnSurface,
+                          style: TextStyle(
+                            color: context.cs.onSurface,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
@@ -534,10 +536,10 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text(
+                        Text(
                           'End Date',
                           style: TextStyle(
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
                           ),
@@ -545,8 +547,8 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                         const SizedBox(height: 4),
                         Text(
                           _dateFormat.format(_member.endDate),
-                          style: const TextStyle(
-                            color: kOnSurface,
+                          style: TextStyle(
+                            color: context.cs.onSurface,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
@@ -568,9 +570,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                 decoration: BoxDecoration(
                   color: planColor.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: planColor.withOpacity(0.15),
-                  ),
+                  border: Border.all(color: planColor.withOpacity(0.15)),
                 ),
                 child: Row(
                   children: [
@@ -579,7 +579,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     Text(
                       'Next Renewal',
                       style: TextStyle(
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -610,18 +610,18 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                   children: [
                     Text(
                       _member.daysLeftLabel,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                       ),
                     ),
                     Text(
                       '$totalDays days total',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
-                        color: kTextTertiary,
+                        color: context.cs.onSurfaceVariant.withAlpha(153),
                       ),
                     ),
                   ],
@@ -632,13 +632,13 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                   child: LinearProgressIndicator(
                     value: 1.0 - _progressFraction,
                     minHeight: 8,
-                    backgroundColor: kSurfaceContainerLow,
+                    backgroundColor: context.cs.surfaceContainerLow,
                     valueColor: AlwaysStoppedAnimation<Color>(
                       daysLeft <= 7
                           ? kOverdue
                           : daysLeft <= 30
-                              ? kPending
-                              : planColor,
+                          ? kPending
+                          : planColor,
                     ),
                   ),
                 ),
@@ -654,25 +654,25 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
   Widget _buildStatusBadge() {
     final (bg, text, label) = switch (_member.status) {
       MemberStatus.active => (
-          const Color(0xFFDCFCE7),
-          const Color(0xFF15803D),
-          'Active',
-        ),
+        const Color(0xFFDCFCE7),
+        const Color(0xFF15803D),
+        'Active',
+      ),
       MemberStatus.expired => (
-          const Color(0xFFFEE2E2),
-          const Color(0xFFB91C1C),
-          'Expired',
-        ),
+        const Color(0xFFFEE2E2),
+        const Color(0xFFB91C1C),
+        'Expired',
+      ),
       MemberStatus.frozen => (
-          const Color(0xFFDBEAFE),
-          const Color(0xFF1E40AF),
-          'Frozen',
-        ),
+        const Color(0xFFDBEAFE),
+        const Color(0xFF1E40AF),
+        'Frozen',
+      ),
       MemberStatus.cancelled => (
-          const Color(0xFFF3F4F6),
-          const Color(0xFF6B7280),
-          'Cancelled',
-        ),
+        const Color(0xFFF3F4F6),
+        const Color(0xFF6B7280),
+        'Cancelled',
+      ),
     };
 
     return Container(
@@ -700,20 +700,20 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Payment Summary',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 12),
-          Container(height: 1, color: kSurfaceContainer),
+          Container(height: 1, color: context.cs.surfaceContainer),
           const SizedBox(height: 12),
           _SummaryLine(
             label: _isRecurring ? 'Plan Price' : 'Package Fee',
@@ -737,24 +737,26 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
           const SizedBox(height: 8),
           _SummaryLine(
             label: 'Payment Status',
-            value: _member.amountPaid >= _plan.effectivePrice ? 'Paid' : 'Pending',
+            value: _member.amountPaid >= _plan.effectivePrice
+                ? 'Paid'
+                : 'Pending',
             valueColor: _member.amountPaid >= _plan.effectivePrice
                 ? const Color(0xFF15803D)
                 : const Color(0xFFB45309),
           ),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: kOutlineVariant, height: 1),
+            child: Divider(color: context.cs.outlineVariant, height: 1),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Total',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
               ),
               Text(
@@ -769,290 +771,6 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
           ),
         ],
       ),
-    );
-  }
-
-  // ── PDF Generation ─────────────────────────────────────────────────────────
-
-  Future<Uint8List> _buildMembershipPdf() async {
-    final pdf = pw.Document();
-    final profile = _profile;
-    final businessName = profile?.storeName.trim().isNotEmpty == true
-        ? profile!.storeName
-        : 'BillRaja';
-
-    // Parse plan color for PDF
-    PdfColor planPdfColor;
-    try {
-      final hex = _plan.colorHex.replaceFirst('#', '');
-      final r = int.parse(hex.substring(0, 2), radix: 16) / 255;
-      final g = int.parse(hex.substring(2, 4), radix: 16) / 255;
-      final b = int.parse(hex.substring(4, 6), radix: 16) / 255;
-      planPdfColor = PdfColor(r, g, b);
-    } catch (_) {
-      planPdfColor = const PdfColor(0.0, 0.34, 1.0);
-    }
-
-    final headerTextStyle = pw.TextStyle(
-      color: PdfColors.white,
-      fontSize: 10,
-    );
-    final headerBoldStyle = pw.TextStyle(
-      color: PdfColors.white,
-      fontSize: 12,
-      fontWeight: pw.FontWeight.bold,
-    );
-    final bodyText = const pw.TextStyle(fontSize: 10);
-    final bodyBold = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
-    final labelStyle = pw.TextStyle(
-      fontSize: 9,
-      color: const PdfColor(0.45, 0.51, 0.62),
-    );
-    final titleStyle = pw.TextStyle(
-      fontSize: 14,
-      fontWeight: pw.FontWeight.bold,
-      color: const PdfColor(0.08, 0.13, 0.22),
-    );
-    final sectionTitle = pw.TextStyle(
-      fontSize: 11,
-      fontWeight: pw.FontWeight.bold,
-      color: const PdfColor(0.2, 0.25, 0.35),
-    );
-
-    pdf.addPage(
-      pw.Page(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(0),
-        build: (pw.Context context) {
-          return pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              // ── Header ─────────────────────────────
-              pw.Container(
-                width: double.infinity,
-                padding: const pw.EdgeInsets.all(24),
-                color: planPdfColor,
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(
-                      businessName,
-                      style: pw.TextStyle(
-                        color: PdfColors.white,
-                        fontSize: 20,
-                        fontWeight: pw.FontWeight.bold,
-                      ),
-                    ),
-                    if (profile?.address.trim().isNotEmpty == true)
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(top: 4),
-                        child: pw.Text(profile!.address, style: headerTextStyle),
-                      ),
-                    if (profile?.phoneNumber.trim().isNotEmpty == true)
-                      pw.Padding(
-                        padding: const pw.EdgeInsets.only(top: 2),
-                        child: pw.Text(
-                          'Phone: ${profile!.phoneNumber}',
-                          style: headerTextStyle,
-                        ),
-                      ),
-                    pw.SizedBox(height: 16),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('MEMBERSHIP INVOICE', style: headerBoldStyle),
-                        pw.Text(_invoiceNumber, style: headerBoldStyle),
-                      ],
-                    ),
-                    pw.SizedBox(height: 4),
-                    pw.Text(
-                      'Date: ${_dateFormat.format(_member.startDate)}',
-                      style: headerTextStyle,
-                    ),
-                  ],
-                ),
-              ),
-              // ── Body ──────────────────────────────
-              pw.Padding(
-                padding: const pw.EdgeInsets.all(24),
-                child: pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    // Member details
-                    pw.Text('Member Details', style: sectionTitle),
-                    pw.SizedBox(height: 8),
-                    _pdfRow('Name', _member.name, bodyText, bodyBold),
-                    if (_member.phone.trim().isNotEmpty)
-                      _pdfRow('Phone', _member.phone, bodyText, bodyBold),
-                    if (_member.email.trim().isNotEmpty)
-                      _pdfRow('Email', _member.email, bodyText, bodyBold),
-                    _pdfRow('Member Since',
-                        _dateFormat.format(_member.startDate), bodyText, bodyBold),
-                    pw.SizedBox(height: 20),
-
-                    // Plan details table
-                    pw.Text('Plan Details', style: sectionTitle),
-                    pw.SizedBox(height: 8),
-                    pw.Table(
-                      border: pw.TableBorder.all(
-                        color: const PdfColor(0.87, 0.90, 0.95),
-                      ),
-                      columnWidths: {
-                        0: const pw.FlexColumnWidth(1),
-                        1: const pw.FlexColumnWidth(1),
-                      },
-                      children: [
-                        _pdfTableRow(
-                            'Plan Name', _plan.name, bodyText, bodyBold,
-                            bg: planPdfColor.shade(0.05)),
-                        _pdfTableRow('Type',
-                            _isRecurring ? 'Recurring' : 'Package', bodyText, bodyBold),
-                        _pdfTableRow(
-                            'Duration', _plan.durationLabel, bodyText, bodyBold,
-                            bg: planPdfColor.shade(0.05)),
-                        _pdfTableRow('Start Date',
-                            _dateFormat.format(_member.startDate), bodyText, bodyBold),
-                        _pdfTableRow('End Date',
-                            _dateFormat.format(_member.endDate), bodyText, bodyBold,
-                            bg: planPdfColor.shade(0.05)),
-                        if (_isRecurring)
-                          _pdfTableRow('Next Renewal',
-                              _dateFormat.format(_nextRenewalDate), bodyText, bodyBold),
-                        _pdfTableRow('Status', _member.status.name[0].toUpperCase() +
-                            _member.status.name.substring(1), bodyText, bodyBold,
-                            bg: _isRecurring ? null : planPdfColor.shade(0.05)),
-                      ],
-                    ),
-                    pw.SizedBox(height: 20),
-
-                    // Payment summary
-                    pw.Text('Payment Summary', style: sectionTitle),
-                    pw.SizedBox(height: 8),
-                    _pdfRow(
-                      _isRecurring ? 'Plan Price' : 'Package Fee',
-                      _pdfCurrencyFormat.format(_plan.price),
-                      bodyText,
-                      bodyBold,
-                    ),
-                    if (_plan.discountPercent > 0)
-                      _pdfRow(
-                        'Discount (${_plan.discountPercent.toStringAsFixed(0)}%)',
-                        '-${_pdfCurrencyFormat.format(_discountAmount)}',
-                        bodyText,
-                        bodyBold,
-                      ),
-                    if (_isRecurring && _member.joiningFeePaid > 0)
-                      _pdfRow(
-                        'Joining Fee',
-                        _pdfCurrencyFormat.format(_member.joiningFeePaid),
-                        bodyText,
-                        bodyBold,
-                      ),
-                    pw.Divider(color: const PdfColor(0.87, 0.90, 0.95)),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Total Amount', style: titleStyle),
-                        pw.Text(
-                          _pdfCurrencyFormat.format(_totalAmount),
-                          style: pw.TextStyle(
-                            fontSize: 16,
-                            fontWeight: pw.FontWeight.bold,
-                            color: planPdfColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    if (_isRecurring) ...[
-                      pw.SizedBox(height: 20),
-                      pw.Container(
-                        padding: const pw.EdgeInsets.all(12),
-                        decoration: pw.BoxDecoration(
-                          color: planPdfColor.shade(0.05),
-                          borderRadius:
-                              const pw.BorderRadius.all(pw.Radius.circular(6)),
-                        ),
-                        child: pw.Row(
-                          children: [
-                            pw.Text('Next Renewal: ', style: bodyBold),
-                            pw.Text(
-                              _dateFormat.format(_nextRenewalDate),
-                              style: pw.TextStyle(
-                                fontSize: 10,
-                                fontWeight: pw.FontWeight.bold,
-                                color: planPdfColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              pw.Spacer(),
-              // ── Footer ────────────────────────────
-              pw.Container(
-                width: double.infinity,
-                padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 16),
-                color: const PdfColor(0.97, 0.98, 1.00),
-                child: pw.Center(
-                  child: pw.Text(
-                    'Generated by BillRaja',
-                    style: pw.TextStyle(
-                      fontSize: 9,
-                      color: const PdfColor(0.45, 0.51, 0.62),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-
-    return pdf.save();
-  }
-
-  pw.Widget _pdfRow(
-    String label,
-    String value,
-    pw.TextStyle textStyle,
-    pw.TextStyle boldStyle,
-  ) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 3),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(label, style: textStyle),
-          pw.Text(value, style: boldStyle),
-        ],
-      ),
-    );
-  }
-
-  pw.TableRow _pdfTableRow(
-    String label,
-    String value,
-    pw.TextStyle textStyle,
-    pw.TextStyle boldStyle, {
-    PdfColor? bg,
-  }) {
-    return pw.TableRow(
-      decoration: bg != null ? pw.BoxDecoration(color: bg) : null,
-      children: [
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(label, style: textStyle),
-        ),
-        pw.Padding(
-          padding: const pw.EdgeInsets.all(8),
-          child: pw.Text(value, style: boldStyle),
-        ),
-      ],
     );
   }
 
@@ -1083,7 +801,14 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('PDF error: $error')),
+          SnackBar(
+            content: Text(
+              userFriendlyError(
+                error,
+                fallback: 'Failed to generate PDF. Please try again.',
+              ),
+            ),
+          ),
         );
     } finally {
       if (mounted) setState(() => _isGeneratingPdf = false);
@@ -1094,14 +819,24 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
     setState(() => _isGeneratingPdf = true);
     try {
       final bytes = await _generatePdf();
-      final text = 'Hi ${_member.name}, here is your membership invoice for the ${_plan.name} plan. '
+      final text =
+          'Hi ${_member.name}, here is your membership invoice for the ${_plan.name} plan. '
           'Valid till ${_dateFormat.format(_member.endDate)}.';
 
       if (kIsWeb) {
-        await SharePlus.instance.share(ShareParams(
-          files: [XFile.fromData(bytes, mimeType: 'application/pdf', name: 'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf')],
-          text: text,
-        ));
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile.fromData(
+                bytes,
+                mimeType: 'application/pdf',
+                name:
+                    'MembershipInvoice_${_member.name.replaceAll(' ', '_')}.pdf',
+              ),
+            ],
+            text: text,
+          ),
+        );
       } else {
         final dir = await getTemporaryDirectory();
         final fileName =
@@ -1109,17 +844,21 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
         final file = File('${dir.path}/$fileName');
         await file.writeAsBytes(bytes);
 
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: text,
-        );
+        await Share.shareXFiles([XFile(file.path)], text: text);
       }
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('Share error: $error')),
+          SnackBar(
+            content: Text(
+              userFriendlyError(
+                error,
+                fallback: 'Failed to share. Please try again.',
+              ),
+            ),
+          ),
         );
     } finally {
       if (mounted) setState(() => _isGeneratingPdf = false);
@@ -1209,8 +948,8 @@ class _InfoRow extends StatelessWidget {
                 width: 110,
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    color: kOnSurfaceVariant,
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                   ),
@@ -1219,8 +958,8 @@ class _InfoRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   value,
-                  style: const TextStyle(
-                    color: kOnSurface,
+                  style: TextStyle(
+                    color: context.cs.onSurface,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1230,7 +969,8 @@ class _InfoRow extends StatelessWidget {
             ],
           ),
         ),
-        if (!isLast) Container(height: 1, color: kSurfaceContainerLow),
+        if (!isLast)
+          Container(height: 1, color: context.cs.surfaceContainerLow),
       ],
     );
   }
@@ -1240,12 +980,12 @@ class _SummaryLine extends StatelessWidget {
   const _SummaryLine({
     required this.label,
     required this.value,
-    this.valueColor = kOnSurface,
+    this.valueColor,
   });
 
   final String label;
   final String value;
-  final Color valueColor;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -1254,10 +994,10 @@ class _SummaryLine extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w500,
-            color: kOnSurfaceVariant,
+            color: context.cs.onSurfaceVariant,
           ),
         ),
         Text(
@@ -1265,7 +1005,7 @@ class _SummaryLine extends StatelessWidget {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w700,
-            color: valueColor,
+            color: valueColor ?? context.cs.onSurface,
           ),
         ),
       ],

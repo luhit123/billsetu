@@ -4,17 +4,32 @@ import 'package:flutter/foundation.dart';
 class AppCheckService {
   AppCheckService._();
 
+  static const String _webSiteKey = String.fromEnvironment(
+    'FIREBASE_APPCHECK_WEB_SITE_KEY',
+  );
+
   static Future<void> activate() async {
     if (kIsWeb) {
-      // Skip App Check on web until reCAPTCHA Enterprise is configured.
+      if (_webSiteKey.isEmpty) {
+        debugPrint(
+          'App Check skipped on web: set FIREBASE_APPCHECK_WEB_SITE_KEY to enable reCAPTCHA Enterprise.',
+        );
+        return;
+      }
+
+      await FirebaseAppCheck.instance.activate(
+        providerWeb: ReCaptchaEnterpriseProvider(_webSiteKey),
+      );
       return;
     }
 
     await FirebaseAppCheck.instance.activate(
-      androidProvider:
-          kDebugMode ? AndroidProvider.debug : AndroidProvider.playIntegrity,
-      appleProvider:
-          kDebugMode ? AppleProvider.debug : AppleProvider.appAttest,
+      providerAndroid: kDebugMode
+          ? const AndroidDebugProvider()
+          : const AndroidPlayIntegrityProvider(),
+      providerApple: kDebugMode
+          ? const AppleDebugProvider()
+          : const AppleAppAttestProvider(),
     );
   }
 }

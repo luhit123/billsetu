@@ -14,7 +14,6 @@ class RemoteConfigService {
 
   FirebaseRemoteConfig? _rc;
   PackageInfo? _packageInfo;
-  bool _initialized = false;
 
   final _updateController = StreamController<void>.broadcast();
 
@@ -28,32 +27,58 @@ class RemoteConfigService {
       _rc = FirebaseRemoteConfig.instance;
       _packageInfo = await PackageInfo.fromPlatform();
 
-      await _rc!.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: kDebugMode
-            ? const Duration(minutes: 1)
-            : const Duration(minutes: 15),
-      ));
+      await _rc!.setConfigSettings(
+        RemoteConfigSettings(
+          fetchTimeout: const Duration(seconds: 10),
+          minimumFetchInterval: kDebugMode
+              ? const Duration(minutes: 1)
+              : const Duration(minutes: 15),
+        ),
+      );
 
       await _rc!.setDefaults(_defaults);
 
       // Fetch & activate — non-blocking after first load.
+      bool fetchSucceeded = false;
       try {
         await _rc!.fetchAndActivate();
+        fetchSucceeded = true;
       } catch (e) {
         debugPrint('[RemoteConfig] Initial fetch failed (using defaults): $e');
       }
-
-      _initialized = true;
+      // If initial fetch failed, retry once after 30 s to pick up fresh values
+      // without blocking the app startup.
+      if (!fetchSucceeded) {
+        Future.delayed(const Duration(seconds: 30), () async {
+          if (_rc == null) return;
+          try {
+            await _rc!.fetchAndActivate();
+            _updateController.add(null);
+            debugPrint('[RemoteConfig] Retry fetch succeeded');
+          } catch (e) {
+            debugPrint('[RemoteConfig] Retry fetch also failed: $e');
+          }
+        });
+      }
 
       // Listen for real-time config updates (Firebase RC v2).
-      _rc!.onConfigUpdated.listen((_) async {
-        await _rc!.activate();
-        _updateController.add(null);
-        debugPrint('[RemoteConfig] Config updated & activated');
-      }, onError: (e) {
-        debugPrint('[RemoteConfig] Real-time listener error: $e');
-      });
+      //
+      // On Flutter web (especially `flutter run -d chrome` / localhost), the
+      // streaming transport is commonly blocked by extensions, firewalls, or
+      // browser networking constraints and can spam `remoteconfig/stream-error`.
+      // Fetch + activate is sufficient for local testing.
+      if (!kIsWeb) {
+        _rc!.onConfigUpdated.listen(
+          (_) async {
+            await _rc!.activate();
+            _updateController.add(null);
+            debugPrint('[RemoteConfig] Config updated & activated');
+          },
+          onError: (e) {
+            debugPrint('[RemoteConfig] Real-time listener error: $e');
+          },
+        );
+      }
     } catch (e) {
       debugPrint('[RemoteConfig] init() failed: $e');
       // Service remains uninitialized — all getters return safe defaults.
@@ -76,7 +101,20 @@ class RemoteConfigService {
     'maintenance_message':
         'We\'re performing scheduled maintenance. We\'ll be back shortly!',
 
-    // Plan limits — expired
+    // Plan limits — free (applies to trial + expired users)
+    'free_max_invoices': -1,
+    'free_max_customers': -1,
+    'free_max_products': -1,
+    'free_max_pdf_templates': -1,
+    'free_max_whatsapp_shares': -1,
+    'free_max_team_members': 0,
+    'free_has_reports': true,
+    'free_has_purchase_orders': true,
+    'free_has_data_export': true,
+    'free_has_attendance': true,
+    'free_has_membership': false,
+
+    // Plan limits — expired (legacy keys, kept for backward compatibility)
     'expired_max_invoices': 5,
     'expired_max_customers': 5,
     'expired_max_products': 20,
@@ -85,6 +123,7 @@ class RemoteConfigService {
     'expired_has_reports': false,
     'expired_has_purchase_orders': false,
     'expired_has_data_export': false,
+    'expired_has_membership': false,
 
     // Plan limits — pro
     'pro_max_invoices': -1,
@@ -92,13 +131,31 @@ class RemoteConfigService {
     'pro_max_products': -1,
     'pro_max_pdf_templates': -1,
     'pro_max_whatsapp_shares': -1,
+    'pro_max_team_members': 3,
     'pro_has_reports': true,
     'pro_has_purchase_orders': true,
     'pro_has_data_export': true,
+    'pro_has_attendance': false,
+    'pro_has_membership': true,
+
+    // Plan limits — enterprise
+    'enterprise_max_invoices': -1,
+    'enterprise_max_customers': -1,
+    'enterprise_max_products': -1,
+    'enterprise_max_pdf_templates': -1,
+    'enterprise_max_whatsapp_shares': -1,
+    'enterprise_max_team_members': -1,
+    'enterprise_has_reports': true,
+    'enterprise_has_purchase_orders': true,
+    'enterprise_has_data_export': true,
+    'enterprise_has_attendance': true,
+    'enterprise_has_membership': true,
 
     // Pricing
-    'pro_price_monthly': 99.0,
-    'pro_price_annual': 999.0,
+    'pro_price_monthly': 59.0,
+    'pro_price_annual': 499.0,
+    'enterprise_price_monthly': 99.0,
+    'enterprise_price_annual': 999.0,
 
     // Subscription config
     'trial_duration_months': 6,
@@ -135,6 +192,9 @@ class RemoteConfigService {
     'promo_banner_text': '',
     'promo_banner_color': '#0057FF',
 
+    // Google Maps API key (server-side, changeable without app update)
+    'google_maps_api_key': '',
+
     // Language control — empty string means all languages enabled.
     // Comma-separated list of AppLanguage enum names to show.
     // e.g. "english,hindi,bengali,tamil,telugu,marathi,gujarati"
@@ -146,8 +206,7 @@ class RemoteConfigService {
   bool _getBool(String key) =>
       _rc?.getBool(key) ?? (_defaults[key] as bool? ?? false);
 
-  int _getInt(String key) =>
-      _rc?.getInt(key) ?? (_defaults[key] as int? ?? 0);
+  int _getInt(String key) => _rc?.getInt(key) ?? (_defaults[key] as int? ?? 0);
 
   double _getDouble(String key) =>
       _rc?.getDouble(key) ?? ((_defaults[key] as num?)?.toDouble() ?? 0.0);
@@ -176,7 +235,21 @@ class RemoteConfigService {
 
   String get currentAppVersion => _packageInfo?.version ?? '0.0.0';
 
-  // ── Plan Limits — Expired ─────────────────────────────────────────────
+  // ── Plan Limits — Free (trial + expired) ──────────────────────────────
+
+  int get freeMaxInvoices => _getInt('free_max_invoices');
+  int get freeMaxCustomers => _getInt('free_max_customers');
+  int get freeMaxProducts => _getInt('free_max_products');
+  int get freeMaxPdfTemplates => _getInt('free_max_pdf_templates');
+  int get freeMaxWhatsAppShares => _getInt('free_max_whatsapp_shares');
+  int get freeMaxTeamMembers => _getInt('free_max_team_members');
+  bool get freeHasReports => _getBool('free_has_reports');
+  bool get freeHasPurchaseOrders => _getBool('free_has_purchase_orders');
+  bool get freeHasDataExport => _getBool('free_has_data_export');
+  bool get freeHasAttendance => _getBool('free_has_attendance');
+  bool get freeHasMembership => _getBool('free_has_membership');
+
+  // ── Plan Limits — Expired (legacy, kept for backward compatibility) ──
 
   int get expiredMaxInvoices => _getInt('expired_max_invoices');
   int get expiredMaxCustomers => _getInt('expired_max_customers');
@@ -186,6 +259,7 @@ class RemoteConfigService {
   bool get expiredHasReports => _getBool('expired_has_reports');
   bool get expiredHasPurchaseOrders => _getBool('expired_has_purchase_orders');
   bool get expiredHasDataExport => _getBool('expired_has_data_export');
+  bool get expiredHasMembership => _getBool('expired_has_membership');
 
   // ── Plan Limits — Pro ─────────────────────────────────────────────────
 
@@ -194,18 +268,40 @@ class RemoteConfigService {
   int get proMaxProducts => _getInt('pro_max_products');
   int get proMaxPdfTemplates => _getInt('pro_max_pdf_templates');
   int get proMaxWhatsAppShares => _getInt('pro_max_whatsapp_shares');
+  int get proMaxTeamMembers => _getInt('pro_max_team_members');
   bool get proHasReports => _getBool('pro_has_reports');
   bool get proHasPurchaseOrders => _getBool('pro_has_purchase_orders');
   bool get proHasDataExport => _getBool('pro_has_data_export');
+  bool get proHasAttendance => _getBool('pro_has_attendance');
+  bool get proHasMembership => _getBool('pro_has_membership');
+
+  // ── Plan Limits — Enterprise ─────────────────────────────────────────
+
+  int get enterpriseMaxInvoices => _getInt('enterprise_max_invoices');
+  int get enterpriseMaxCustomers => _getInt('enterprise_max_customers');
+  int get enterpriseMaxProducts => _getInt('enterprise_max_products');
+  int get enterpriseMaxPdfTemplates => _getInt('enterprise_max_pdf_templates');
+  int get enterpriseMaxWhatsAppShares =>
+      _getInt('enterprise_max_whatsapp_shares');
+  int get enterpriseMaxTeamMembers => _getInt('enterprise_max_team_members');
+  bool get enterpriseHasReports => _getBool('enterprise_has_reports');
+  bool get enterpriseHasPurchaseOrders =>
+      _getBool('enterprise_has_purchase_orders');
+  bool get enterpriseHasDataExport => _getBool('enterprise_has_data_export');
+  bool get enterpriseHasAttendance => _getBool('enterprise_has_attendance');
+  bool get enterpriseHasMembership => _getBool('enterprise_has_membership');
 
   // ── Payment Gateway ──────────────────────────────────────────────────
 
   String get razorpayKey => _getString('razorpay_key');
+  String get googleMapsApiKey => _getString('google_maps_api_key');
 
   // ── Pricing ───────────────────────────────────────────────────────────
 
   double get proPriceMonthly => _getDouble('pro_price_monthly');
   double get proPriceAnnual => _getDouble('pro_price_annual');
+  double get enterprisePriceMonthly => _getDouble('enterprise_price_monthly');
+  double get enterprisePriceAnnual => _getDouble('enterprise_price_annual');
 
   // ── Subscription Config ──────────────────────────────────────────────
 
@@ -293,7 +389,11 @@ class RemoteConfigService {
   List<String> get enabledLanguages {
     final raw = _getString('enabled_languages').trim();
     if (raw.isEmpty) return [];
-    return raw.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+    return raw
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────
@@ -322,18 +422,22 @@ class RemoteConfigService {
     if (_rc == null) return;
     try {
       // Temporarily set interval to 0 to force a real network fetch
-      await _rc!.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: Duration.zero,
-      ));
+      await _rc!.setConfigSettings(
+        RemoteConfigSettings(
+          fetchTimeout: const Duration(seconds: 10),
+          minimumFetchInterval: Duration.zero,
+        ),
+      );
       await _rc!.fetchAndActivate();
       // Restore normal interval
-      await _rc!.setConfigSettings(RemoteConfigSettings(
-        fetchTimeout: const Duration(seconds: 10),
-        minimumFetchInterval: kDebugMode
-            ? const Duration(minutes: 1)
-            : const Duration(minutes: 15),
-      ));
+      await _rc!.setConfigSettings(
+        RemoteConfigSettings(
+          fetchTimeout: const Duration(seconds: 10),
+          minimumFetchInterval: kDebugMode
+              ? const Duration(minutes: 1)
+              : const Duration(minutes: 15),
+        ),
+      );
       _updateController.add(null);
     } catch (e) {
       debugPrint('[RemoteConfig] Refetch failed: $e');

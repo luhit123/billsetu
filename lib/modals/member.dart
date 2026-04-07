@@ -12,6 +12,14 @@ class Member {
   final String notes;
   final String planId;
   final String planName;
+  final String planDuration;
+  final int planDurationDays;
+  final String planTypeSnapshot;
+  final int planGracePeriodDays;
+  final bool planGstEnabled;
+  final double planGstRate;
+  final String planGstType;
+  final double planEffectivePrice;
   final MemberStatus status;
   final DateTime startDate;
   final DateTime endDate;
@@ -21,6 +29,7 @@ class Member {
   final double joiningFeePaid;
   final int attendanceCount;
   final DateTime? lastCheckIn;
+  final bool isDeleted;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -34,6 +43,14 @@ class Member {
     this.notes = '',
     required this.planId,
     this.planName = '',
+    this.planDuration = 'monthly',
+    this.planDurationDays = 30,
+    this.planTypeSnapshot = 'recurring',
+    this.planGracePeriodDays = 0,
+    this.planGstEnabled = false,
+    this.planGstRate = 18,
+    this.planGstType = 'cgst_sgst',
+    this.planEffectivePrice = 0,
     this.status = MemberStatus.active,
     required this.startDate,
     required this.endDate,
@@ -43,13 +60,19 @@ class Member {
     this.joiningFeePaid = 0,
     this.attendanceCount = 0,
     this.lastCheckIn,
+    this.isDeleted = false,
     required this.createdAt,
     required this.updatedAt,
   });
 
-  bool get isActive => status == MemberStatus.active && endDate.isAfter(DateTime.now());
-  bool get isExpired => status == MemberStatus.expired || endDate.isBefore(DateTime.now());
-  bool get isFrozen => status == MemberStatus.frozen && frozenUntil != null && frozenUntil!.isAfter(DateTime.now());
+  bool get isActive =>
+      status == MemberStatus.active && endDate.isAfter(DateTime.now());
+  bool get isExpired =>
+      status == MemberStatus.expired || endDate.isBefore(DateTime.now());
+  bool get isFrozen =>
+      status == MemberStatus.frozen &&
+      frozenUntil != null &&
+      frozenUntil!.isAfter(DateTime.now());
 
   int get daysLeft {
     if (isExpired) return 0;
@@ -82,6 +105,14 @@ class Member {
       notes: map['notes'] as String? ?? '',
       planId: map['planId'] as String? ?? '',
       planName: map['planName'] as String? ?? '',
+      planDuration: map['planDuration'] as String? ?? 'monthly',
+      planDurationDays: map['planDurationDays'] as int? ?? 30,
+      planTypeSnapshot: map['planTypeSnapshot'] as String? ?? 'recurring',
+      planGracePeriodDays: map['planGracePeriodDays'] as int? ?? 0,
+      planGstEnabled: map['planGstEnabled'] as bool? ?? false,
+      planGstRate: (map['planGstRate'] as num?)?.toDouble() ?? 18,
+      planGstType: map['planGstType'] as String? ?? 'cgst_sgst',
+      planEffectivePrice: (map['planEffectivePrice'] as num?)?.toDouble() ?? 0,
       status: _parseStatus(map['status'] as String?),
       startDate: (map['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
       endDate: (map['endDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -91,6 +122,7 @@ class Member {
       joiningFeePaid: (map['joiningFeePaid'] as num?)?.toDouble() ?? 0,
       attendanceCount: map['attendanceCount'] as int? ?? 0,
       lastCheckIn: (map['lastCheckIn'] as Timestamp?)?.toDate(),
+      isDeleted: map['isDeleted'] as bool? ?? false,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
@@ -107,15 +139,28 @@ class Member {
       'notes': notes,
       'planId': planId,
       'planName': planName,
+      'planDuration': planDuration,
+      'planDurationDays': planDurationDays,
+      'planTypeSnapshot': planTypeSnapshot,
+      'planGracePeriodDays': planGracePeriodDays,
+      'planGstEnabled': planGstEnabled,
+      'planGstRate': planGstRate,
+      'planGstType': planGstType,
+      'planEffectivePrice': planEffectivePrice,
       'status': status.name,
       'startDate': Timestamp.fromDate(startDate),
       'endDate': Timestamp.fromDate(endDate),
-      'frozenUntil': frozenUntil != null ? Timestamp.fromDate(frozenUntil!) : null,
+      'frozenUntil': frozenUntil != null
+          ? Timestamp.fromDate(frozenUntil!)
+          : null,
       'autoRenew': autoRenew,
       'amountPaid': amountPaid,
       'joiningFeePaid': joiningFeePaid,
       'attendanceCount': attendanceCount,
-      'lastCheckIn': lastCheckIn != null ? Timestamp.fromDate(lastCheckIn!) : null,
+      'lastCheckIn': lastCheckIn != null
+          ? Timestamp.fromDate(lastCheckIn!)
+          : null,
+      'isDeleted': isDeleted,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -131,6 +176,14 @@ class Member {
     String? notes,
     String? planId,
     String? planName,
+    String? planDuration,
+    int? planDurationDays,
+    String? planTypeSnapshot,
+    int? planGracePeriodDays,
+    bool? planGstEnabled,
+    double? planGstRate,
+    String? planGstType,
+    double? planEffectivePrice,
     MemberStatus? status,
     DateTime? startDate,
     DateTime? endDate,
@@ -140,6 +193,7 @@ class Member {
     double? joiningFeePaid,
     int? attendanceCount,
     DateTime? lastCheckIn,
+    bool? isDeleted,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -153,6 +207,14 @@ class Member {
       notes: notes ?? this.notes,
       planId: planId ?? this.planId,
       planName: planName ?? this.planName,
+      planDuration: planDuration ?? this.planDuration,
+      planDurationDays: planDurationDays ?? this.planDurationDays,
+      planTypeSnapshot: planTypeSnapshot ?? this.planTypeSnapshot,
+      planGracePeriodDays: planGracePeriodDays ?? this.planGracePeriodDays,
+      planGstEnabled: planGstEnabled ?? this.planGstEnabled,
+      planGstRate: planGstRate ?? this.planGstRate,
+      planGstType: planGstType ?? this.planGstType,
+      planEffectivePrice: planEffectivePrice ?? this.planEffectivePrice,
       status: status ?? this.status,
       startDate: startDate ?? this.startDate,
       endDate: endDate ?? this.endDate,
@@ -162,6 +224,7 @@ class Member {
       joiningFeePaid: joiningFeePaid ?? this.joiningFeePaid,
       attendanceCount: attendanceCount ?? this.attendanceCount,
       lastCheckIn: lastCheckIn ?? this.lastCheckIn,
+      isDeleted: isDeleted ?? this.isDeleted,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );
@@ -181,26 +244,45 @@ class AttendanceLog {
   final String memberId;
   final String memberName;
   final DateTime checkInTime;
-  final String method; // 'qr', 'code', 'manual'
+  final DateTime? checkOutTime;
+  final String method; // 'qr', 'code', 'manual', 'geo'
   final String markedBy;
+  final double? latitude;
+  final double? longitude;
 
   const AttendanceLog({
     required this.id,
     required this.memberId,
     this.memberName = '',
     required this.checkInTime,
+    this.checkOutTime,
     this.method = 'manual',
     this.markedBy = '',
+    this.latitude,
+    this.longitude,
   });
+
+  /// Total hours worked (null if not yet checked out).
+  double? get totalHours {
+    if (checkOutTime == null) return null;
+    return checkOutTime!.difference(checkInTime).inMinutes / 60.0;
+  }
+
+  /// Whether the member is currently checked in (no checkout yet).
+  bool get isCheckedIn => checkOutTime == null;
 
   factory AttendanceLog.fromMap(Map<String, dynamic> map, {String? docId}) {
     return AttendanceLog(
       id: docId ?? map['id'] as String? ?? '',
       memberId: map['memberId'] as String? ?? '',
       memberName: map['memberName'] as String? ?? '',
-      checkInTime: (map['checkInTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      checkInTime:
+          (map['checkInTime'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      checkOutTime: (map['checkOutTime'] as Timestamp?)?.toDate(),
       method: map['method'] as String? ?? 'manual',
       markedBy: map['markedBy'] as String? ?? '',
+      latitude: (map['latitude'] as num?)?.toDouble(),
+      longitude: (map['longitude'] as num?)?.toDouble(),
     );
   }
 
@@ -209,8 +291,12 @@ class AttendanceLog {
       'memberId': memberId,
       'memberName': memberName,
       'checkInTime': Timestamp.fromDate(checkInTime),
+      if (checkOutTime != null)
+        'checkOutTime': Timestamp.fromDate(checkOutTime!),
       'method': method,
       'markedBy': markedBy,
+      if (latitude != null) 'latitude': latitude,
+      if (longitude != null) 'longitude': longitude,
     };
   }
 }

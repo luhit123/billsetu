@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Analyze Flutter code
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run Flutter tests
+        run: flutter test
+
+      - name: Build Flutter web release
+        run: flutter build web --release
+
+      - name: Build Flutter Android release bundle
+        run: flutter build appbundle --release
+
+      - name: Install Admin Flutter dependencies
+        working-directory: admin
+        run: flutter pub get
+
+      - name: Build Admin web release
+        working-directory: admin
+        run: flutter build web --release
+
+  functions:
+    name: Firebase Functions checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: functions
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install Functions dependencies
+        run: npm ci
+
+      - name: Check Functions syntax
+        run: node --check index.js
+
+      - name: Run Functions tests
+        run: npm test

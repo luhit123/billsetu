@@ -78,8 +78,8 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             s.groupsSubtitle,
-                            style: const TextStyle(
-                              color: kOnSurfaceVariant,
+                            style: TextStyle(
+                              color: context.cs.onSurfaceVariant,
                               height: 1.4,
                             ),
                           ),
@@ -114,13 +114,13 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
-                      color: kSurfaceContainerLow,
+                      color: context.cs.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: Text(
                       s.groupsEmpty,
-                      style: const TextStyle(
-                        color: kOnSurfaceVariant,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
                         height: 1.45,
                       ),
                     ),
@@ -136,13 +136,13 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                         final group = groups[index];
                         return Container(
                           decoration: BoxDecoration(
-                            color: kSurfaceLowest,
+                            color: context.cs.surfaceContainerLowest,
                             borderRadius: BorderRadius.circular(18),
                           ),
                           child: ListTile(
                             leading: CircleAvatar(
-                              backgroundColor: kPrimaryContainer,
-                              foregroundColor: kPrimary,
+                              backgroundColor: context.cs.primaryContainer,
+                              foregroundColor: context.cs.primary,
                               child: Text(
                                 group.name.trim().isEmpty
                                     ? '?'
@@ -160,7 +160,7 @@ class _CustomerGroupManagerSheet extends StatelessWidget {
                             ),
                             subtitle: Text(
                               s.groupsRenameHint,
-                              style: const TextStyle(color: kOnSurfaceVariant),
+                              style: TextStyle(color: context.cs.onSurfaceVariant),
                             ),
                             trailing: IconButton(
                               onPressed: () => _openGroupDialog(
@@ -311,8 +311,8 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             s.groupsPickerSubtitle,
-                            style: const TextStyle(
-                              color: kOnSurfaceVariant,
+                            style: TextStyle(
+                              color: context.cs.onSurfaceVariant,
                               height: 1.4,
                             ),
                           ),
@@ -364,13 +364,13 @@ class _CustomerGroupPickerSheet extends StatelessWidget {
                       margin: const EdgeInsets.only(top: 12),
                       padding: const EdgeInsets.all(18),
                       decoration: BoxDecoration(
-                        color: kSurfaceContainerLow,
+                        color: context.cs.surfaceContainerLow,
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
                         s.groupsPickerEmpty,
-                        style: const TextStyle(
-                          color: kOnSurfaceVariant,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
                           height: 1.45,
                         ),
                       ),
@@ -439,7 +439,7 @@ class _GroupPickerTile extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isSelected ? kPrimaryContainer : kSurfaceLowest,
+            color: isSelected ? context.cs.primaryContainer : context.cs.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(18),
           ),
           child: Row(
@@ -448,7 +448,7 @@ class _GroupPickerTile extends StatelessWidget {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: iconBackgroundColor ?? kPrimaryContainer,
+                  color: iconBackgroundColor ?? context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(7),
                 ),
                 child: Icon(icon, color: Colors.white, size: 15),
@@ -465,8 +465,8 @@ class _GroupPickerTile extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       subtitle,
-                      style: const TextStyle(
-                        color: kOnSurfaceVariant,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
                         height: 1.4,
                       ),
                     ),
@@ -480,7 +480,7 @@ class _GroupPickerTile extends StatelessWidget {
                     : Icons.chevron_right_rounded,
                 color: isSelected
                     ? kPrimary
-                    : kTextTertiary,
+                    : context.cs.onSurfaceVariant.withAlpha(153),
               ),
             ],
           ),

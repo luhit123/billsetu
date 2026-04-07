@@ -6,7 +6,7 @@ import 'razorpay_checkout_stub.dart';
 @JS('Object.assign')
 external JSObject _objectAssign(JSObject target, JSObject source);
 
-@JS()
+@JS('Razorpay')
 @staticInterop
 class _RazorpayJS {
   external factory _RazorpayJS(JSObject options);

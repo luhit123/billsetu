@@ -1,28 +1,31 @@
+import 'dart:math' as math;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 
 import '../modals/member.dart';
+import '../modals/team.dart';
+import 'team_service.dart';
 import '../modals/subscription_plan.dart';
 
 class MembershipService {
   MembershipService({
     FirebaseFirestore? firestore,
-    FirebaseAuth? firebaseAuth,
-  })  : _firestore = firestore ?? FirebaseFirestore.instance,
-        _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+    FirebaseFunctions? functions,
+  }) : _firestore = firestore ?? FirebaseFirestore.instance,
+       _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _firebaseAuth;
+  final FirebaseFunctions _functions;
 
-  String _requireOwnerId() {
-    final user = _firebaseAuth.currentUser;
-    if (user == null) throw StateError('Sign in required');
-    return user.uid;
-  }
+  String _requireOwnerId() => TeamService.instance.getEffectiveOwnerId();
 
   CollectionReference<Map<String, dynamic>> _plansCol() {
     final uid = _requireOwnerId();
-    return _firestore.collection('users').doc(uid).collection('subscription_plans');
+    return _firestore
+        .collection('users')
+        .doc(uid)
+        .collection('subscription_plans');
   }
 
   CollectionReference<Map<String, dynamic>> _membersCol() {
@@ -46,9 +49,12 @@ class MembershipService {
     return _plansCol()
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => SubscriptionPlan.fromMap(d.data(), docId: d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => SubscriptionPlan.fromMap(d.data(), docId: d.id))
+              .where((plan) => !plan.isDeleted)
+              .toList(),
+        );
   }
 
   Future<List<SubscriptionPlan>> getActivePlans() async {
@@ -58,6 +64,7 @@ class MembershipService {
         .get();
     return snap.docs
         .map((d) => SubscriptionPlan.fromMap(d.data(), docId: d.id))
+        .where((plan) => !plan.isDeleted)
         .toList();
   }
 
@@ -69,28 +76,46 @@ class MembershipService {
   }
 
   Future<SubscriptionPlan> savePlan(SubscriptionPlan plan) async {
-    final uid = _requireOwnerId();
-    final now = DateTime.now();
-    final data = plan.copyWith(ownerId: uid, updatedAt: now).toMap();
+    final result = await _functions.httpsCallable('saveMembershipPlan').call({
+      'planId': plan.id,
+      'plan': {
+        'name': plan.name,
+        'description': plan.description,
+        'benefits': plan.benefits,
+        'duration': plan.duration.name,
+        'customDays': plan.customDays,
+        'price': plan.price,
+        'joiningFee': plan.joiningFee,
+        'discountPercent': plan.discountPercent,
+        'gracePeriodDays': plan.gracePeriodDays,
+        'planType': plan.planType.name,
+        'autoRenew': plan.autoRenew,
+        'isActive': plan.isActive,
+        'colorHex': plan.colorHex,
+        'gstEnabled': plan.gstEnabled,
+        'gstRate': plan.gstRate,
+        'gstType': plan.gstType,
+      },
+    });
 
-    if (plan.id.isEmpty) {
-      data['createdAt'] = Timestamp.fromDate(now);
-      final ref = await _plansCol().add(data);
-      return plan.copyWith(id: ref.id, ownerId: uid, createdAt: now, updatedAt: now);
-    } else {
-      await _plansCol().doc(plan.id).update(data);
-      return plan.copyWith(ownerId: uid, updatedAt: now);
+    final savedId = result.data['planId'] as String? ?? plan.id;
+    final savedDoc = await _plansCol().doc(savedId).get();
+    if (!savedDoc.exists || savedDoc.data() == null) {
+      throw StateError('Saved membership plan could not be loaded.');
     }
+    return SubscriptionPlan.fromMap(savedDoc.data()!, docId: savedDoc.id);
   }
 
   Future<void> deletePlan(String planId) async {
-    await _plansCol().doc(planId).delete();
+    await _functions.httpsCallable('deleteMembershipPlan').call({
+      'planId': planId,
+    });
   }
 
   Future<void> togglePlanActive(String planId, bool isActive) async {
-    await _plansCol().doc(planId).update({
+    await _functions.httpsCallable('setMembershipPlanActive').call({
+      'planId': planId,
       'isActive': isActive,
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
     });
   }
 
@@ -100,9 +125,12 @@ class MembershipService {
     return _membersCol()
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => Member.fromMap(d.data(), docId: d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => Member.fromMap(d.data(), docId: d.id))
+              .where((member) => !member.isDeleted)
+              .toList(),
+        );
   }
 
   Stream<List<Member>> watchMembersByStatus(MemberStatus status) {
@@ -110,94 +138,110 @@ class MembershipService {
         .where('status', isEqualTo: status.name)
         .orderBy('endDate')
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => Member.fromMap(d.data(), docId: d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => Member.fromMap(d.data(), docId: d.id))
+              .where((member) => !member.isDeleted)
+              .toList(),
+        );
   }
 
   Future<Member> saveMember(Member member) async {
-    final uid = _requireOwnerId();
-    final now = DateTime.now();
-    final data = member.copyWith(ownerId: uid, updatedAt: now).toMap();
+    final result = await _functions.httpsCallable('saveMembershipMember').call({
+      'memberId': member.id,
+      'member': {
+        'name': member.name,
+        'phone': member.phone,
+        'email': member.email,
+        'notes': member.notes,
+        'planId': member.planId,
+        'startDateMs': member.startDate.millisecondsSinceEpoch,
+        'endDateMs': member.endDate.millisecondsSinceEpoch,
+        'autoRenew': member.autoRenew,
+        'amountPaid': member.amountPaid,
+        'joiningFeePaid': member.joiningFeePaid,
+      },
+    });
 
-    if (member.id.isEmpty) {
-      data['createdAt'] = Timestamp.fromDate(now);
-      final ref = await _membersCol().add(data);
-      // Increment member count on plan
-      if (member.planId.isNotEmpty) {
-        await _plansCol().doc(member.planId).update({
-          'memberCount': FieldValue.increment(1),
-        });
-      }
-      return member.copyWith(id: ref.id, ownerId: uid, createdAt: now, updatedAt: now);
-    } else {
-      await _membersCol().doc(member.id).update(data);
-      return member.copyWith(ownerId: uid, updatedAt: now);
+    final savedId = result.data['memberId'] as String? ?? member.id;
+    final savedDoc = await _membersCol().doc(savedId).get();
+    if (!savedDoc.exists || savedDoc.data() == null) {
+      throw StateError('Saved membership member could not be loaded.');
     }
+    return Member.fromMap(savedDoc.data()!, docId: savedDoc.id);
   }
 
   Future<void> deleteMember(String memberId, String planId) async {
-    await _membersCol().doc(memberId).delete();
-    if (planId.isNotEmpty) {
-      await _plansCol().doc(planId).update({
-        'memberCount': FieldValue.increment(-1),
-      });
-    }
+    await _functions.httpsCallable('deleteMembershipMember').call({
+      'memberId': memberId,
+    });
   }
 
   Future<void> freezeMember(String memberId, DateTime freezeUntil) async {
-    await _membersCol().doc(memberId).update({
-      'status': MemberStatus.frozen.name,
-      'frozenUntil': Timestamp.fromDate(freezeUntil),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
+    await _functions.httpsCallable('freezeMembershipMember').call({
+      'memberId': memberId,
+      'freezeUntilMs': freezeUntil.millisecondsSinceEpoch,
     });
   }
 
-  Future<void> unfreezeMember(String memberId, DateTime newEndDate) async {
-    await _membersCol().doc(memberId).update({
-      'status': MemberStatus.active.name,
-      'frozenUntil': null,
-      'endDate': Timestamp.fromDate(newEndDate),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
-    });
+  Future<DateTime> unfreezeMember(
+    String memberId, [
+    DateTime? legacyNewEndDate,
+  ]) async {
+    final result = await _functions
+        .httpsCallable('unfreezeMembershipMember')
+        .call({'memberId': memberId});
+    final newEndMs = result.data['newEndDate'] as int?;
+    if (newEndMs == null) {
+      return legacyNewEndDate ?? DateTime.now();
+    }
+    return DateTime.fromMillisecondsSinceEpoch(newEndMs);
   }
 
-  Future<void> renewMember(String memberId, DateTime newEnd, double amount) async {
-    await _membersCol().doc(memberId).update({
-      'status': MemberStatus.active.name,
-      'endDate': Timestamp.fromDate(newEnd),
-      'amountPaid': FieldValue.increment(amount),
-      'updatedAt': Timestamp.fromDate(DateTime.now()),
-    });
+  Future<MembershipRenewalResult> renewMember(
+    String memberId, [
+    DateTime? legacyNewEnd,
+    double? legacyAmount,
+  ]) async {
+    final result = await _functions.httpsCallable('renewMembershipMember').call(
+      {'memberId': memberId},
+    );
+    final newEndMs = result.data['newEndDate'] as int?;
+    final renewalAmount = (result.data['renewalAmount'] as num?)?.toDouble();
+    return MembershipRenewalResult(
+      newEndDate: newEndMs != null
+          ? DateTime.fromMillisecondsSinceEpoch(newEndMs)
+          : (legacyNewEnd ?? DateTime.now()),
+      renewalAmount: renewalAmount ?? (legacyAmount ?? 0),
+    );
   }
 
   // ── Attendance ──────────────────────────────────────────────────────────────
 
-  Future<void> markAttendance(String memberId, String memberName, String method) async {
-    final uid = _requireOwnerId();
-    final now = DateTime.now();
-    await _attendanceCol(memberId).add(AttendanceLog(
-      id: '',
-      memberId: memberId,
-      memberName: memberName,
-      checkInTime: now,
-      method: method,
-      markedBy: uid,
-    ).toMap());
-    await _membersCol().doc(memberId).update({
-      'attendanceCount': FieldValue.increment(1),
-      'lastCheckIn': Timestamp.fromDate(now),
+  Future<void> markAttendance(
+    String memberId,
+    String memberName,
+    String method,
+  ) async {
+    await _functions.httpsCallable('markMembershipAttendance').call({
+      'memberId': memberId,
+      'method': method,
     });
   }
 
-  Stream<List<AttendanceLog>> watchAttendance(String memberId, {int limit = 50}) {
+  Stream<List<AttendanceLog>> watchAttendance(
+    String memberId, {
+    int limit = 50,
+  }) {
     return _attendanceCol(memberId)
         .orderBy('checkInTime', descending: true)
         .limit(limit)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => AttendanceLog.fromMap(d.data(), docId: d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => AttendanceLog.fromMap(d.data(), docId: d.id))
+              .toList(),
+        );
   }
 
   Future<List<AttendanceLog>> getTodayAttendance() async {
@@ -211,9 +255,12 @@ class MembershipService {
     //   markedBy ASC, checkInTime ASC
     final snap = await _firestore
         .collectionGroup('attendance')
+        .where('attendanceDomain', isEqualTo: 'membership')
         .where('markedBy', isEqualTo: uid)
-        .where('checkInTime',
-            isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay))
+        .where(
+          'checkInTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
         .where('checkInTime', isLessThan: Timestamp.fromDate(endOfDay))
         .orderBy('checkInTime', descending: true)
         .get();
@@ -223,6 +270,149 @@ class MembershipService {
         .toList();
   }
 
+  // ── Geo Attendance ──────────────────────────────────────────────────────────
+
+  /// Team attendance collection: `teams/{teamId}/members/{memberId}/attendance`
+  CollectionReference<Map<String, dynamic>> _teamAttendanceCol(
+    String memberId,
+  ) {
+    final teamId = TeamService.instance.getEffectiveOwnerId();
+    return _firestore
+        .collection('teams')
+        .doc(teamId)
+        .collection('members')
+        .doc(memberId)
+        .collection('attendance');
+  }
+
+  /// Check if coordinates are inside the team's office geofence.
+  bool isInsideGeofence(double lat, double lng, Team team) {
+    if (!team.hasOfficeLocation) return false;
+    final distance = _haversineDistance(
+      lat,
+      lng,
+      team.officeLatitude!,
+      team.officeLongitude!,
+    );
+    return distance <= team.officeRadius;
+  }
+
+  /// Distance in meters between two coordinates (Haversine formula).
+  double distanceToOffice(double lat, double lng, Team team) {
+    if (!team.hasOfficeLocation) return double.infinity;
+    return _haversineDistance(
+      lat,
+      lng,
+      team.officeLatitude!,
+      team.officeLongitude!,
+    );
+  }
+
+  /// Geo check-in: records attendance with GPS coordinates.
+  Future<String> geoCheckIn({
+    required String memberId,
+    required String memberName,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final uid = TeamService.instance.getActualUserId();
+    if (memberId != uid) {
+      throw StateError('You can only check in for yourself.');
+    }
+
+    final result = await _functions.httpsCallable('teamGeoCheckIn').call({
+      'latitude': latitude,
+      'longitude': longitude,
+    });
+
+    return result.data['logId'] as String? ?? '';
+  }
+
+  /// Geo check-out: updates the existing attendance log with checkout time.
+  Future<void> geoCheckOut({
+    required String memberId,
+    required String logId,
+    required double latitude,
+    required double longitude,
+  }) async {
+    final uid = TeamService.instance.getActualUserId();
+    if (memberId != uid) {
+      throw StateError('You can only check out for yourself.');
+    }
+
+    await _functions.httpsCallable('teamGeoCheckOut').call({'logId': logId});
+  }
+
+  /// Gets today's active check-in for a member (if any, no checkout yet).
+  Future<AttendanceLog?> getActiveCheckIn(String memberId) async {
+    final now = DateTime.now();
+    final startOfDay = DateTime(now.year, now.month, now.day);
+    final snap = await _teamAttendanceCol(memberId)
+        .where(
+          'checkInTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfDay),
+        )
+        .orderBy('checkInTime', descending: true)
+        .limit(1)
+        .get();
+    if (snap.docs.isEmpty) return null;
+    final log = AttendanceLog.fromMap(
+      snap.docs.first.data(),
+      docId: snap.docs.first.id,
+    );
+    return log.isCheckedIn ? log : null;
+  }
+
+  /// Watches attendance logs for a team member.
+  Stream<List<AttendanceLog>> watchTeamAttendance(
+    String memberId, {
+    int limit = 50,
+  }) {
+    return _teamAttendanceCol(memberId)
+        .orderBy('checkInTime', descending: true)
+        .limit(limit)
+        .snapshots()
+        .map(
+          (snap) => snap.docs
+              .map((d) => AttendanceLog.fromMap(d.data(), docId: d.id))
+              .toList(),
+        );
+  }
+
+  Future<List<AttendanceLog>> getTeamAttendance(
+    String memberId, {
+    int limit = 50,
+  }) async {
+    final snap = await _teamAttendanceCol(
+      memberId,
+    ).orderBy('checkInTime', descending: true).limit(limit).get();
+    return snap.docs
+        .map((d) => AttendanceLog.fromMap(d.data(), docId: d.id))
+        .toList();
+  }
+
+  /// Haversine formula for distance between two GPS points (in meters).
+  static double _haversineDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const r = 6371000.0; // Earth's radius in meters
+    final dLat = _toRadians(lat2 - lat1);
+    final dLon = _toRadians(lon2 - lon1);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_toRadians(lat1)) *
+            math.cos(_toRadians(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return r * c;
+  }
+
+  static double _toRadians(double degrees) => degrees * math.pi / 180;
+
   // ── Dashboard Stats ─────────────────────────────────────────────────────────
 
   // Loads all members for field-level aggregation (revenue, expiry dates).
@@ -230,7 +420,10 @@ class MembershipService {
   // a summary document updated by a Cloud Function trigger.
   Future<Map<String, dynamic>> getDashboardStats() async {
     final snap = await _membersCol().get();
-    final members = snap.docs.map((d) => Member.fromMap(d.data(), docId: d.id)).toList();
+    final members = snap.docs
+        .map((d) => Member.fromMap(d.data(), docId: d.id))
+        .where((member) => !member.isDeleted)
+        .toList();
 
     final now = DateTime.now();
     int active = 0, expired = 0, frozen = 0, expiringThisWeek = 0;
@@ -259,4 +452,14 @@ class MembershipService {
       'totalRevenue': totalRevenue,
     };
   }
+}
+
+class MembershipRenewalResult {
+  const MembershipRenewalResult({
+    required this.newEndDate,
+    required this.renewalAmount,
+  });
+
+  final DateTime newEndDate;
+  final double renewalAmount;
 }

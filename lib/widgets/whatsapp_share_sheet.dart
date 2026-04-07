@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/invoice_link_service.dart';
+import 'package:billeasy/services/payment_link_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
@@ -13,7 +14,6 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
-import 'package:billeasy/utils/upi_utils.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 
 /// Bottom sheet for sharing an invoice via WhatsApp or SMS.
@@ -50,7 +50,7 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   String get _formattedAmount =>
       widget.currencyFormat.format(widget.invoice.grandTotal);
 
-  String? get _upiWebLink {
+  Future<String?> _buildUpiWebLink() async {
     if (widget.upiId == null || widget.upiId!.isEmpty) return null;
     // The "received" amount is what the customer is paying right now.
     // If received > 0, use that as the UPI link amount.
@@ -59,7 +59,7 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
         ? widget.invoice.amountReceived
         : widget.invoice.grandTotal;
     if (payAmount <= 0) return null;
-    return buildUpiWebPaymentLink(
+    return PaymentLinkService.instance.createUpiWebPaymentLink(
       upiId: widget.upiId!,
       businessName: widget.businessName ?? '',
       amount: payAmount,
@@ -67,24 +67,24 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
     );
   }
 
-  String _shareMessage() {
+  String _shareMessage({String? payLink}) {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
-    final base = 'Hi $name, your invoice *#${widget.invoice.invoiceNumber}* '
+    final base =
+        'Hi $name, your invoice *#${widget.invoice.invoiceNumber}* '
         'of *$_formattedAmount* is attached.';
-    final payLink = _upiWebLink;
     if (payLink != null) {
       return '$base\n\nPay now: $payLink';
     }
     return base;
   }
 
-  String _smsMessage(String downloadUrl) {
+  String _smsMessage(String downloadUrl, {String? payLink}) {
     final name = widget.invoice.clientName.trim().isNotEmpty
         ? widget.invoice.clientName.trim()
         : 'Customer';
-    final webLink = _upiWebLink;
+    final webLink = payLink;
     final payPart = webLink != null ? '\nPay: $webLink' : '';
     return 'Hi $name, invoice #${widget.invoice.invoiceNumber} '
         'of $_formattedAmount.\nDownload: $downloadUrl$payPart';
@@ -101,9 +101,7 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
 
   Future<String?> _uploadAndGetLink() async {
     try {
-      return await InvoiceLinkService.shareLink(
-        invoice: widget.invoice,
-      );
+      return await InvoiceLinkService.shareLink(invoice: widget.invoice);
     } catch (_) {
       return null;
     }
@@ -112,8 +110,8 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -128,15 +126,15 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerHigh,
+                  color: context.cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const Text(
+            Text(
               'Share Invoice',
               style: TextStyle(
-                color: kOnSurface,
+                color: context.cs.onSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -144,22 +142,26 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
             const SizedBox(height: 4),
             Text(
               '${widget.invoice.invoiceNumber}  •  $_formattedAmount',
-              style: const TextStyle(
-                color: kOnSurfaceVariant,
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
             const SizedBox(height: 16),
             // WhatsApp
             _OptionTile(
-              iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 22),
+              iconWidget: const FaIcon(
+                FontAwesomeIcons.whatsapp,
+                color: Color(0xFF25D366),
+                size: 22,
+              ),
               icon: Icons.chat_rounded,
               iconColor: const Color(0xFF25D366),
               title: 'WhatsApp',
               subtitle: 'Send invoice as PDF',
               onTap: () => _shareWhatsApp(context),
             ),
-            const Divider(height: 1, color: kSurfaceContainerLow),
+            Divider(height: 1, color: context.cs.surfaceContainerLow),
             // SMS
             _OptionTile(
               icon: Icons.sms_rounded,
@@ -182,16 +184,16 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
 
   Future<void> _shareWhatsApp(BuildContext context) async {
     // Plan gate
-    final shareCount =
-        await UsageTrackingService.instance.getWhatsAppShareCount();
+    final shareCount = await UsageTrackingService.instance
+        .getWhatsAppShareCount();
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!context.mounted) return;
       final killSwitchOff = !RemoteConfigService.instance.featureWhatsAppShare;
-      final max =
-          PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
+      final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
       String msg;
       if (killSwitchOff) {
-        msg = 'WhatsApp sharing is temporarily unavailable. Please restart the app.';
+        msg =
+            'WhatsApp sharing is temporarily unavailable. Please restart the app.';
       } else if (max == 0) {
         msg = 'WhatsApp sharing is available on Pro plan.';
       } else {
@@ -209,16 +211,23 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
     if (kIsWeb) {
       // On web, generate download link and open wa.me with text
       final phone = _normalizedPhone() ?? '';
+      final payLink = await _buildUpiWebLink();
       String? downloadLink;
       try {
-        downloadLink = await InvoiceLinkService.shareLink(invoice: widget.invoice);
-      } catch (_) {}
+        downloadLink = await InvoiceLinkService.shareLink(
+          invoice: widget.invoice,
+        );
+      } catch (e) {
+        debugPrint('[WhatsAppShare] Share link generation failed: $e');
+      }
 
-      final baseMsg = _shareMessage();
+      final baseMsg = _shareMessage(payLink: payLink);
       final fullMsg = downloadLink != null
           ? '$baseMsg\n\nDownload: $downloadLink'
           : baseMsg;
-      final waUri = Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(fullMsg)}');
+      final waUri = Uri.parse(
+        'https://wa.me/$phone?text=${Uri.encodeComponent(fullMsg)}',
+      );
       await launchUrl(waUri, mode: LaunchMode.externalApplication);
       await UsageTrackingService.instance.incrementWhatsAppShareCount();
       if (context.mounted) Navigator.pop(context);
@@ -227,17 +236,19 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
 
     if (widget.pdfFile == null) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF not available')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('PDF not available')));
       return;
     }
+
+    final payLink = await _buildUpiWebLink();
 
     // Share the PDF file directly via the system share sheet (targets WhatsApp).
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(widget.pdfFile!.path)],
-        text: _shareMessage(),
+        text: _shareMessage(payLink: payLink),
       ),
     );
 
@@ -262,25 +273,30 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
     if (url == null) {
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not generate download link. Check your internet connection.')),
+        const SnackBar(
+          content: Text(
+            'Could not generate download link. Check your internet connection.',
+          ),
+        ),
       );
       return;
     }
 
-    final body = Uri.encodeComponent(_smsMessage(url));
+    final payLink = await _buildUpiWebLink();
+    final body = Uri.encodeComponent(_smsMessage(url, payLink: payLink));
     final uri = Uri.parse('sms:$phone?body=$body');
     try {
       if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
         if (!context.mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open SMS app')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Could not open SMS app')));
       }
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error: $e')));
     }
   }
 }
@@ -336,8 +352,8 @@ class _OptionTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: kOnSurface,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -345,16 +361,19 @@ class _OptionTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: kTextTertiary, size: 20),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
+              size: 20,
+            ),
           ],
         ),
       ),

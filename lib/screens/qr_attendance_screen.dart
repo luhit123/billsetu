@@ -6,7 +6,9 @@ import 'package:intl/intl.dart';
 
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 
 class QrAttendanceScreen extends StatefulWidget {
   const QrAttendanceScreen({super.key});
@@ -74,8 +76,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
       if (!mounted) return;
       setState(() {
         _todayLogs = logs;
-        _todayCheckedInMemberIds =
-            logs.map((log) => log.memberId).toSet();
+        _todayCheckedInMemberIds = logs.map((log) => log.memberId).toSet();
         _isLoadingAttendance = false;
       });
     } catch (e) {
@@ -85,6 +86,13 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
   }
 
   Future<void> _checkIn(Member member) async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'mark attendance',
+    )) {
+      return;
+    }
     // Haptic feedback
     HapticFeedback.mediumImpact();
 
@@ -92,11 +100,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
     setState(() => _flashingMemberId = member.id);
 
     try {
-      await _membershipService.markAttendance(
-        member.id,
-        member.name,
-        'manual',
-      );
+      await _membershipService.markAttendance(member.id, member.name, 'qr');
 
       // Reload today's attendance
       await _loadTodayAttendance();
@@ -109,8 +113,11 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
         SnackBar(
           content: Row(
             children: [
-              const Icon(Icons.check_circle_rounded,
-                  color: Colors.white, size: 20),
+              const Icon(
+                Icons.check_circle_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -125,8 +132,9 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           ),
           backgroundColor: kPaid,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           duration: const Duration(seconds: 2),
         ),
@@ -138,8 +146,9 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           content: Text('Failed to check in: $e'),
           backgroundColor: kOverdue,
           behavior: SnackBarBehavior.floating,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         ),
       );
@@ -159,7 +168,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: kBuildGradientAppBar(titleText: 'Check-in'),
       body: Column(
         children: [
@@ -171,7 +180,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           Expanded(
             child: _isLoadingMembers
                 ? const Center(
-                    child: CircularProgressIndicator(color: kPrimary))
+                    child: CircularProgressIndicator(color: kPrimary),
+                  )
                 : _buildBody(),
           ),
         ],
@@ -185,9 +195,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: const BoxDecoration(
-        color: kPrimaryContainer,
-      ),
+      decoration: BoxDecoration(color: context.cs.primaryContainer),
       child: Row(
         children: [
           Container(
@@ -196,14 +204,17 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               color: kPrimary.withOpacity(0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.people_alt_rounded,
-                color: kPrimary, size: 18),
+            child: const Icon(
+              Icons.people_alt_rounded,
+              color: kPrimary,
+              size: 18,
+            ),
           ),
           const SizedBox(width: 12),
           Text(
             'Today: ${_todayLogs.length} check-in${_todayLogs.length == 1 ? '' : 's'}',
-            style: const TextStyle(
-              color: kOnSurface,
+            style: TextStyle(
+              color: context.cs.onSurface,
               fontWeight: FontWeight.w600,
               fontSize: 14,
               letterSpacing: -0.2,
@@ -212,8 +223,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           const Spacer(),
           Text(
             DateFormat('EEEE, d MMM').format(DateTime.now()),
-            style: const TextStyle(
-              color: kOnSurfaceVariant,
+            style: TextStyle(
+              color: context.cs.onSurfaceVariant,
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -230,7 +241,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
       child: Container(
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [kWhisperShadow],
         ),
@@ -238,15 +249,15 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           controller: _searchController,
           focusNode: _searchFocusNode,
           autofocus: true,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 16,
-            color: kOnSurface,
+            color: context.cs.onSurface,
             fontWeight: FontWeight.w500,
           ),
           decoration: InputDecoration(
             hintText: 'Search by name or phone number',
-            hintStyle: const TextStyle(
-              color: kTextTertiary,
+            hintStyle: TextStyle(
+              color: context.cs.onSurfaceVariant.withAlpha(153),
               fontSize: 16,
               fontWeight: FontWeight.w400,
             ),
@@ -254,12 +265,17 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               padding: EdgeInsets.only(left: 14, right: 10),
               child: Icon(Icons.search_rounded, color: kPrimary, size: 24),
             ),
-            prefixIconConstraints:
-                const BoxConstraints(minWidth: 48, minHeight: 48),
+            prefixIconConstraints: const BoxConstraints(
+              minWidth: 48,
+              minHeight: 48,
+            ),
             suffixIcon: _searchController.text.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.close_rounded,
-                        color: kOnSurfaceVariant, size: 20),
+                    icon: Icon(
+                      Icons.close_rounded,
+                      color: context.cs.onSurfaceVariant,
+                      size: 20,
+                    ),
                     onPressed: () {
                       _searchController.clear();
                       setState(() => _applyFilter());
@@ -267,8 +283,10 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                   )
                 : null,
             border: InputBorder.none,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
+            ),
           ),
           onChanged: (_) => setState(() => _applyFilter()),
         ),
@@ -288,8 +306,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
             sliver: SliverToBoxAdapter(
               child: Text(
                 '${_filteredMembers.length} member${_filteredMembers.length == 1 ? '' : 's'} found',
-                style: const TextStyle(
-                  color: kOnSurfaceVariant,
+                style: TextStyle(
+                  color: context.cs.onSurfaceVariant,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
@@ -302,23 +320,17 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           SliverPadding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             sliver: SliverList(
-              delegate: SliverChildBuilderDelegate(
-                (context, index) {
-                  final member = _filteredMembers[index];
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: _buildMemberCard(member),
-                  );
-                },
-                childCount: _filteredMembers.length,
-              ),
+              delegate: SliverChildBuilderDelegate((context, index) {
+                final member = _filteredMembers[index];
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: _buildMemberCard(member),
+                );
+              }, childCount: _filteredMembers.length),
             ),
           ),
         if (_filteredMembers.isEmpty && _searchController.text.isNotEmpty)
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: _buildEmptySearch(),
-          ),
+          SliverFillRemaining(hasScrollBody: false, child: _buildEmptySearch()),
 
         // Today's check-ins section
         if (_searchController.text.isEmpty) ...[
@@ -328,26 +340,21 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               child: Padding(
                 padding: EdgeInsets.all(40),
                 child: Center(
-                    child: CircularProgressIndicator(color: kPrimary)),
+                  child: CircularProgressIndicator(color: kPrimary),
+                ),
               ),
             )
           else if (_todayLogs.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: _buildEmptyToday(),
-            )
+            SliverFillRemaining(hasScrollBody: false, child: _buildEmptyToday())
           else
             SliverPadding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
               sliver: SliverList(
-                delegate: SliverChildBuilderDelegate(
-                  (context, index) {
-                    final log = _todayLogs[index];
-                    final isLast = index == _todayLogs.length - 1;
-                    return _buildTimelineEntry(log, isLast);
-                  },
-                  childCount: _todayLogs.length,
-                ),
+                delegate: SliverChildBuilderDelegate((context, index) {
+                  final log = _todayLogs[index];
+                  final isLast = index == _todayLogs.length - 1;
+                  return _buildTimelineEntry(log, isLast);
+                }, childCount: _todayLogs.length),
               ),
             ),
         ],
@@ -365,9 +372,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
       duration: const Duration(milliseconds: 400),
       curve: Curves.easeOut,
       decoration: BoxDecoration(
-        color: isFlashing
-            ? kPaidBg
-            : kSurfaceLowest,
+        color: isFlashing ? kPaidBg : context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kWhisperShadow],
       ),
@@ -408,8 +413,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               children: [
                 Text(
                   member.name,
-                  style: const TextStyle(
-                    color: kOnSurface,
+                  style: TextStyle(
+                    color: context.cs.onSurface,
                     fontWeight: FontWeight.w600,
                     fontSize: 15,
                     letterSpacing: -0.2,
@@ -423,9 +428,11 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                     if (member.planName.isNotEmpty) ...[
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
-                          color: kPrimaryContainer,
+                          color: context.cs.primaryContainer,
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -444,7 +451,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                       style: TextStyle(
                         color: member.daysLeft <= 7
                             ? kOverdue
-                            : kOnSurfaceVariant,
+                            : context.cs.onSurfaceVariant,
                         fontSize: 12,
                         fontWeight: FontWeight.w500,
                       ),
@@ -478,10 +485,10 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
             ),
           ],
         ),
-        child: const Text(
+        child: Text(
           'CHECK IN',
           style: TextStyle(
-            color: kOnPrimary,
+            color: context.cs.onPrimary,
             fontWeight: FontWeight.w700,
             fontSize: 12,
             letterSpacing: 0.8,
@@ -529,26 +536,29 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               width: 72,
               height: 72,
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: const Icon(Icons.person_search_rounded,
-                  color: kTextTertiary, size: 36),
+              child: Icon(
+                Icons.person_search_rounded,
+                color: context.cs.onSurfaceVariant.withAlpha(153),
+                size: 36,
+              ),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No active members found',
               style: TextStyle(
-                color: kOnSurface,
+                color: context.cs.onSurface,
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Try a different name or phone number',
               style: TextStyle(
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 14,
               ),
             ),
@@ -569,26 +579,29 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(22),
               ),
-              child: const Icon(Icons.how_to_reg_rounded,
-                  color: kTextTertiary, size: 40),
+              child: Icon(
+                Icons.how_to_reg_rounded,
+                color: context.cs.onSurfaceVariant.withAlpha(153),
+                size: 40,
+              ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'No check-ins yet today',
               style: TextStyle(
-                color: kOnSurface,
+                color: context.cs.onSurface,
                 fontWeight: FontWeight.w600,
                 fontSize: 17,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Search for a member above to start checking in',
               style: TextStyle(
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,
@@ -606,10 +619,10 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
       child: Row(
         children: [
-          const Text(
+          Text(
             "TODAY'S CHECK-INS",
             style: TextStyle(
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
               fontWeight: FontWeight.w700,
               fontSize: 12,
               letterSpacing: 1.0,
@@ -619,7 +632,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: kPrimaryContainer,
+              color: context.cs.primaryContainer,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -640,11 +653,14 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
             child: Container(
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.refresh_rounded,
-                  color: kOnSurfaceVariant, size: 18),
+              child: Icon(
+                Icons.refresh_rounded,
+                color: context.cs.onSurfaceVariant,
+                size: 18,
+              ),
             ),
           ),
         ],
@@ -686,7 +702,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                       width: 2,
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       decoration: BoxDecoration(
-                        color: kPrimaryContainer,
+                        color: context.cs.primaryContainer,
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),
@@ -701,7 +717,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
               margin: const EdgeInsets.only(bottom: 10),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
-                color: kSurfaceLowest,
+                color: context.cs.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: const [kSubtleShadow],
               ),
@@ -712,7 +728,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                     width: 38,
                     height: 38,
                     decoration: BoxDecoration(
-                      color: kPrimaryContainer,
+                      color: context.cs.primaryContainer,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Center(
@@ -735,8 +751,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                           log.memberName.isNotEmpty
                               ? log.memberName
                               : 'Unknown',
-                          style: const TextStyle(
-                            color: kOnSurface,
+                          style: TextStyle(
+                            color: context.cs.onSurface,
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
                           ),
@@ -748,8 +764,8 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                           children: [
                             Text(
                               timeStr,
-                              style: const TextStyle(
-                                color: kOnSurfaceVariant,
+                              style: TextStyle(
+                                color: context.cs.onSurfaceVariant,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -758,16 +774,20 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                             Container(
                               width: 4,
                               height: 4,
-                              decoration: const BoxDecoration(
-                                color: kTextTertiary,
+                              decoration: BoxDecoration(
+                                color: context.cs.onSurfaceVariant.withAlpha(
+                                  153,
+                                ),
                                 shape: BoxShape.circle,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
                               _methodLabel(log.method),
-                              style: const TextStyle(
-                                color: kTextTertiary,
+                              style: TextStyle(
+                                color: context.cs.onSurfaceVariant.withAlpha(
+                                  153,
+                                ),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -777,8 +797,11 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                       ],
                     ),
                   ),
-                  const Icon(Icons.check_circle_rounded,
-                      color: kPaid, size: 20),
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    color: kPaid,
+                    size: 20,
+                  ),
                 ],
               ),
             ),

@@ -1,28 +1,35 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/analytics_models.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
+import 'package:billeasy/modals/team_role.dart';
+import 'package:billeasy/screens/attendance_dashboard_screen.dart';
+import 'package:billeasy/screens/geo_attendance_screen.dart';
+import 'package:billeasy/screens/office_location_screen.dart';
+import 'package:billeasy/screens/member_performance_detail_screen.dart';
+import 'package:billeasy/screens/team_management_screen.dart';
+import 'package:billeasy/screens/team_settings_screen.dart';
 import 'package:billeasy/screens/customers_screen.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/screens/gst_report_screen.dart';
-import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/screens/invoices_screen.dart';
 import 'package:billeasy/screens/reports_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
-import 'package:billeasy/screens/purchase_orders_screen.dart';
 import 'package:billeasy/screens/create_purchase_order_screen.dart';
-import 'package:billeasy/screens/login_screen.dart';
-import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/screens/settings_screen.dart';
 import 'package:billeasy/screens/subscriptions_screen.dart';
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/services/analytics_service.dart';
-import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
-import 'package:billeasy/services/remote_config_service.dart';
+import 'package:billeasy/services/sync_status_service.dart';
+import 'package:billeasy/screens/upgrade_screen.dart';
+import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/review_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/aurora_app_backdrop.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -57,9 +64,9 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _tabs = [
       _DashboardPage(invoicesStream: widget.invoicesStream),
-      const InvoicesScreen(),
-      const CustomersScreen(),
-      const ProductsScreen(),
+      const InvoicesScreen(embeddedInHomeShell: true),
+      const CustomersScreen(embeddedInHomeShell: true),
+      const ProductsScreen(embeddedInHomeShell: true),
     ];
     ReviewService.instance.onAppOpen();
   }
@@ -67,9 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    // Always use compact layout — NavigationRail has rendering issues on web.
-    // TODO: re-enable wide layout after fixing web rendering
-    return _buildCompactLayout(s);
+    return windowSizeOf(context) == WindowSize.expanded
+        ? _buildWideLayout(s)
+        : _buildCompactLayout(s);
   }
 
   /// Phone layout — bottom nav + draggable FAB.
@@ -77,6 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: Stack(
         children: [
+          const Positioned.fill(child: AuroraAppBackdrop()),
           Column(
             children: [
               Expanded(
@@ -84,12 +92,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
-          _DraggableFab(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CreateInvoiceScreen()),
+          if (TeamService.instance.can.canCreateInvoice)
+            _DraggableFab(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CreateInvoiceScreen()),
+              ),
             ),
-          ),
         ],
       ),
       bottomNavigationBar: _buildBottomNav(s),
@@ -98,149 +107,198 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Tablet / Desktop layout — NavigationRail on the left.
   Widget _buildWideLayout(AppStrings s) {
-    final expanded = windowSizeOf(context) == WindowSize.expanded;
+    final currentPlan = PlanService.instance.currentLimits.displayName;
+    final planStatus = switch (PlanService.instance.currentPlan) {
+      AppPlan.trial => '${PlanService.instance.trialDaysLeft}d trial left',
+      AppPlan.pro || AppPlan.enterprise => 'Workspace active',
+      AppPlan.expired => 'Free workspace',
+    };
+
     return Scaffold(
-      body: Row(
+      backgroundColor: Colors.transparent,
+      body: Stack(
         children: [
-          NavigationRail(
-            extended: expanded,
-            minExtendedWidth: 200,
-            backgroundColor: kSurfaceLowest,
-            selectedIndex: _selectedTab,
-            onDestinationSelected: (i) => setState(() => _selectedTab = i),
-            leading: Padding(
-              padding: EdgeInsets.symmetric(
-                vertical: 16,
-                horizontal: expanded ? 16 : 8,
-              ),
-              child: expanded
-                  ? Row(
+          const Positioned.fill(child: AuroraAppBackdrop()),
+          SafeArea(
+            minimum: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+            child: Row(
+              children: [
+                ConstrainedBox(
+                  constraints: const BoxConstraints.tightFor(width: 272),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+                    decoration: BoxDecoration(
+                      color: context.cs.surfaceContainerLowest.withValues(
+                        alpha: 0.9,
+                      ),
+                      borderRadius: BorderRadius.circular(30),
+                      boxShadow: const [kWhisperShadow],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 42,
+                              height: 42,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: kSignatureGradient,
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'B',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 17,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'BillRaja',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 19,
+                                      color: context.cs.onSurface,
+                                      letterSpacing: -0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Web workspace',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: context.cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 18),
                         Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(
-                            shape: BoxShape.circle,
-                            gradient: kSignatureGradient,
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                context.cs.primaryContainer.withValues(
+                                  alpha: 0.95,
+                                ),
+                                context.cs.surfaceContainerLowest,
+                              ],
+                            ),
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          child: const Center(
-                            child: Text(
-                              'B',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                currentPlan,
+                                style: const TextStyle(
+                                  color: kPrimary,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                planStatus,
+                                style: TextStyle(
+                                  color: context.cs.onSurfaceVariant,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 18),
+                        _HomeDesktopNavItem(
+                          icon: Icons.home_rounded,
+                          label: s.homeBottomHome,
+                          subtitle: 'Overview, KPIs, and alerts',
+                          isActive: _selectedTab == 0,
+                          onTap: () => setState(() => _selectedTab = 0),
+                        ),
+                        const SizedBox(height: 8),
+                        _HomeDesktopNavItem(
+                          icon: Icons.receipt_long_rounded,
+                          label: s.homeBottomInvoices,
+                          subtitle: 'Billing, status, and follow-ups',
+                          isActive: _selectedTab == 1,
+                          onTap: () => setState(() => _selectedTab = 1),
+                        ),
+                        const SizedBox(height: 8),
+                        _HomeDesktopNavItem(
+                          icon: Icons.people_alt_rounded,
+                          label: s.homeBottomClients,
+                          subtitle: 'Customer relationships and groups',
+                          isActive: _selectedTab == 2,
+                          onTap: () => setState(() => _selectedTab = 2),
+                        ),
+                        const SizedBox(height: 8),
+                        _HomeDesktopNavItem(
+                          icon: Icons.inventory_2_rounded,
+                          label: s.homeBottomProducts,
+                          subtitle: 'Catalog, pricing, and stock',
+                          isActive: _selectedTab == 3,
+                          onTap: () => setState(() => _selectedTab = 3),
+                        ),
+                        const Spacer(),
+                        Text(
+                          'Keep invoices, customers, products, and plan controls in one place.',
+                          style: TextStyle(
+                            color: context.cs.onSurfaceVariant,
+                            fontSize: 12.5,
+                            height: 1.5,
+                          ),
+                        ),
+                        if (TeamService.instance.can.canCreateInvoice) ...[
+                          const SizedBox(height: 14),
+                          SizedBox(
+                            width: double.infinity,
+                            child: _WaveHomeInvoiceButton(
+                              label: 'New Invoice',
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const CreateInvoiceScreen(),
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'BillRaja',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 18,
-                            color: kOnSurface,
-                          ),
-                        ),
+                        ],
                       ],
-                    )
-                  : Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        gradient: kSignatureGradient,
-                      ),
-                      child: const Center(
-                        child: Text(
-                          'B',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                          ),
-                        ),
-                      ),
                     ),
-            ),
-            trailing: Padding(
-              padding: const EdgeInsets.only(bottom: 16, top: 16),
-              child: expanded
-                  ? Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.icon(
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => const CreateInvoiceScreen(),
-                            ),
-                          ),
-                          icon: const Icon(Icons.add_rounded, size: 20),
-                          label: const Text('New Invoice'),
-                          style: FilledButton.styleFrom(
-                            backgroundColor: const Color(0xFF7C3AED),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                          ),
-                        ),
-                      ),
-                    )
-                  : IconButton.filled(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CreateInvoiceScreen(),
-                        ),
-                      ),
-                      icon: const Icon(Icons.add_rounded),
-                      style: IconButton.styleFrom(
-                        backgroundColor: const Color(0xFF7C3AED),
-                        foregroundColor: Colors.white,
-                      ),
+                  ),
+                ),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Container(
+                    clipBehavior: Clip.antiAlias,
+                    decoration: BoxDecoration(
+                      color: context.cs.surface.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(32),
+                      boxShadow: const [kWhisperShadow],
                     ),
+                    child: IndexedStack(index: _selectedTab, children: _tabs),
+                  ),
+                ),
+              ],
             ),
-            indicatorColor: kPrimaryContainer,
-            selectedIconTheme: const IconThemeData(color: kPrimary),
-            unselectedIconTheme: const IconThemeData(color: kTextTertiary),
-            selectedLabelTextStyle: const TextStyle(
-              fontWeight: FontWeight.w700,
-              color: kPrimary,
-            ),
-            unselectedLabelTextStyle: const TextStyle(
-              fontWeight: FontWeight.w500,
-              color: kTextTertiary,
-            ),
-            destinations: [
-              NavigationRailDestination(
-                icon: const Icon(Icons.home_outlined),
-                selectedIcon: const Icon(Icons.home_rounded),
-                label: Text(s.homeBottomHome),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.receipt_long_outlined),
-                selectedIcon: const Icon(Icons.receipt_long_rounded),
-                label: Text(s.homeBottomInvoices),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.people_outline_rounded),
-                selectedIcon: const Icon(Icons.people_alt_rounded),
-                label: Text(s.homeBottomClients),
-              ),
-              NavigationRailDestination(
-                icon: const Icon(Icons.inventory_2_outlined),
-                selectedIcon: const Icon(Icons.inventory_2_rounded),
-                label: Text(s.homeBottomProducts),
-              ),
-            ],
-          ),
-          const VerticalDivider(thickness: 1, width: 1, color: kSurfaceContainer),
-          Expanded(
-            child: IndexedStack(index: _selectedTab, children: _tabs),
           ),
         ],
       ),
@@ -249,8 +307,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomNav(AppStrings s) {
     return Container(
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         boxShadow: [kWhisperShadow],
       ),
       child: SafeArea(
@@ -359,8 +417,16 @@ class _DashboardPageState extends State<_DashboardPage> {
       return;
     }
     _invoicesSub?.cancel();
-    final stream = widget.invoicesStream ??
-        _firebaseService.getInvoicesStream(limit: 50);
+    // If team member can't view others' invoices, show only their own
+    final onlyMyInvoices =
+        TeamService.instance.isTeamMember &&
+        !TeamService.instance.can.canViewOthersInvoices;
+    final filterUid = onlyMyInvoices
+        ? TeamService.instance.getActualUserId()
+        : null;
+    final stream =
+        widget.invoicesStream ??
+        _firebaseService.getInvoicesStream(limit: 50, createdByUid: filterUid);
     _invoicesSub = stream.listen(
       (invoices) {
         if (!mounted) return;
@@ -385,13 +451,10 @@ class _DashboardPageState extends State<_DashboardPage> {
     if (Firebase.apps.isEmpty) return;
     _analyticsService ??= AnalyticsService();
     _analyticsSub?.cancel();
-    _analyticsSub = _analyticsService!.watchDashboardSummary().listen(
-      (data) {
-        if (!mounted) return;
-        setState(() => _analytics = data);
-      },
-      onError: (_) {},
-    );
+    _analyticsSub = _analyticsService!.watchDashboardSummary().listen((data) {
+      if (!mounted) return;
+      setState(() => _analytics = data);
+    }, onError: (_) {});
   }
 
   Future<void> _loadLowStockProducts() async {
@@ -413,11 +476,14 @@ class _DashboardPageState extends State<_DashboardPage> {
           .limit(200)
           .get(getOpts);
       if (!mounted) return;
-      final products = snap.docs
-          .map((d) => Product.fromMap(d.data(), docId: d.id))
-          .where((p) => p.currentStock <= p.minStockAlert && p.minStockAlert > 0)
-          .toList()
-        ..sort((a, b) => a.currentStock.compareTo(b.currentStock));
+      final products =
+          snap.docs
+              .map((d) => Product.fromMap(d.data(), docId: d.id))
+              .where(
+                (p) => p.currentStock <= p.minStockAlert && p.minStockAlert > 0,
+              )
+              .toList()
+            ..sort((a, b) => a.currentStock.compareTo(b.currentStock));
       setState(() {
         _lowStockProducts = products;
         _lowStockLoading = false;
@@ -432,18 +498,22 @@ class _DashboardPageState extends State<_DashboardPage> {
   void _computeMonthlyRevenue() {
     final now = DateTime.now();
     _currentMonthRevenue = _allInvoices
-        .where((inv) =>
-            inv.status == InvoiceStatus.paid &&
-            inv.createdAt.year == now.year &&
-            inv.createdAt.month == now.month)
+        .where(
+          (inv) =>
+              inv.status == InvoiceStatus.paid &&
+              inv.createdAt.year == now.year &&
+              inv.createdAt.month == now.month,
+        )
         .fold<double>(0, (s, inv) => s + inv.grandTotal);
 
     final prevMonth = DateTime(now.year, now.month - 1);
     _previousMonthRevenue = _allInvoices
-        .where((inv) =>
-            inv.status == InvoiceStatus.paid &&
-            inv.createdAt.year == prevMonth.year &&
-            inv.createdAt.month == prevMonth.month)
+        .where(
+          (inv) =>
+              inv.status == InvoiceStatus.paid &&
+              inv.createdAt.year == prevMonth.year &&
+              inv.createdAt.month == prevMonth.month,
+        )
         .fold<double>(0, (s, inv) => s + inv.grandTotal);
   }
 
@@ -509,32 +579,12 @@ class _DashboardPageState extends State<_DashboardPage> {
   List<Invoice> get _overdueInvoices =>
       _allInvoices.where((i) => i.status == InvoiceStatus.overdue).toList();
 
-  List<Invoice> get _recentInvoices {
-    final sorted = _allInvoices.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return sorted.take(3).toList();
-  }
-
   String _avatarLabel(User? user) {
     final source = user?.displayName?.trim().isNotEmpty == true
         ? user!.displayName!.trim()
         : user?.email?.trim();
     if (source == null || source.isEmpty) return 'G';
     return source.characters.first.toUpperCase();
-  }
-
-  static String _timeAgo(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inDays >= 7) {
-      final w = (diff.inDays / 7).floor();
-      return '$w week${w > 1 ? 's' : ''} ago';
-    } else if (diff.inDays >= 1) {
-      return '${diff.inDays}d ago';
-    } else if (diff.inHours >= 1) {
-      return '${diff.inHours}h ago';
-    } else {
-      return 'Just now';
-    }
   }
 
   // ─── Build ────────────────────────────────────────────────────────────────
@@ -546,7 +596,7 @@ class _DashboardPageState extends State<_DashboardPage> {
     // even if a subsequent stream error occurs — the offline banner handles UX.
     if (_invoicesError != null && _allInvoices.isEmpty) {
       return Scaffold(
-        backgroundColor: kSurface,
+        backgroundColor: Colors.transparent,
         body: ErrorRetryWidget(
           message: _s.homeLoadError,
           onRetry: _subscribeToInvoices,
@@ -555,14 +605,14 @@ class _DashboardPageState extends State<_DashboardPage> {
     }
 
     if (_invoicesLoading && _allInvoices.isEmpty) {
-      return const Scaffold(
-        backgroundColor: kSurface,
+      return Scaffold(
+        backgroundColor: Colors.transparent,
         body: Center(child: CircularProgressIndicator(color: kPrimary)),
       );
     }
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: Colors.transparent,
       body: RefreshIndicator(
         color: kPrimary,
         onRefresh: _handleRefresh,
@@ -574,21 +624,128 @@ class _DashboardPageState extends State<_DashboardPage> {
                 // 1. SliverAppBar
                 _buildSliverAppBar(),
 
-                // 2. Hero Card
-                SliverToBoxAdapter(child: _buildHeroCard()),
+                // 1b. Sync warning banner
+                SliverToBoxAdapter(child: _SyncWarningBanner()),
 
-                // 3. Status Strip
-                SliverToBoxAdapter(child: _buildStatusStrip()),
+                // 2. Hero Card (revenue — owner/manager only)
+                if (TeamService.instance.can.canViewRevenue)
+                  SliverToBoxAdapter(child: _buildHeroCard()),
 
-                // 4. Overdue Alert (conditional)
-                if (_overdueCount > 0)
+                // 3. Status Strip (paid/pending/overdue — owner/manager only)
+                if (TeamService.instance.can.canViewRevenue)
+                  SliverToBoxAdapter(child: _buildStatusStrip()),
+
+                // 4. Overdue Alert (conditional — owner/manager only)
+                if (TeamService.instance.can.canViewRevenue &&
+                    _overdueCount > 0)
                   SliverToBoxAdapter(child: _buildOverdueAlert()),
+
+                // 4b. Team member cards (attendance + my performance)
+                if (TeamService.instance.isTeamMember)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                      child: Column(
+                        children: [
+                          if (TeamService.instance.can.canMarkAttendance)
+                            Card(
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: kPrimary.withAlpha(20),
+                                  child: Icon(
+                                    Icons.location_on_rounded,
+                                    color: kPrimary,
+                                  ),
+                                ),
+                                title: const Text(
+                                  'Attendance',
+                                  style: TextStyle(fontWeight: FontWeight.w700),
+                                ),
+                                subtitle: Text(
+                                  PlanService.instance.hasAttendance
+                                      ? 'Check in / out at office'
+                                      : 'Upgrade to Pro to use attendance',
+                                ),
+                                trailing: PlanService.instance.hasAttendance
+                                    ? const Icon(Icons.chevron_right_rounded)
+                                    : Icon(
+                                        Icons.lock_rounded,
+                                        size: 18,
+                                        color: Colors.amber.shade700,
+                                      ),
+                                onTap: () {
+                                  if (!PlanService.instance.hasAttendance) {
+                                    _showFeatureUpgradePrompt('Attendance');
+                                    return;
+                                  }
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const GeoAttendanceScreen(),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          const SizedBox(height: 8),
+                          Card(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                backgroundColor: Colors.blue.withAlpha(20),
+                                child: const Icon(
+                                  Icons.analytics_outlined,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                              title: const Text(
+                                'My Performance',
+                                style: TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                              subtitle: const Text(
+                                'Attendance & invoice stats',
+                              ),
+                              trailing: const Icon(Icons.chevron_right_rounded),
+                              onTap: () async {
+                                final uid = TeamService.instance
+                                    .getActualUserId();
+                                final members = await TeamService.instance
+                                    .watchMembers()
+                                    .first;
+                                final me = members
+                                    .where((m) => m.uid == uid)
+                                    .firstOrNull;
+                                if (me != null && context.mounted) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          MemberPerformanceDetailScreen(
+                                            member: me,
+                                          ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
 
                 // 5. Quick Actions
                 SliverToBoxAdapter(child: _buildQuickActions()),
 
-                // 6. Revenue Card
-                SliverToBoxAdapter(child: _buildRevenueCard()),
+                // 6. Revenue Card (owner/manager only)
+                if (TeamService.instance.can.canViewRevenue)
+                  SliverToBoxAdapter(child: _buildRevenueCard()),
 
                 // 7. Low Stock Banner (conditional)
                 if (!_lowStockLoading && _lowStockProducts.isNotEmpty)
@@ -609,16 +766,16 @@ class _DashboardPageState extends State<_DashboardPage> {
   SliverAppBar _buildSliverAppBar() {
     return SliverAppBar(
       pinned: true,
-      backgroundColor: kSurface,
-      foregroundColor: kOnSurface,
+      backgroundColor: Colors.transparent,
+      foregroundColor: context.cs.onSurface,
       elevation: 0,
       scrolledUnderElevation: 0.5,
       surfaceTintColor: Colors.transparent,
       automaticallyImplyLeading: false,
-      title: const Text(
+      title: Text(
         'BillRaja',
         style: TextStyle(
-          color: kOnSurface,
+          color: context.cs.onSurface,
           fontWeight: FontWeight.w800,
           fontSize: 20,
           letterSpacing: -0.4,
@@ -630,7 +787,10 @@ class _DashboardPageState extends State<_DashboardPage> {
             context,
             MaterialPageRoute(builder: (_) => const SettingsScreen()),
           ),
-          icon: const Icon(Icons.settings_outlined, color: kOnSurfaceVariant),
+          icon: Icon(
+            Icons.settings_outlined,
+            color: context.cs.onSurfaceVariant,
+          ),
           tooltip: 'Settings',
         ),
         Padding(
@@ -793,12 +953,10 @@ class _DashboardPageState extends State<_DashboardPage> {
         onTap: onTap,
         child: Container(
           decoration: BoxDecoration(
-            color: kSurfaceLowest,
+            color: context.cs.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(14),
             boxShadow: const [kSubtleShadow],
-            border: Border(
-              left: BorderSide(color: color, width: 3),
-            ),
+            border: Border(left: BorderSide(color: color, width: 3)),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
@@ -807,19 +965,19 @@ class _DashboardPageState extends State<_DashboardPage> {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w500,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   _currencyFormat.format(amount),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -891,95 +1049,211 @@ class _DashboardPageState extends State<_DashboardPage> {
   Widget _buildQuickActions() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(children: [Row(
+      child: Column(
         children: [
-          _buildQuickAction(
-            icon: Icons.add_circle_outline_rounded,
-            label: _s.homeCreateInvoice,
-            highlighted: true,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CreateInvoiceScreen()),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildQuickAction(
-            icon: Icons.person_add_alt_1_rounded,
-            label: _s.homeAddClient,
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CustomersScreen()),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildQuickAction(
-            icon: Icons.shopping_cart_outlined,
-            label: 'New PO',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => const CreatePurchaseOrderScreen(),
+          Row(
+            children: [
+              _buildQuickAction(
+                icon: Icons.add_circle_outline_rounded,
+                label: _s.homeCreateInvoice,
+                highlighted: true,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const CreateInvoiceScreen(),
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.person_add_alt_1_rounded,
+                label: _s.homeAddClient,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const CustomersScreen()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.shopping_cart_outlined,
+                label: 'New PO',
+                onTap: () {
+                  if (!PlanService.instance.hasPurchaseOrders) {
+                    if (TeamService.instance.isTeamMember) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'This feature is not available. Contact your team owner to upgrade.',
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UpgradeScreen(),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const CreatePurchaseOrderScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.receipt_long_outlined,
+                label: 'GST Report',
+                onTap: () {
+                  if (!TeamService.instance.can.canViewReports) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'You do not have permission to view reports',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!PlanService.instance.hasReports) {
+                    if (TeamService.instance.isTeamMember) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'This feature is not available. Contact your team owner to upgrade.',
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UpgradeScreen(),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const GstReportScreen()),
+                  );
+                },
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _buildQuickAction(
-            icon: Icons.receipt_long_outlined,
-            label: 'GST Report',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const GstReportScreen()),
-            ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              _buildQuickAction(
+                icon: Icons.fingerprint_rounded,
+                label: 'Attendance',
+                onTap: () {
+                  if (!PlanService.instance.hasAttendance) {
+                    _showFeatureUpgradePrompt('Attendance');
+                    return;
+                  }
+                  _showAttendanceHowItWorks();
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.bar_chart_rounded,
+                label: 'Reports',
+                onTap: () {
+                  if (!TeamService.instance.can.canViewReports) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'You do not have permission to view reports',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  if (!PlanService.instance.hasReports) {
+                    if (TeamService.instance.isTeamMember) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            'This feature is not available. Contact your team owner to upgrade.',
+                          ),
+                        ),
+                      );
+                    } else {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const UpgradeScreen(),
+                        ),
+                      );
+                    }
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ReportsScreen()),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.workspace_premium_rounded,
+                label: 'Manage Sub',
+                onTap: () {
+                  if (!PlanService.instance.hasMembership) {
+                    _showFeatureUpgradePrompt('Membership Management');
+                    return;
+                  }
+                  if (!TeamService.instance.can.canManageSubscription) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'You do not have permission to manage memberships',
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SubscriptionsScreen(),
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.groups_rounded,
+                label: 'Team',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => TeamService.instance.isTeamMember
+                        ? const TeamSettingsScreen()
+                        : const TeamManagementScreen(),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _buildQuickAction(
+                icon: Icons.inventory_2_outlined,
+                label: 'Products',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProductsScreen()),
+                ),
+              ),
+            ],
           ),
         ],
       ),
-      const SizedBox(height: 8),
-      Row(
-        children: [
-          _buildQuickAction(
-            icon: Icons.bar_chart_rounded,
-            label: 'Reports',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ReportsScreen()),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildGradientAction(
-            icon: Icons.workspace_premium_rounded,
-            label: 'Manage Sub',
-            gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF3CAC), Color(0xFF784BA0)]),
-            onTap: () {
-              if (!RemoteConfigService.instance.featureMembership) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Membership feature is currently unavailable')),
-                );
-                return;
-              }
-              Navigator.push(context, MaterialPageRoute(builder: (_) => const SubscriptionsScreen()));
-            },
-          ),
-          const SizedBox(width: 8),
-          _buildQuickAction(
-            icon: Icons.settings_outlined,
-            label: 'Settings',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-          const SizedBox(width: 8),
-          _buildQuickAction(
-            icon: Icons.inventory_2_outlined,
-            label: 'Products',
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const ProductsScreen()),
-            ),
-          ),
-        ],
-      ),
-    ]),
     );
   }
 
@@ -1000,7 +1274,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             padding: const EdgeInsets.symmetric(vertical: 12),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(14),
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               boxShadow: const [kSubtleShadow],
             ),
             child: Column(
@@ -1009,7 +1283,9 @@ class _DashboardPageState extends State<_DashboardPage> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: highlighted ? kPrimary : kSurfaceContainerLow,
+                    color: highlighted
+                        ? kPrimary
+                        : context.cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
@@ -1021,10 +1297,10 @@ class _DashboardPageState extends State<_DashboardPage> {
                 const SizedBox(height: 8),
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                   textAlign: TextAlign.center,
                   maxLines: 1,
@@ -1038,47 +1314,48 @@ class _DashboardPageState extends State<_DashboardPage> {
     );
   }
 
-  Widget _buildGradientAction({
-    required IconData icon,
-    required String label,
-    required Gradient gradient,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            gradient: gradient,
-            boxShadow: [
-              BoxShadow(color: const Color(0xFFFF6B35).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 3)),
-            ],
-          ),
-          child: Column(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.25),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, size: 24, color: Colors.white),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.white),
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+  void _showFeatureUpgradePrompt(String featureName) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('$featureName — Pro Feature'),
+        content: Text(
+          'Upgrade to Pro or Enterprise to unlock $featureName and other premium features.',
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Later'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
+              );
+            },
+            child: const Text('View Plans'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAttendanceHowItWorks() {
+    final isOwnerOrManager =
+        TeamService.instance.isOnTeam &&
+        (TeamService.instance.isTeamOwner ||
+            TeamService.instance.currentRole == TeamRole.coOwner ||
+            TeamService.instance.currentRole == TeamRole.manager);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _AttendanceHowItWorksSheet(
+        isOwnerOrManager: isOwnerOrManager,
+        isOnTeam: TeamService.instance.isOnTeam,
       ),
     );
   }
@@ -1086,19 +1363,23 @@ class _DashboardPageState extends State<_DashboardPage> {
   Widget _buildRevenueCard() {
     final now = DateTime.now();
     final monthName = DateFormat('MMMM').format(now);
-    final prevMonthName = DateFormat('MMM').format(DateTime(now.year, now.month - 1));
+    final prevMonthName = DateFormat(
+      'MMM',
+    ).format(DateTime(now.year, now.month - 1));
 
     double? percentChange;
     if (_previousMonthRevenue > 0) {
       percentChange =
-          ((_currentMonthRevenue - _previousMonthRevenue) / _previousMonthRevenue) * 100;
+          ((_currentMonthRevenue - _previousMonthRevenue) /
+              _previousMonthRevenue) *
+          100;
     }
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [kSubtleShadow],
       ),
@@ -1110,19 +1391,19 @@ class _DashboardPageState extends State<_DashboardPage> {
               children: [
                 Text(
                   '$monthName Revenue',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _currencyFormat.format(_currentMonthRevenue),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w800,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
               ],
@@ -1170,10 +1451,10 @@ class _DashboardPageState extends State<_DashboardPage> {
             Expanded(
               child: Text(
                 '${_lowStockProducts.length} product${_lowStockProducts.length > 1 ? 's' : ''} low on stock',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
               ),
             ),
@@ -1186,127 +1467,6 @@ class _DashboardPageState extends State<_DashboardPage> {
               ),
             ),
             const Icon(Icons.chevron_right_rounded, size: 16, color: kPending),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRecentInvoicesHeader() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 8),
-      child: Row(
-        children: [
-          Text(
-            _s.homeRecentInvoices,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: kOnSurface,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const Spacer(),
-          GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InvoicesScreen()),
-            ),
-            child: Row(
-              children: [
-                Text(
-                  _s.homeViewAll,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: kPrimary,
-                  ),
-                ),
-                const Icon(Icons.chevron_right_rounded, size: 16, color: kPrimary),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentInvoiceTile(Invoice invoice) {
-    final (badgeColor, badgeBg, statusLabel) = switch (invoice.effectiveStatus) {
-      InvoiceStatus.paid => (kPaid, kPaidBg, 'PAID'),
-      InvoiceStatus.pending => (const Color(0xFFEF4444), const Color(0xFFFEE2E2), 'UNPAID'),
-      InvoiceStatus.overdue => (kOverdue, kOverdueBg, 'OVERDUE'),
-      InvoiceStatus.partiallyPaid => (const Color(0xFFEAB308), const Color(0xFFFEF3C7), 'PARTIAL'),
-    };
-
-    return GestureDetector(
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => InvoiceDetailsScreen(invoice: invoice),
-        ),
-      ),
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: kSurfaceLowest,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: const [kSubtleShadow],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    invoice.clientName,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: kOnSurface,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _timeAgo(invoice.createdAt),
-                    style: const TextStyle(fontSize: 11, color: kTextTertiary),
-                  ),
-                ],
-              ),
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  _currencyFormat.format(invoice.grandTotal),
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: kOnSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: badgeBg,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w700,
-                      color: badgeColor,
-                      letterSpacing: 0.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ],
         ),
       ),
@@ -1327,19 +1487,35 @@ class _DraggableFab extends StatefulWidget {
   State<_DraggableFab> createState() => _DraggableFabState();
 }
 
-class _DraggableFabState extends State<_DraggableFab> {
+class _DraggableFabState extends State<_DraggableFab>
+    with SingleTickerProviderStateMixin {
   static const _fabW = 160.0;
   static const _fabH = 52.0;
 
   Offset? _position;
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final screen = MediaQuery.sizeOf(context);
-    _position ??= Offset(
-      (screen.width - _fabW) / 2,
-      screen.height - 170,
-    );
+    final animationsDisabled =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    _position ??= Offset((screen.width - _fabW) / 2, screen.height - 170);
     final pos = _position!;
 
     return SizedBox.expand(
@@ -1358,46 +1534,287 @@ class _DraggableFabState extends State<_DraggableFab> {
                 });
               },
               onTap: widget.onTap,
-              child: Container(
+              child: _WaveInvoiceVisual(
+                progress: animationsDisabled ? 0.18 : _controller.value,
                 width: _fabW,
                 height: _fabH,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF7C3AED), Color(0xFF5B21B6)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF7C3AED).withValues(alpha: 0.45),
-                      blurRadius: 20,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_rounded, color: Colors.white, size: 22),
-                    SizedBox(width: 8),
-                    Text(
-                      'New Invoice',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ],
-                ),
+                borderRadius: const BorderRadius.all(Radius.circular(30)),
+                label: 'New Invoice',
+                iconSize: 22,
+                iconTextSpacing: 8,
+                fontSize: 15,
+                letterSpacing: 0.3,
+                shadowAlpha: 0.45,
+                shadowBlur: 20,
+                shadowOffset: const Offset(0, 8),
               ),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+class _WaveHomeInvoiceButton extends StatefulWidget {
+  const _WaveHomeInvoiceButton({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  State<_WaveHomeInvoiceButton> createState() => _WaveHomeInvoiceButtonState();
+}
+
+class _WaveHomeInvoiceButtonState extends State<_WaveHomeInvoiceButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2800),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final animationsDisabled =
+        MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+    final borderRadius = const BorderRadius.all(Radius.circular(14));
+
+    return Tooltip(
+      message: widget.label,
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: borderRadius,
+        child: InkWell(
+          onTap: widget.onPressed,
+          borderRadius: borderRadius,
+          child: _WaveInvoiceVisual(
+            progress: animationsDisabled ? 0.18 : _controller.value,
+            width: null,
+            height: 52,
+            borderRadius: borderRadius,
+            label: widget.label,
+            showLabel: true,
+            iconSize: 20,
+            iconTextSpacing: 8,
+            fontSize: 15,
+            shadowAlpha: 0.34,
+            shadowBlur: 16,
+            shadowOffset: const Offset(0, 6),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WaveInvoiceVisual extends StatelessWidget {
+  const _WaveInvoiceVisual({
+    required this.progress,
+    required this.height,
+    required this.borderRadius,
+    required this.label,
+    this.width,
+    this.showLabel = true,
+    this.iconSize = 20,
+    this.iconTextSpacing = 8,
+    this.fontSize = 15,
+    this.letterSpacing = 0,
+    this.shadowAlpha = 0.34,
+    this.shadowBlur = 16,
+    this.shadowOffset = const Offset(0, 6),
+  });
+
+  final double progress;
+  final double? width;
+  final double height;
+  final BorderRadius borderRadius;
+  final String label;
+  final bool showLabel;
+  final double iconSize;
+  final double iconTextSpacing;
+  final double fontSize;
+  final double letterSpacing;
+  final double shadowAlpha;
+  final double shadowBlur;
+  final Offset shadowOffset;
+
+  static const _waveStart = Color(0xFF7C3AED);
+  static const _waveEnd = Color(0xFF5B21B6);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [_waveStart, _waveEnd],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: borderRadius,
+        boxShadow: [
+          BoxShadow(
+            color: _waveStart.withValues(alpha: shadowAlpha),
+            blurRadius: shadowBlur,
+            offset: shadowOffset,
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: borderRadius,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _WaveActionPainter(
+                  progress: progress,
+                  backWaveColor: Colors.white.withValues(alpha: 0.10),
+                  frontWaveColor: Colors.white.withValues(alpha: 0.16),
+                  highlightColor: Colors.white.withValues(alpha: 0.28),
+                ),
+              ),
+            ),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, color: Colors.white, size: iconSize),
+                  if (showLabel) ...[
+                    SizedBox(width: iconTextSpacing),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: fontSize,
+                        letterSpacing: letterSpacing,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WaveActionPainter extends CustomPainter {
+  const _WaveActionPainter({
+    required this.progress,
+    required this.backWaveColor,
+    required this.frontWaveColor,
+    required this.highlightColor,
+  });
+
+  final double progress;
+  final Color backWaveColor;
+  final Color frontWaveColor;
+  final Color highlightColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    _paintWave(
+      canvas,
+      size,
+      baseline: size.height * 0.78,
+      amplitude: 5,
+      wavelength: size.width * 0.92,
+      phase: progress * math.pi * 2,
+      color: backWaveColor,
+    );
+    _paintWave(
+      canvas,
+      size,
+      baseline: size.height * 0.66,
+      amplitude: 7,
+      wavelength: size.width * 0.72,
+      phase: -progress * math.pi * 3.2,
+      color: frontWaveColor,
+    );
+    _paintHighlight(
+      canvas,
+      size,
+      baseline: size.height * 0.51,
+      amplitude: 3,
+      wavelength: size.width * 0.84,
+      phase: progress * math.pi * 4.6,
+    );
+  }
+
+  void _paintWave(
+    Canvas canvas,
+    Size size, {
+    required double baseline,
+    required double amplitude,
+    required double wavelength,
+    required double phase,
+    required Color color,
+  }) {
+    final path = Path()..moveTo(0, size.height);
+    for (double x = 0; x <= size.width; x++) {
+      final y =
+          baseline +
+          math.sin((x / wavelength) * math.pi * 2 + phase) * amplitude;
+      path.lineTo(x, y);
+    }
+    path
+      ..lineTo(size.width, size.height)
+      ..close();
+
+    canvas.drawPath(path, Paint()..color = color);
+  }
+
+  void _paintHighlight(
+    Canvas canvas,
+    Size size, {
+    required double baseline,
+    required double amplitude,
+    required double wavelength,
+    required double phase,
+  }) {
+    final path = Path();
+    for (double x = 0; x <= size.width; x++) {
+      final y =
+          baseline +
+          math.sin((x / wavelength) * math.pi * 2 + phase) * amplitude;
+      if (x == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = highlightColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.4,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _WaveActionPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.backWaveColor != backWaveColor ||
+        oldDelegate.frontWaveColor != frontWaveColor ||
+        oldDelegate.highlightColor != highlightColor;
   }
 }
 
@@ -1482,7 +1899,9 @@ class _BottomNavItem extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 22,
-                  color: isActive ? activeColor : kTextTertiary,
+                  color: isActive
+                      ? activeColor
+                      : context.cs.onSurfaceVariant.withAlpha(153),
                 ),
               ),
               const SizedBox(height: 3),
@@ -1491,13 +1910,698 @@ class _BottomNavItem extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                  color: isActive ? activeColor : kTextTertiary,
+                  color: isActive
+                      ? activeColor
+                      : context.cs.onSurfaceVariant.withAlpha(153),
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _HomeDesktopNavItem extends StatelessWidget {
+  const _HomeDesktopNavItem({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: isActive
+                ? context.cs.primaryContainer.withValues(alpha: 0.96)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: isActive
+                      ? Colors.white.withValues(alpha: 0.88)
+                      : context.cs.surfaceContainerLow,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(
+                  icon,
+                  color: isActive ? kPrimary : context.cs.onSurfaceVariant,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: isActive ? kPrimary : context.cs.onSurface,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: context.cs.onSurfaceVariant,
+                        fontSize: 11.5,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Attendance "How It Works" Bottom Sheet
+// ═════════════════════════════════════════════════════════════════════════════
+
+class _AttendanceHowItWorksSheet extends StatelessWidget {
+  const _AttendanceHowItWorksSheet({
+    required this.isOwnerOrManager,
+    required this.isOnTeam,
+  });
+
+  final bool isOwnerOrManager;
+  final bool isOnTeam;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.88,
+      ),
+      decoration: BoxDecoration(
+        color: context.cs.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Drag handle
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: context.cs.onSurface.withAlpha(40),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header with icon
+                  Center(
+                    child: Container(
+                      width: 72,
+                      height: 72,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [Color(0xFF6C63FF), Color(0xFF4A42E8)],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF6C63FF).withAlpha(50),
+                            blurRadius: 20,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.fingerprint_rounded,
+                        size: 36,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  Center(
+                    child: Text(
+                      'GPS Attendance System',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
+                        color: context.cs.onSurface,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 6),
+
+                  Center(
+                    child: Text(
+                      'Track team attendance with GPS geofencing',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // How it works steps
+                  _buildSectionTitle(context, 'How It Works'),
+                  const SizedBox(height: 14),
+
+                  _buildStep(
+                    context,
+                    step: '1',
+                    icon: Icons.location_on_rounded,
+                    color: const Color(0xFF4CAF50),
+                    title: 'Owner sets office location',
+                    description:
+                        'The team owner marks the office on a map and sets a geofence radius (e.g., 100m). Only check-ins within this boundary are accepted.',
+                  ),
+
+                  _buildStepConnector(context),
+
+                  _buildStep(
+                    context,
+                    step: '2',
+                    icon: Icons.groups_rounded,
+                    color: const Color(0xFF2196F3),
+                    title: 'Invite team members',
+                    description:
+                        'Add your sales reps, managers, and staff to the team. Each member gets the attendance feature on their app.',
+                  ),
+
+                  _buildStepConnector(context),
+
+                  _buildStep(
+                    context,
+                    step: '3',
+                    icon: Icons.login_rounded,
+                    color: const Color(0xFFFF9800),
+                    title: 'Members check in & out',
+                    description:
+                        'Team members tap "Check In" when they arrive at office. GPS verifies they\'re within the geofence. Tap "Check Out" when leaving.',
+                  ),
+
+                  _buildStepConnector(context),
+
+                  _buildStep(
+                    context,
+                    step: '4',
+                    icon: Icons.analytics_rounded,
+                    color: const Color(0xFF9C27B0),
+                    title: 'Owner tracks everything',
+                    description:
+                        'View daily attendance logs, total hours worked, late arrivals, and team performance — all from the dashboard.',
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // Features grid
+                  _buildSectionTitle(context, 'Features Included'),
+                  const SizedBox(height: 14),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.gps_fixed_rounded,
+                    color: const Color(0xFF4CAF50),
+                    title: 'GPS Geofencing',
+                    subtitle: 'Check-in only works within office radius',
+                  ),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.schedule_rounded,
+                    color: const Color(0xFF2196F3),
+                    title: 'Work Hours Tracking',
+                    subtitle: 'Automatic calculation of daily hours worked',
+                  ),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.bar_chart_rounded,
+                    color: const Color(0xFFFF9800),
+                    title: 'Attendance Dashboard',
+                    subtitle: 'Owner sees all members\' daily/monthly logs',
+                  ),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.trending_up_rounded,
+                    color: const Color(0xFF9C27B0),
+                    title: 'Performance Reports',
+                    subtitle: 'Track individual member attendance & invoices',
+                  ),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.shield_rounded,
+                    color: const Color(0xFF607D8B),
+                    title: 'Anti-Fraud Protection',
+                    subtitle: 'GPS coordinates logged with every check-in',
+                  ),
+
+                  _buildFeatureRow(
+                    context,
+                    icon: Icons.people_rounded,
+                    color: const Color(0xFFE91E63),
+                    title: 'Unlimited Team Members',
+                    subtitle: 'No limit on how many people can use attendance',
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // CTA section
+                  if (!isOnTeam) ...[
+                    // User has no team — prompt to create one
+                    _buildInfoCard(
+                      context,
+                      icon: Icons.info_outline_rounded,
+                      color: const Color(0xFF2196F3),
+                      text:
+                          'Create a team first to start using GPS attendance. Go to Team from the quick actions below.',
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const TeamManagementScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.groups_rounded),
+                        label: const Text(
+                          'Create Your Team',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else if (isOwnerOrManager) ...[
+                    // Owner/manager — show setup + dashboard options
+                    _buildInfoCard(
+                      context,
+                      icon: Icons.lightbulb_outline_rounded,
+                      color: const Color(0xFFFF9800),
+                      text:
+                          'Set your office location first, then invite team members. They\'ll be able to check in when near your office.',
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const OfficeLocationScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.location_on_rounded,
+                                size: 20,
+                              ),
+                              label: const Text(
+                                'Set Location',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: SizedBox(
+                            height: 52,
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(context);
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const AttendanceDashboardScreen(),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(
+                                Icons.dashboard_rounded,
+                                size: 20,
+                              ),
+                              label: const Text(
+                                'Dashboard',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ] else ...[
+                    // Team member — show check-in button
+                    _buildInfoCard(
+                      context,
+                      icon: Icons.info_outline_rounded,
+                      color: const Color(0xFF4CAF50),
+                      text:
+                          'You can check in when you\'re at the office location set by your team owner.',
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const GeoAttendanceScreen(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.login_rounded),
+                        label: const Text(
+                          'Go to Check In',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(BuildContext context, String title) {
+    return Text(
+      title,
+      style: TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w800,
+        color: context.cs.onSurface,
+        letterSpacing: -0.2,
+      ),
+    );
+  }
+
+  Widget _buildStep(
+    BuildContext context, {
+    required String step,
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String description,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Step number circle
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: color.withAlpha(25),
+            shape: BoxShape.circle,
+            border: Border.all(color: color.withAlpha(60), width: 1.5),
+          ),
+          child: Center(
+            child: Text(
+              step,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, size: 18, color: color),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: context.cs.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: context.cs.onSurfaceVariant,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStepConnector(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 17, top: 4, bottom: 4),
+      child: Container(
+        width: 2,
+        height: 20,
+        decoration: BoxDecoration(
+          color: context.cs.onSurface.withAlpha(25),
+          borderRadius: BorderRadius.circular(1),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFeatureRow(
+    BuildContext context, {
+    required IconData icon,
+    required Color color,
+    required String title,
+    required String subtitle,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: color.withAlpha(20),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 20, color: color),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: context.cs.onSurface,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.cs.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(
+            Icons.check_circle_rounded,
+            size: 18,
+            color: color.withAlpha(180),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(
+    BuildContext context, {
+    required IconData icon,
+    required Color color,
+    required String text,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: color.withAlpha(15),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withAlpha(40)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurface,
+                height: 1.4,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Sync Warning Banner ─────────────────────────────────────────────────────
+
+/// Shows a persistent warning when offline writes haven't synced to the server.
+/// Listens to [SyncStatusService] and auto-hides when sync completes.
+class _SyncWarningBanner extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: SyncStatusService.instance.lastSyncError,
+      builder: (context, error, _) {
+        if (error == null) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+          child: Material(
+            color: const Color(0xFFFEF3C7),
+            borderRadius: BorderRadius.circular(12),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.sync_problem_rounded,
+                    size: 18,
+                    color: Color(0xFFB45309),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      error,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: Color(0xFF92400E),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

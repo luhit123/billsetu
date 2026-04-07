@@ -1,6 +1,14 @@
 User-agent: *
 Allow: /
+Allow: /pricing.html
+Allow: /security.html
+Allow: /support.html
+Allow: /privacy-policy.html
+Allow: /terms-conditions.html
+Allow: /account-deletion.html
 Allow: /i/
 Disallow: /api/
+Disallow: /d/
+Disallow: /p
 
-Sitemap: https://billeasy-3a6ad.web.app/sitemap.xml
+Sitemap: https://billraja.com/sitemap.xml

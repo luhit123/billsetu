@@ -7,6 +7,7 @@ import 'package:billeasy/screens/purchase_order_details_screen.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/error_retry_widget.dart';
 import 'package:flutter/material.dart';
@@ -47,6 +48,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
   Timer? _searchDebounce;
 
   // ── Stream-based state ───────────────────────────────────────────────────
+  static const _streamLimit = 200;
   List<PurchaseOrder> _allOrders = [];
   bool _isLoading = true;
   Object? _loadError;
@@ -96,7 +98,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       _isLoading = true;
       _loadError = null;
     });
-    _orderSub = _svc.getPurchaseOrdersStream(limit: 200).listen(
+    _orderSub = _svc.getPurchaseOrdersStream(limit: _streamLimit).listen(
       (orders) {
         if (!mounted) return;
         setState(() {
@@ -124,11 +126,11 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
 
     if (!PlanService.instance.hasPurchaseOrders) {
       return Scaffold(
-        backgroundColor: kSurface,
+        backgroundColor: context.cs.surface,
         appBar: AppBar(
           title: const Text('Purchase Orders'),
-          backgroundColor: kSurface,
-          foregroundColor: kOnSurface,
+          backgroundColor: context.cs.surface,
+          foregroundColor: context.cs.onSurface,
           elevation: 0,
           scrolledUnderElevation: 0,
           surfaceTintColor: Colors.transparent,
@@ -139,22 +141,30 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.lock_outline, size: 64, color: kSurfaceDim),
+                Icon(Icons.lock_outline, size: 64, color: context.cs.surfaceContainerHighest),
                 const SizedBox(height: 16),
-                const Text('Purchase Orders', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: kOnSurface)),
+                Text('Purchase Orders', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: context.cs.onSurface)),
                 const SizedBox(height: 8),
-                const Text('Upgrade to Pro to create and manage purchase orders.', textAlign: TextAlign.center, style: TextStyle(color: kOnSurfaceVariant)),
-                const SizedBox(height: 24),
-                ElevatedButton.icon(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Purchase Orders'))),
-                  icon: const Icon(Icons.workspace_premium),
-                  label: const Text('Upgrade to Pro'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                  ),
+                Text(
+                  TeamService.instance.isTeamMember
+                      ? 'This feature is not available. Contact your team owner.'
+                      : 'This feature is currently unavailable. Please check back later.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: context.cs.onSurfaceVariant),
                 ),
+                if (!TeamService.instance.isTeamMember) ...[
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const UpgradeScreen(featureName: 'Purchase Orders'))),
+                    icon: const Icon(Icons.workspace_premium),
+                    label: const Text('View Plans'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: context.cs.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -163,7 +173,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
     }
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: _buildAppBar(),
       body: SafeArea(
         child: RefreshIndicator(
@@ -222,7 +232,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             width: 72,
                             height: 72,
                             decoration: BoxDecoration(
-                              color: kSurfaceContainerLow,
+                              color: context.cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(24),
                             ),
                             child: const Icon(
@@ -236,19 +246,19 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                             _allOrders.isEmpty
                                 ? 'No purchase orders yet'
                                 : 'No orders match this filter',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
-                              color: kOnSurface,
+                              color: context.cs.onSurface,
                             ),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 8),
                           if (_allOrders.isEmpty)
-                            const Text(
+                            Text(
                               'Create your first PO',
                               style: TextStyle(
-                                color: kOnSurfaceVariant,
+                                color: context.cs.onSurfaceVariant,
                                 fontSize: 14,
                                 height: 1.5,
                               ),
@@ -259,7 +269,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                     ),
                   ),
                 )
-              else
+              else ...[
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
                   sliver: SliverList(
@@ -285,21 +295,50 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
                     ),
                   ),
                 ),
+                // Show a hint when the stream limit is reached
+                if (_allOrders.length >= _streamLimit)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: context.cs.surfaceContainerHighest.withAlpha(80),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline_rounded, size: 16, color: context.cs.onSurfaceVariant),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Showing latest $_streamLimit orders. Use search to find others.',
+                                style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: 'po-fab',
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const CreatePurchaseOrderScreen()),
-        ),
-        backgroundColor: kPrimary,
-        foregroundColor: Colors.white,
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New PO'),
-      ),
+      floatingActionButton: TeamService.instance.can.canManagePurchaseOrders
+          ? FloatingActionButton.extended(
+              heroTag: 'po-fab',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CreatePurchaseOrderScreen()),
+              ),
+              backgroundColor: context.cs.primary,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('New PO'),
+            )
+          : null,
     );
   }
 
@@ -307,8 +346,8 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      backgroundColor: kSurface,
-      foregroundColor: kOnSurface,
+      backgroundColor: context.cs.surface,
+      foregroundColor: context.cs.onSurface,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
@@ -316,24 +355,24 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           ? TextField(
               controller: _searchCtrl,
               autofocus: true,
-              cursorColor: kOnSurface,
-              style: const TextStyle(
-                color: kOnSurface,
+              cursorColor: context.cs.onSurface,
+              style: TextStyle(
+                color: context.cs.onSurface,
                 fontWeight: FontWeight.w600,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Search orders…',
-                hintStyle: TextStyle(color: kTextTertiary),
+                hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153)),
                 border: InputBorder.none,
               ),
               onChanged: _handleSearchChanged,
             )
-          : const Text(
+          : Text(
               'Purchase Orders',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 20,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
       actions: [
@@ -352,7 +391,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           },
           icon: Icon(
             _searching ? Icons.close_rounded : Icons.search_rounded,
-            color: kOnSurface,
+            color: context.cs.onSurface,
           ),
         ),
       ],
@@ -368,7 +407,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: active ? kPrimary : kSurfaceContainerLow,
+          color: active ? kPrimary : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -376,7 +415,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: active ? Colors.white : kTextSecondary,
+            color: active ? Colors.white : context.cs.onSurfaceVariant,
           ),
         ),
       ),
@@ -417,7 +456,7 @@ class _SummaryStrip extends StatelessWidget {
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       padding: const EdgeInsets.symmetric(vertical: 14),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kSubtleShadow],
       ),
@@ -465,19 +504,19 @@ class _SummaryCell extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -489,7 +528,7 @@ class _SummaryCell extends StatelessWidget {
 class _VertDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return Container(width: 1, height: 36, color: kSurfaceDim);
+    return Container(width: 1, height: 36, color: context.cs.surfaceContainerHighest);
   }
 }
 
@@ -529,7 +568,7 @@ class _POTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
           boxShadow: const [kSubtleShadow],
         ),
@@ -539,7 +578,7 @@ class _POTile extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: kPrimaryContainer,
+                color: context.cs.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -555,18 +594,18 @@ class _POTile extends StatelessWidget {
                 children: [
                   Text(
                     order.supplierName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
-                      color: kOnSurface,
+                      color: context.cs.onSurface,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     '${order.orderNumber} · ${dateFmt.format(order.createdAt)} · $itemLabel',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: kTextTertiary,
+                      color: context.cs.onSurfaceVariant.withAlpha(153),
                     ),
                   ),
                 ],
@@ -578,10 +617,10 @@ class _POTile extends StatelessWidget {
               children: [
                 Text(
                   currency.format(order.subtotal),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
                 const SizedBox(height: 5),

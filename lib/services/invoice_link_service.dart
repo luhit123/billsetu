@@ -2,15 +2,11 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:billeasy/modals/invoice.dart';
-import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
-import 'package:billeasy/services/profile_service.dart';
-import 'package:billeasy/services/signature_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crypto/crypto.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
-import 'package:intl/intl.dart';
 
 /// Uploads invoice PDFs to Firebase Storage, writes metadata to Firestore,
 /// and returns a branded download URL.
@@ -19,39 +15,73 @@ class InvoiceLinkService {
 
   static final FirebaseStorage _storage = FirebaseStorage.instance;
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  static final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
   static const _baseUrl = 'https://invoice.billraja.online';
 
   /// Returns the Storage path for an invoice PDF.
-  static String _storagePath(String ownerId, Invoice invoice) {
+  static String _storagePath(
+    String ownerId,
+    String writerUid,
+    Invoice invoice,
+  ) {
     final fileName = InvoicePdfService().fileNameForInvoice(invoice);
-    return 'invoices/$ownerId/${invoice.id}/$fileName';
+    return 'invoices/$ownerId/$writerUid/${invoice.id}/$fileName';
   }
-
-  static const _chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-  static final _rng = Random.secure();
 
   /// Cache to ensure same invoice always gets same shortcode within a session.
   static final Map<String, String> _shortCodeCache = {};
 
-  /// Generates a deterministic short code from invoice ID + number.
-  /// Falls back to a random code only if invoice ID is empty.
-  static String _shortCode(Invoice invoice) {
+  static final _secureRandom = Random.secure();
+
+  /// Generates a cryptographically random short code for new links.
+  /// Reuses existing codes from Firestore if one was already created for this invoice.
+  static Future<String> _shortCode(Invoice invoice) async {
     final key = '${invoice.id}_${invoice.invoiceNumber}';
     if (_shortCodeCache.containsKey(key)) return _shortCodeCache[key]!;
 
-    final String code;
+    // Check if a shared link already exists for this invoice.
     if (invoice.id.isNotEmpty) {
-      // Deterministic: same invoice always produces same code
-      final hash = sha256.convert('${invoice.id}${invoice.invoiceNumber}'.codeUnits).toString();
-      code = hash.substring(0, 16);
-    } else {
-      // Fallback for unsaved invoices — random but cached
-      final hash = sha256.convert('${invoice.invoiceNumber}${DateTime.now().millisecondsSinceEpoch}'.codeUnits).toString();
-      code = hash.substring(0, 16);
+      final ownerId = TeamService.instance.getEffectiveOwnerId();
+      final existing = await _firestore
+          .collection('shared_invoices')
+          .where('invoiceId', isEqualTo: invoice.id)
+          .where('ownerId', isEqualTo: ownerId)
+          .limit(1)
+          .get();
+      if (existing.docs.isNotEmpty) {
+        final code = existing.docs.first.id;
+        _shortCodeCache[key] = code;
+        return code;
+      }
     }
+
+    // Generate cryptographically random 32-character hex string
+    final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
+    final code = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     _shortCodeCache[key] = code;
     return code;
+  }
+
+  static Future<void> _saveSharedInvoiceMetadata({
+    required String shortCode,
+    required Invoice invoice,
+    String? templateName,
+    String? downloadUrl,
+  }) async {
+    final invoiceId = invoice.id.trim();
+    if (invoiceId.isEmpty) {
+      throw StateError('Please save the invoice before sharing it.');
+    }
+
+    await _functions.httpsCallable('saveSharedInvoiceLink').call({
+      'shortCode': shortCode,
+      'invoiceId': invoiceId,
+      if (templateName != null && templateName.trim().isNotEmpty)
+        'templateName': templateName.trim(),
+      if (downloadUrl != null && downloadUrl.trim().isNotEmpty)
+        'downloadUrl': downloadUrl.trim(),
+    });
   }
 
   /// Uploads [pdfBytes] for [invoice], writes shared metadata to Firestore,
@@ -62,13 +92,17 @@ class InvoiceLinkService {
     required Invoice invoice,
     required Uint8List pdfBytes,
   }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw StateError('User not authenticated');
+    if (invoice.id.trim().isEmpty) {
+      throw StateError('Please save the invoice before sharing it.');
+    }
 
-    final shortCode = _shortCode(invoice);
+    final ownerId = TeamService.instance.getEffectiveOwnerId();
+    final actualUid = TeamService.instance.getActualUserId();
+
+    final shortCode = await _shortCode(invoice);
 
     // Upload PDF to Storage (skip if already uploaded)
-    final path = _storagePath(uid, invoice);
+    final path = _storagePath(ownerId, actualUid, invoice);
     final ref = _storage.ref(path);
 
     String downloadUrl;
@@ -89,82 +123,11 @@ class InvoiceLinkService {
       downloadUrl = await ref.getDownloadURL();
     }
 
-    // Always re-write metadata so payment status stays current.
-    final data = <String, dynamic>{
-      'invoiceNumber': invoice.invoiceNumber,
-      'clientId': invoice.clientId,
-      'clientName': invoice.clientName,
-      'amount': invoice.grandTotal,
-      'subtotal': invoice.subtotal,
-      'date': DateFormat('dd MMM yyyy').format(invoice.createdAt),
-      'status': invoice.effectiveStatus.name,
-      'amountReceived': invoice.amountReceived,
-      'balanceDue': invoice.balanceDue,
-      'downloadUrl': downloadUrl,
-      'ownerId': uid,
-      'createdAt': FieldValue.serverTimestamp(),
-      'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 90))),
-      // Item details for the landing page
-      'items': invoice.items
-          .map((item) => {
-                'description': item.description,
-                'quantity': item.quantity,
-                'unitPrice': item.unitPrice,
-                'unit': item.unit,
-                'hsnCode': item.hsnCode,
-                'gstRate': item.gstRate,
-                'total': item.total,
-              })
-          .toList(),
-      // Tax & discount breakdown
-      'discountAmount': invoice.discountAmount,
-      'gstEnabled': invoice.gstEnabled,
-      'gstType': invoice.gstType,
-      'cgstAmount': invoice.cgstAmount,
-      'sgstAmount': invoice.sgstAmount,
-      'igstAmount': invoice.igstAmount,
-      'totalTax': invoice.totalTax,
-    };
-
-    // Include UPI payment details if configured
-    final profile = await ProfileService().getCurrentProfile();
-    if (profile != null) {
-      if (profile.upiId.isNotEmpty) data['upiId'] = profile.upiId;
-      if (profile.upiNumber.isNotEmpty) data['upiNumber'] = profile.upiNumber;
-      if (profile.upiQrUrl.isNotEmpty) data['upiQrUrl'] = profile.upiQrUrl;
-      if (profile.storeName.isNotEmpty) data['storeName'] = profile.storeName;
-    }
-
-    // Upload signature image to Storage (if saved locally)
-    try {
-      final sigBytes = await SignatureService.load();
-      if (sigBytes != null && sigBytes.isNotEmpty) {
-        final sigRef = _storage.ref('signatures/$uid/signature.png');
-        await sigRef.putData(sigBytes, SettableMetadata(contentType: 'image/png'));
-        final sigUrl = await sigRef.getDownloadURL();
-        data['signatureUrl'] = sigUrl;
-      }
-    } catch (_) {}
-
-    // Logo URL from profile
-    if (profile != null && profile.logoUrl.isNotEmpty) {
-      data['logoUrl'] = profile.logoUrl;
-    }
-
-    // NOTE: clientPhone intentionally NOT stored in shared_invoices
-    // to avoid exposing customer PII in a publicly readable collection.
-    // OTP verification should be handled via an authenticated Cloud Function.
-
-    await _firestore.collection('shared_invoices').doc(shortCode).set(data);
-
-    // Verify the write reached the server (same guard as shareLink)
-    final verify = await _firestore
-        .collection('shared_invoices')
-        .doc(shortCode)
-        .get(const GetOptions(source: Source.server));
-    if (!verify.exists) {
-      throw StateError('Invoice link could not be confirmed on the server');
-    }
+    await _saveSharedInvoiceMetadata(
+      shortCode: shortCode,
+      invoice: invoice,
+      downloadUrl: downloadUrl,
+    );
 
     return '$_baseUrl/i/$shortCode';
   }
@@ -176,111 +139,16 @@ class InvoiceLinkService {
     required Invoice invoice,
     String? templateName,
   }) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) throw StateError('User not authenticated');
-
-    final shortCode = _shortCode(invoice);
-
-    // Build metadata — everything the landing page needs to render.
-    // Always re-write so payment status / received amount stays current.
-    final data = <String, dynamic>{
-      'invoiceNumber': invoice.invoiceNumber,
-      'clientId': invoice.clientId,
-      'clientName': invoice.clientName,
-      'amount': invoice.grandTotal,
-      'subtotal': invoice.subtotal,
-      'date': DateFormat('dd MMM yyyy').format(invoice.createdAt),
-      'status': invoice.effectiveStatus.name,
-      'amountReceived': invoice.amountReceived,
-      'balanceDue': invoice.balanceDue,
-      'ownerId': uid,
-      'createdAt': FieldValue.serverTimestamp(),
-      'expiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 90))),
-      'items': invoice.items
-          .map((item) => {
-                'description': item.description,
-                'quantity': item.quantity,
-                'unitPrice': item.unitPrice,
-                'unit': item.unit,
-                'hsnCode': item.hsnCode,
-                'gstRate': item.gstRate,
-                'total': item.total,
-                'discountPercent': item.discountPercent,
-              })
-          .toList(),
-      'discountAmount': invoice.discountAmount,
-      'discountType': invoice.discountType?.name,
-      'discountValue': invoice.discountValue,
-      'gstEnabled': invoice.gstEnabled,
-      'gstType': invoice.gstType,
-      'cgstAmount': invoice.cgstAmount,
-      'sgstAmount': invoice.sgstAmount,
-      'igstAmount': invoice.igstAmount,
-      'totalTax': invoice.totalTax,
-      'customerGstin': invoice.customerGstin,
-      if (invoice.dueDate != null)
-        'dueDate': DateFormat('dd MMM yyyy').format(invoice.dueDate!),
-      if (templateName != null) 'templateName': templateName,
-    };
-
-    // Seller details for the landing page
-    final profile = await ProfileService().getCurrentProfile();
-    if (profile != null) {
-      data['storeName'] = profile.storeName;
-      data['sellerPhone'] = profile.phoneNumber;
-      data['sellerAddress'] = profile.address;
-      data['sellerGstin'] = profile.gstin;
-      if (profile.upiId.isNotEmpty) data['upiId'] = profile.upiId;
-      if (profile.upiNumber.isNotEmpty) data['upiNumber'] = profile.upiNumber;
-      if (profile.upiQrUrl.isNotEmpty) data['upiQrUrl'] = profile.upiQrUrl;
+    if (invoice.id.trim().isEmpty) {
+      throw StateError('Please save the invoice before sharing it.');
     }
 
-    // Upload signature image to Storage (if saved locally)
-    try {
-      final sigBytes = await SignatureService.load();
-      if (sigBytes != null && sigBytes.isNotEmpty) {
-        final sigRef = _storage.ref('signatures/$uid/signature.png');
-        // Always re-upload to ensure the file exists (previous uploads
-        // may have failed silently due to storage rules).
-        await sigRef.putData(
-          sigBytes,
-          SettableMetadata(contentType: 'image/png'),
-        );
-        final sigUrl = await sigRef.getDownloadURL();
-        data['signatureUrl'] = sigUrl;
-      }
-    } catch (_) {
-      // Non-critical — invoice still works without signature
-    }
-
-    // Logo URL from profile
-    if (profile != null && profile.logoUrl.isNotEmpty) {
-      data['logoUrl'] = profile.logoUrl;
-    }
-
-    // Client phone for bill history
-    if (invoice.clientId.isNotEmpty) {
-      try {
-        final client = await ClientService().getClient(invoice.clientId);
-        if (client != null && client.phone.trim().isNotEmpty) {
-          data['clientPhone'] = client.phone.trim();
-        }
-      } catch (_) {}
-    }
-
-    await _firestore.collection('shared_invoices').doc(shortCode).set(data);
-
-    // Verify the write reached the server — Firestore offline persistence
-    // resolves set() from local cache, but the Cloud Function that serves
-    // the link reads from the server. Without this check the recipient can
-    // tap the SMS link before the document is synced → "invoice not found".
-    final verify = await _firestore
-        .collection('shared_invoices')
-        .doc(shortCode)
-        .get(const GetOptions(source: Source.server));
-    if (!verify.exists) {
-      throw StateError('Invoice link could not be confirmed on the server');
-    }
+    final shortCode = await _shortCode(invoice);
+    await _saveSharedInvoiceMetadata(
+      shortCode: shortCode,
+      invoice: invoice,
+      templateName: templateName,
+    );
 
     return '$_baseUrl/i/$shortCode';
   }
@@ -288,11 +156,19 @@ class InvoiceLinkService {
   /// Returns the existing branded link if metadata was previously written,
   /// or `null` if no shared link exists yet.
   static Future<String?> getExistingLink(Invoice invoice) async {
-    final shortCode = _shortCode(invoice);
-    final doc =
-        await _firestore.collection('shared_invoices').doc(shortCode).get();
-    if (doc.exists) {
-      return '$_baseUrl/i/$shortCode';
+    if (invoice.id.trim().isEmpty) {
+      return null;
+    }
+
+    final ownerId = TeamService.instance.getEffectiveOwnerId();
+    final existing = await _firestore
+        .collection('shared_invoices')
+        .where('invoiceId', isEqualTo: invoice.id)
+        .where('ownerId', isEqualTo: ownerId)
+        .limit(1)
+        .get();
+    if (existing.docs.isNotEmpty) {
+      return '$_baseUrl/i/${existing.docs.first.id}';
     }
     return null;
   }

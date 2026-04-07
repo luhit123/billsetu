@@ -12,7 +12,7 @@ class MaintenanceScreen extends StatelessWidget {
     final rc = RemoteConfigService.instance;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -36,19 +36,19 @@ class MaintenanceScreen extends StatelessWidget {
               const SizedBox(height: 32),
               Text(
                 rc.maintenanceTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
               Text(
                 rc.maintenanceMessage,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -66,7 +66,7 @@ class MaintenanceScreen extends StatelessWidget {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: kPrimary,
+                    foregroundColor: context.cs.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),

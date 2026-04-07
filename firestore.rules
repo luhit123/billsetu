@@ -10,8 +10,198 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    // Admin check — allows authorized admin emails full read access.
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        exists(/databases/$(database)/documents/authorizedAdmins/$(request.auth.token.email));
+    }
+
+    function isOwnEmailDoc(email) {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        request.auth.token.email == email;
+    }
+
+    // ── Team helpers ─────────────────────────────────────────────────────
+    // Checks whether the caller is an active member of the team owned by ownerId.
+    function isTeamMember(ownerId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/teams/$(ownerId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/teams/$(ownerId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function getTeamRole(ownerId) {
+      return get(/databases/$(database)/documents/teams/$(ownerId)/members/$(request.auth.uid)).data.role;
+    }
+
+    function getTeamDoc(ownerId) {
+      return get(/databases/$(database)/documents/teams/$(ownerId)).data;
+    }
+
+    // ── Override-aware permission check ──────────────────────────────────
+    // Checks if a team member has a specific permission, respecting
+    // rolePermissions overrides set by the owner on the team doc.
+    // permKey must be a string like 'canCreateInvoice'.
+    // defaultRoles is a list of roles that have this permission by default.
+    function teamMemberHasPermission(ownerId, permKey, defaultRoles) {
+      let role = getTeamRole(ownerId);
+      let teamData = getTeamDoc(ownerId);
+      // Check for overrides first
+      let hasOverrides = 'rolePermissions' in teamData
+        && role in teamData.rolePermissions
+        && permKey in teamData.rolePermissions[role];
+      return hasOverrides
+        ? teamData.rolePermissions[role][permKey] == true
+        : role in defaultRoles;
+    }
+
+    // Owner OR any active team member
+    function isOwnerOrTeamMember(userId) {
+      return isOwner(userId) || isTeamMember(userId);
+    }
+
+    // Owner OR team member with write permission (not viewer)
+    // Legacy helper — used for broad write access checks
+    function isOwnerOrTeamWriter(userId) {
+      return isOwner(userId) || (isTeamMember(userId) && getTeamRole(userId) != 'viewer');
+    }
+
+    // Owner OR team manager
+    function isOwnerOrTeamManager(userId) {
+      return isOwner(userId) || (isTeamMember(userId) && getTeamRole(userId) == 'manager');
+    }
+
+    // Owner OR owner-level team member (owner/coOwner)
+    function canManageMembershipFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        (getTeamRole(ownerId) == 'owner' || getTeamRole(ownerId) == 'coOwner'));
+    }
+
+    // ── Override-aware permission helpers ────────────────────────────────
+    function canCreateInvoiceFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canCreateInvoice', ['owner', 'coOwner', 'manager', 'sales']));
+    }
+
+    function canEditInvoiceFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canEditInvoice', ['owner', 'coOwner', 'manager']));
+    }
+
+    function canDeleteInvoiceFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canDeleteInvoice', ['owner', 'coOwner', 'manager']));
+    }
+
+    function canWriteCustomerFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canEditCustomer', ['owner', 'coOwner', 'manager', 'sales']));
+    }
+
+    function canDeleteCustomerFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canDeleteCustomer', ['owner', 'coOwner', 'manager']));
+    }
+
+    function canWriteProductFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canEditProduct', ['owner', 'coOwner', 'manager', 'sales']));
+    }
+
+    function canManagePOFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canManagePurchaseOrders', ['owner', 'coOwner', 'manager']));
+    }
+
     function isNumber(value) {
       return value is int || value is float;
+    }
+
+    function isOwnerMemberCreate(teamId, memberUid) {
+      return isOwner(teamId) &&
+        memberUid == teamId &&
+        request.resource.data.keys().hasOnly([
+          'uid',
+          'role',
+          'displayName',
+          'phone',
+          'email',
+          'status',
+          'invitedBy',
+          'invitedAt',
+          'joinedAt',
+          'updatedAt',
+        ]) &&
+        request.resource.data.uid == teamId &&
+        request.resource.data.role == 'owner' &&
+        request.resource.data.status == 'active' &&
+        request.resource.data.invitedBy == teamId &&
+        request.resource.data.displayName is string &&
+        request.resource.data.phone is string &&
+        request.resource.data.email is string &&
+        (request.resource.data.joinedAt == null || request.resource.data.joinedAt is timestamp);
+    }
+
+    function isValidTeamCreate(teamId) {
+      return isOwner(teamId) &&
+        request.resource.data.keys().hasOnly([
+          'ownerId',
+          'ownerName',
+          'ownerPhone',
+          'ownerEmail',
+          'businessName',
+          'memberCount',
+          'maxMembers',
+          'isActive',
+          'rolePermissions',
+          'officeLatitude',
+          'officeLongitude',
+          'officeRadius',
+          'officeAddress',
+          'createdAt',
+          'updatedAt',
+        ]) &&
+        request.resource.data.ownerId == teamId &&
+        request.resource.data.ownerName is string &&
+        request.resource.data.ownerPhone is string &&
+        request.resource.data.ownerEmail is string &&
+        request.resource.data.businessName is string &&
+        request.resource.data.memberCount == 1 &&
+        request.resource.data.maxMembers == 5 &&
+        request.resource.data.isActive == true &&
+        request.resource.data.rolePermissions is map &&
+        request.resource.data.rolePermissions.keys().size() == 0 &&
+        isNumber(request.resource.data.officeRadius) &&
+        request.resource.data.officeRadius >= 50 &&
+        request.resource.data.officeRadius <= 500 &&
+        request.resource.data.officeAddress is string;
+    }
+
+    function isOwnerTeamMapCreate(userId) {
+      return isOwner(userId) &&
+        request.resource.data.keys().hasOnly([
+          'teamId',
+          'role',
+          'teamBusinessName',
+          'isOwner',
+          'joinedAt',
+        ]) &&
+        request.resource.data.teamId == userId &&
+        request.resource.data.role == 'owner' &&
+        request.resource.data.isOwner == true &&
+        request.resource.data.teamBusinessName is string;
+    }
+
+    function canManageTeamInvites(teamId) {
+      return isOwner(teamId) || (isTeamMember(teamId) &&
+        teamMemberHasPermission(teamId, 'canInviteMembers', ['owner', 'coOwner', 'manager']));
+    }
+
+    function canReadTeamInvite() {
+      return isSignedIn() &&
+        resource.data.teamId is string &&
+        canManageTeamInvites(resource.data.teamId);
     }
 
     function isNonNegativeNumber(value) {
@@ -70,6 +260,11 @@ service cloud.firestore {
             'balanceDue',
             'paymentMethod',
             'notes',
+            'createdByUid',
+            'createdByName',
+            'createdBySignatureUrl',
+            'schemaVersion',
+            'gstTransactionType',
           ]) &&
           request.resource.data.keys().hasAll([
             'id',
@@ -99,6 +294,9 @@ service cloud.firestore {
             'totalTax',
             'grandTotal',
             'hasGst',
+            'createdByUid',
+            'createdByName',
+            'createdBySignatureUrl',
           ]);
     }
 
@@ -142,13 +340,23 @@ service cloud.firestore {
     function hasValidInvoiceSearchPrefixes() {
       return request.resource.data.searchPrefixes is list &&
           request.resource.data.searchPrefixes.size() > 0 &&
-          request.resource.data.searchPrefixes.size() <= 60;
+          request.resource.data.searchPrefixes.size() <= 60 &&
+          // Prevent oversized prefix strings (max 100 chars each).
+          // Checking first and last is sufficient since buildInvoiceSearchPrefixes
+          // generates sequential substrings — first is shortest, last is longest.
+          request.resource.data.searchPrefixes[
+            request.resource.data.searchPrefixes.size() - 1
+          ].size() <= 100;
     }
 
     function isValidInvoiceCreate() {
       return hasValidInvoiceShape() &&
           request.resource.id == request.resource.data.id &&
-          request.resource.data.ownerId == request.auth.uid &&
+          // Audit trail: createdByUid must match the authenticated user
+          request.resource.data.createdByUid == request.auth.uid &&
+          // Owner can create with their own UID; team members need canCreateInvoice.
+          (request.resource.data.ownerId == request.auth.uid ||
+           canCreateInvoiceFor(request.resource.data.ownerId)) &&
           request.resource.data.invoiceNumber is string &&
           request.resource.data.invoiceNumber.matches('^BR-[0-9]{4}-[0-9]{5}$') &&
           request.resource.data.clientId is string &&
@@ -158,7 +366,7 @@ service cloud.firestore {
           hasValidInvoiceSearchPrefixes() &&
           request.resource.data.items is list &&
           request.resource.data.items.size() > 0 &&
-          request.resource.data.items.size() <= 100 &&
+          request.resource.data.items.size() <= 200 &&
           request.resource.data.createdAt is timestamp &&
           request.resource.data.dueDate is timestamp &&
           request.resource.data.dueDate >= request.resource.data.createdAt &&
@@ -206,7 +414,7 @@ service cloud.firestore {
           hasValidInvoiceSearchPrefixes() &&
           request.resource.data.items is list &&
           request.resource.data.items.size() > 0 &&
-          request.resource.data.items.size() <= 100 &&
+          request.resource.data.items.size() <= 200 &&
           request.resource.data.createdAt == resource.data.createdAt &&
           request.resource.data.dueDate is timestamp &&
           request.resource.data.dueDate >= request.resource.data.createdAt &&
@@ -221,112 +429,196 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      allow create: if isSignedIn() && isValidInvoiceCreate();
-      allow read, delete: if isOwner(resource.data.ownerId);
-      allow update: if isOwner(resource.data.ownerId) &&
-          (isValidInvoiceStatusUpdate() || isValidInvoiceFullUpdate());
+      allow create: if isAdmin() || (isSignedIn() && isValidInvoiceCreate());
+      allow read: if isOwnerOrTeamMember(resource.data.ownerId) || isAdmin();
+      allow delete: if canDeleteInvoiceFor(resource.data.ownerId) || isAdmin();
+      allow update: if isAdmin() || (canEditInvoiceFor(resource.data.ownerId) &&
+          (isValidInvoiceStatusUpdate() || isValidInvoiceFullUpdate()));
 
-      // Payment history subcollection — owner can read/create, never delete
+      // Payment history subcollection — owner/team writer can read/create; admin full access
       match /payments/{paymentId} {
-        allow read, create: if isSignedIn() &&
-            get(/databases/$(database)/documents/invoices/$(invoiceId)).data.ownerId == request.auth.uid;
-        allow update, delete: if false;
+        allow read: if isAdmin() || (isSignedIn() &&
+            isOwnerOrTeamMember(get(/databases/$(database)/documents/invoices/$(invoiceId)).data.ownerId));
+        allow create: if isAdmin() || (isSignedIn() &&
+            isOwnerOrTeamWriter(get(/databases/$(database)/documents/invoices/$(invoiceId)).data.ownerId));
+        allow update, delete: if isAdmin();
       }
     }
 
     match /users/{userId} {
-      allow read, write: if isOwner(userId);
+      // Profile doc: team members can read (for invoice generation with
+      // business name/logo); only the owner can write. Admins can read/write.
+      allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+      allow write: if isOwner(userId) || isAdmin();
 
       match /analytics/{document=**} {
-        allow read: if isOwner(userId);
-        allow write: if false; // Only Cloud Functions write analytics
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if isAdmin(); // Cloud Functions + admin
       }
 
       match /clients/{clientId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow create, update: if canWriteCustomerFor(userId) || isAdmin();
+        allow delete: if canDeleteCustomerFor(userId) || isAdmin();
       }
 
       match /customerGroups/{groupId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if canWriteCustomerFor(userId) || isAdmin();
       }
 
       match /products/{productId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if canWriteProductFor(userId) || isAdmin();
       }
 
       match /purchaseOrders/{orderId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if canManagePOFor(userId) || isAdmin();
       }
 
       match /stockMovements/{movementId} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if canManagePOFor(userId) || isAdmin();
       }
 
       match /poCounters/{year} {
-        allow read, write: if isOwner(userId);
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow write: if canManagePOFor(userId) || isAdmin();
       }
 
       match /subscriptionPlans/{planId} {
-        allow read, write: if isOwner(userId);
+        allow read: if canManageMembershipFor(userId) || isAdmin();
+        allow write: if isAdmin();
       }
 
       match /subscription_plans/{planId} {
-        allow read, write: if isOwner(userId);
+        allow read: if canManageMembershipFor(userId) || isAdmin();
+        allow write: if isAdmin();
       }
 
       match /members/{memberId} {
-        allow read, write: if isOwner(userId);
+        allow read: if canManageMembershipFor(userId) || isAdmin();
+        allow write: if isAdmin();
 
         match /attendance/{logId} {
-          allow read, write: if isOwner(userId);
+          allow read: if canManageMembershipFor(userId) || isAdmin();
+          allow write: if isAdmin();
         }
       }
 
-      // Usage counters — client can read and increment (never decrement)
+      // Notifications — user can read their own, admin + Cloud Functions can write
+      match /notifications/{notifId} {
+        allow read: if isOwner(userId) || isAdmin();
+        allow write: if isAdmin();
+      }
+
+      // Usage counters — owner/team writer can read and increment (never decrement); admin full access
       match /usage/{periodKey} {
-        allow read: if isOwner(userId);
-        allow create: if isOwner(userId)
+        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        allow create: if isAdmin() || (isOwnerOrTeamWriter(userId)
           && request.resource.data.invoicesCreated is int
-          && request.resource.data.invoicesCreated >= 0;
-        allow update: if isOwner(userId)
-          && request.resource.data.invoicesCreated >= resource.data.invoicesCreated;
+          && request.resource.data.invoicesCreated >= 0);
+        allow update: if isAdmin() || (isOwnerOrTeamWriter(userId)
+          && request.resource.data.invoicesCreated >= resource.data.invoicesCreated);
       }
     }
 
-    // Subscription doc — client can read only; all writes via Cloud Functions
+    // Subscription doc — owner and team members can read; all writes via Cloud Functions
     match /subscriptions/{userId} {
-      allow read: if isOwner(userId);
+      allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+      allow write: if isAdmin();
 
       match /payments/{paymentId} {
-        allow read: if isOwner(userId);
+        allow read: if canManageMembershipFor(userId) || isAdmin();
+        allow write: if isAdmin();
       }
     }
 
-    // Plan config — any signed-in user can read
+    // Plan config — any signed-in user can read; admin can write
     match /config/{docId} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Rate limiting — admin can read/write; otherwise server-only
+    match /rate_limits/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ── Team collections ─────────────────────────────────────────────────
+
+    // Team document — teamId equals the owner's Firebase UID
+    match /teams/{teamId} {
+      allow read: if isOwnerOrTeamMember(teamId) || isAdmin();
+      allow create: if isAdmin() || isValidTeamCreate(teamId);
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      // Audit logs — team members can read, admin + Cloud Functions can write
+      match /auditLogs/{logId} {
+        allow read: if isOwnerOrTeamMember(teamId) || isAdmin();
+        allow create, update, delete: if isAdmin();
+      }
+
+      // Team member subcollection
+      match /members/{memberUid} {
+        allow read: if isOwnerOrTeamMember(teamId) || isAdmin();
+        allow create: if isAdmin() || isOwnerMemberCreate(teamId, memberUid);
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+
+        // Geo attendance logs
+        match /attendance/{logId} {
+          allow read: if isOwnerOrTeamMember(teamId) || isAdmin();
+          allow create, update: if isAdmin();
+          allow delete: if isAdmin();
+        }
+      }
+    }
+
+    // Fast lookup: "which team does this user belong to?"
+    // Server-managed after initial team creation.
+    match /userTeamMap/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow create: if isAdmin() || isOwnerTeamMapCreate(userId);
+      allow update, delete: if isAdmin();
+    }
+
+    // Invites — created and mutated via Cloud Functions; admin has full access
+    match /teamInvites/{inviteId} {
+      allow read: if canReadTeamInvite() || isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Shared invoice landing pages — admin has full access
+    match /shared_invoices/{shortCode} {
+      allow read: if isAdmin() || (isSignedIn() && isOwnerOrTeamMember(resource.data.ownerId));
+      allow create, update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Used-trial tracking — admin has full access
+    match /usedTrials/{identifier} {
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // Authorized admin emails — readable by signed-in users; admin can manage
+    match /authorizedAdmins/{email} {
+      allow read: if isAdmin() || isOwnEmailDoc(email);
+      allow write: if isAdmin();
+    }
+
+    // Admin notification requests — admin creates, Cloud Function updates
+    match /notificationRequests/{requestId} {
+      allow read, write: if isAdmin();
+    }
+
+    // Connectivity health-check — allow any signed-in user to read
+    match /_ping/{docId} {
       allow read: if isSignedIn();
     }
 
-    // Rate limiting — server-only (Cloud Functions write, no client access)
-    match /rate_limits/{docId} {
-      allow read, write: if false;
-    }
-
-    // Shared invoice landing pages — public read (needed for landing page),
-    // authenticated write only if the user owns the invoice.
-    // Links expire after 90 days (expiresAt enforced at read time).
-    match /shared_invoices/{shortCode} {
-      // Public read — check expiry if field exists; old docs without expiresAt pass
-      allow read: if resource == null
-        || !('expiresAt' in resource.data)
-        || resource.data.expiresAt > request.time;
-      // Owner can create with expiresAt, no clientPhone
-      allow create: if isSignedIn()
-        && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn()
-        && resource.data.ownerId == request.auth.uid;
-      allow delete: if isSignedIn()
-        && resource.data.ownerId == request.auth.uid;
-    }
   }
 }

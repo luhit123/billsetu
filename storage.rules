@@ -1,22 +1,63 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    // Invoice PDFs: owner-only read/write
-    match /invoices/{ownerId}/{allPaths=**} {
-      allow read: if request.auth != null && request.auth.uid == ownerId;
-      allow write: if request.auth != null && request.auth.uid == ownerId;
+    function isSignedIn() {
+      return request.auth != null;
     }
 
-    // Signatures: public read (shown on shared invoice pages), owner-only write
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        request.auth.token.email != null &&
+        firestore.exists(/databases/(default)/documents/authorizedAdmins/$(request.auth.token.email));
+    }
+
+    function isTeamMember(ownerId) {
+      return isSignedIn() &&
+        firestore.exists(/databases/(default)/documents/teams/$(ownerId)/members/$(request.auth.uid)) &&
+        firestore.get(/databases/(default)/documents/teams/$(ownerId)/members/$(request.auth.uid)).data.status == 'active';
+    }
+
+    function isOwnerOrTeamMember(ownerId) {
+      return isOwner(ownerId) || isTeamMember(ownerId);
+    }
+
+    function canWriteInvoiceAssets(ownerId) {
+      return isOwner(ownerId) || (
+        isTeamMember(ownerId) &&
+        firestore.get(/databases/(default)/documents/teams/$(ownerId)/members/$(request.auth.uid)).data.role != 'viewer'
+      );
+    }
+
+    // Invoice PDFs. Supports both the current owner-first path layout and the
+    // earlier writer-first layout so existing files remain accessible.
+    match /invoices/{pathUidA}/{pathUidB}/{allPaths=**} {
+      allow read: if isOwner(pathUidA)
+        || isOwner(pathUidB)
+        || isOwnerOrTeamMember(pathUidA)
+        || isOwnerOrTeamMember(pathUidB);
+      allow write: if (isOwner(pathUidA) && canWriteInvoiceAssets(pathUidB))
+        || (isOwner(pathUidB) && canWriteInvoiceAssets(pathUidA));
+    }
+
+    // Signatures: owner-only via Storage rules. Public invoice pages continue
+    // to work through tokenized download URLs already stored in Firestore.
     match /signatures/{userId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow read, write: if isOwner(userId);
     }
 
-    // User assets (logo, UPI QR): public read (shown on invoices/PDFs), owner-only write
+    // User assets (logo, UPI QR, personal signatures): owner-only direct access.
     match /users/{userId}/{allPaths=**} {
+      allow read, write: if isOwner(userId);
+    }
+
+    // Broadcast notification images — admin uploads, anyone can read (for push display)
+    match /broadcasts/{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if isAdmin();
     }
 
     // Default: deny all

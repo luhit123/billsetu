@@ -43,72 +43,98 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
         number: 1,
         title: 'Create Invoices',
         description:
-            'Generate professional GST-compliant invoices in seconds and share them instantly.',
+            'Create GST-ready invoices quickly using saved customers, products, and invoice details.',
         icon: Icons.receipt_long_rounded,
-        steps: ['Add client', 'Add items', 'Set price', 'Apply discount', 'Share PDF'],
+        steps: [
+          'Add customer',
+          'Add items',
+          'Apply GST',
+          'Save invoice',
+          'Share PDF',
+        ],
         illustrationBuilder: _buildInvoiceIllustration,
       ),
       _GuideSection(
         number: 2,
         title: 'Track Payments',
         description:
-            'Record payments, track statuses, and never miss an overdue invoice again.',
+            'Record full or partial payments, keep dues clear, and follow invoice status in one place.',
         icon: Icons.payments_rounded,
-        steps: ['Record payments', 'Auto-status updates', 'Payment history'],
+        steps: [
+          'Record payment',
+          'Partial due',
+          'Pending status',
+          'Payment history',
+        ],
         illustrationBuilder: _buildPaymentIllustration,
       ),
       _GuideSection(
         number: 3,
         title: 'Manage Customers',
         description:
-            'Organise contacts into groups and view their complete invoice history at a glance.',
+            'Save customer details once, group them neatly, and view invoice history and pending dues anytime.',
         icon: Icons.people_rounded,
-        steps: ['Add contacts', 'Group customers', 'View history', 'Track dues'],
+        steps: [
+          'Add customers',
+          'Group customers',
+          'View history',
+          'Track dues',
+        ],
         illustrationBuilder: _buildCustomerIllustration,
       ),
       _GuideSection(
         number: 4,
         title: 'Products & Inventory',
         description:
-            'Manage your product catalogue with HSN codes, prices, and real-time stock levels.',
+            'Keep your products, GST, HSN, prices, and stock ready so invoice creation stays fast and consistent.',
         icon: Icons.inventory_2_rounded,
-        steps: ['Add with HSN', 'Set prices', 'Track stock', 'Low stock alerts'],
+        steps: ['Add product', 'Set HSN/GST', 'Set prices', 'Track stock'],
         illustrationBuilder: _buildProductIllustration,
       ),
       _GuideSection(
         number: 5,
-        title: 'GST Compliance',
+        title: 'GST & Reports',
         description:
-            'Automatic tax calculations with CGST/SGST and IGST support for every invoice.',
+            'Use automatic GST calculation in invoices and review GST or business reports when your plan includes them.',
         icon: Icons.account_balance_rounded,
-        steps: ['Set GSTIN', 'Choose tax type', 'Auto calculation', 'GST reports'],
+        steps: [
+          'Set GSTIN',
+          'Auto GST split',
+          'GST reports',
+          'Financial reports',
+        ],
         illustrationBuilder: _buildGstIllustration,
       ),
       _GuideSection(
         number: 6,
         title: 'Purchase Orders',
         description:
-            'Create purchase orders, track deliveries, and manage your supplier relationships.',
+            'Create purchase orders for suppliers, keep records organised, and track the order lifecycle more cleanly.',
         icon: Icons.shopping_cart_rounded,
-        steps: ['Create PO', 'Track deliveries', 'Manage suppliers'],
+        steps: ['Create PO', 'Add supplier', 'Track status', 'Manage records'],
         illustrationBuilder: _buildPurchaseOrderIllustration,
       ),
       _GuideSection(
         number: 7,
-        title: 'Share & Export',
+        title: 'Share & Collect',
         description:
-            'Share invoices via WhatsApp, export data as CSV, print or email with one tap.',
+            'Share invoices quickly and collect payments using PDF sharing, WhatsApp, UPI, or payment links where available.',
         icon: Icons.share_rounded,
-        steps: ['WhatsApp', 'Export CSV', 'Print', 'Email'],
+        steps: ['Share PDF', 'WhatsApp', 'UPI QR', 'Payment link'],
         illustrationBuilder: _buildShareIllustration,
       ),
       _GuideSection(
         number: 8,
-        title: 'Business Profile & Cards',
+        title: 'Business Profile & Team',
         description:
-            'Set up your business profile, generate digital business cards, and customise templates.',
+            'Set up your business identity, use your digital business card, and manage team access when your plan supports it.',
         icon: Icons.business_rounded,
-        steps: ['Set up profile', 'Business cards', 'Custom templates'],
+        steps: [
+          'Set up profile',
+          'Business card',
+          'Invite team',
+          'Roles & access',
+        ],
         illustrationBuilder: _buildBusinessProfileIllustration,
       ),
     ];
@@ -154,7 +180,10 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
                       color: kPrimaryContainer,
                       borderRadius: BorderRadius.circular(16),
@@ -171,7 +200,7 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                   ),
                   const SizedBox(height: 14),
                   const Text(
-                    'Everything you need\nto run your business',
+                    'Simple guide\nto using BillRaja',
                     style: TextStyle(
                       color: kOnSurface,
                       fontSize: 28,
@@ -182,7 +211,7 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                   ),
                   const SizedBox(height: 10),
                   const Text(
-                    '8 powerful features, explained step by step.',
+                    'A clean walkthrough of the main features you will use most.',
                     style: TextStyle(
                       color: kOnSurfaceVariant,
                       fontSize: 15,
@@ -196,15 +225,12 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
 
           // ── Section cards ────────────────────────────────────────────────
           SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, index) {
-                return _AnimatedSectionCard(
-                  section: _sections[index],
-                  index: index,
-                );
-              },
-              childCount: _sections.length,
-            ),
+            delegate: SliverChildBuilderDelegate((context, index) {
+              return _AnimatedSectionCard(
+                section: _sections[index],
+                index: index,
+              );
+            }, childCount: _sections.length),
           ),
 
           // ── Bottom button ────────────────────────────────────────────────
@@ -256,85 +282,96 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
   static Widget _buildInvoiceIllustration() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 130,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: kSurfaceLowest,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [kSubtleShadow],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 20,
-                      height: 20,
-                      decoration: BoxDecoration(
-                        color: kPrimaryContainer,
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: const Icon(Icons.receipt_long_rounded, size: 11, color: kPrimary),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'INVOICE',
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                        color: kOnSurface,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                _mockLine(width: 80, color: kSurfaceContainerLow),
-                const SizedBox(height: 3),
-                _mockLine(width: 60, color: kSurfaceContainerLow),
-                const SizedBox(height: 6),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      '\u20b91,250',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: kPrimary,
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: kPaidBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        'PAID',
-                        style: TextStyle(fontSize: 6, fontWeight: FontWeight.w700, color: kPaid),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+      children: [
+        Container(
+          width: 130,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: kSurfaceLowest,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [kSubtleShadow],
           ),
-          const SizedBox(width: 10),
-          Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              _miniActionChip(Icons.picture_as_pdf_rounded, 'PDF'),
+              Row(
+                children: [
+                  Container(
+                    width: 20,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: kPrimaryContainer,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: const Icon(
+                      Icons.receipt_long_rounded,
+                      size: 11,
+                      color: kPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'INVOICE',
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w800,
+                      color: kOnSurface,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 6),
-              _miniActionChip(Icons.share_rounded, 'Share'),
+              _mockLine(width: 80, color: kSurfaceContainerLow),
+              const SizedBox(height: 3),
+              _mockLine(width: 60, color: kSurfaceContainerLow),
+              const SizedBox(height: 6),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '\u20b91,250',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: kPrimary,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: kPaidBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      'PAID',
+                      style: TextStyle(
+                        fontSize: 6,
+                        fontWeight: FontWeight.w700,
+                        color: kPaid,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
-        ],
-      );
+        ),
+        const SizedBox(width: 10),
+        Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _miniActionChip(Icons.picture_as_pdf_rounded, 'PDF'),
+            const SizedBox(height: 6),
+            _miniActionChip(Icons.share_rounded, 'Share'),
+          ],
+        ),
+      ],
+    );
   }
 
   // ── 2. Payment tracking illustration ─────────────────────────────────────
@@ -373,96 +410,115 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
         Container(
           width: 150,
           padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: kSurfaceLowest,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [kSubtleShadow],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 22,
-                      height: 22,
-                      decoration: BoxDecoration(
-                        color: kPrimaryContainer,
-                        borderRadius: BorderRadius.circular(6),
+          decoration: BoxDecoration(
+            color: kSurfaceLowest,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: const [kSubtleShadow],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      color: kPrimaryContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(
+                      Icons.inventory_2_rounded,
+                      size: 12,
+                      color: kPrimary,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Widget Pro',
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: kOnSurface,
+                        ),
                       ),
-                      child: const Icon(Icons.inventory_2_rounded, size: 12, color: kPrimary),
+                      Text(
+                        'HSN: 8471',
+                        style: TextStyle(fontSize: 7, color: kTextTertiary),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '\u20b9450/unit',
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: kPrimary,
                     ),
-                    const SizedBox(width: 6),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Widget Pro',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: kOnSurface,
-                          ),
-                        ),
-                        Text(
-                          'HSN: 8471',
-                          style: TextStyle(fontSize: 7, color: kTextTertiary),
-                        ),
-                      ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
                     ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      '\u20b9450/unit',
+                    decoration: BoxDecoration(
+                      color: kPaidBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Text(
+                      '120 in stock',
                       style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        color: kPrimary,
+                        fontSize: 7,
+                        fontWeight: FontWeight.w600,
+                        color: kPaid,
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: kPaidBg,
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Text(
-                        '120 in stock',
-                        style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: kPaid),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            decoration: BoxDecoration(
-              color: kOverdueBg,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.notifications_active_rounded, size: 14, color: kOverdue),
-                SizedBox(height: 2),
-                Text(
-                  'Low\nStock',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 7, fontWeight: FontWeight.w700, color: kOverdue),
-                ),
-              ],
-            ),
+        ),
+        const SizedBox(width: 10),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: kOverdueBg,
+            borderRadius: BorderRadius.circular(10),
           ),
-        ],
-      );
+          child: const Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.notifications_active_rounded,
+                size: 14,
+                color: kOverdue,
+              ),
+              SizedBox(height: 2),
+              Text(
+                'Low\nStock',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 7,
+                  fontWeight: FontWeight.w700,
+                  color: kOverdue,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
   // ── 5. GST illustration ──────────────────────────────────────────────────
@@ -503,12 +559,20 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                 children: [
                   Text(
                     'Total',
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: kOnSurface),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      color: kOnSurface,
+                    ),
                   ),
                   SizedBox(width: 20),
                   Text(
                     '\u20b911,800',
-                    style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: kPrimary),
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w800,
+                      color: kPrimary,
+                    ),
                   ),
                 ],
               ),
@@ -535,7 +599,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                 ),
                 Text(
                   'GST',
-                  style: TextStyle(fontSize: 7, fontWeight: FontWeight.w600, color: kPrimary),
+                  style: TextStyle(
+                    fontSize: 7,
+                    fontWeight: FontWeight.w600,
+                    color: kPrimary,
+                  ),
                 ),
               ],
             ),
@@ -568,7 +636,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                   color: kPrimaryContainer,
                   borderRadius: BorderRadius.circular(5),
                 ),
-                child: const Icon(Icons.shopping_cart_rounded, size: 11, color: kPrimary),
+                child: const Icon(
+                  Icons.shopping_cart_rounded,
+                  size: 11,
+                  color: kPrimary,
+                ),
               ),
               const SizedBox(width: 6),
               const Text(
@@ -592,7 +664,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
             children: [
               const Text(
                 '\u20b98,500',
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: kPrimary),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: kPrimary,
+                ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -602,7 +678,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
                 ),
                 child: const Text(
                   'CONFIRMED',
-                  style: TextStyle(fontSize: 6, fontWeight: FontWeight.w700, color: kConfirmed),
+                  style: TextStyle(
+                    fontSize: 6,
+                    fontWeight: FontWeight.w700,
+                    color: kConfirmed,
+                  ),
                 ),
               ),
             ],
@@ -719,14 +799,23 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
           const SizedBox(width: 4),
           Text(
             label,
-            style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: kPrimary),
+            style: const TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: kPrimary,
+            ),
           ),
         ],
       ),
     );
   }
 
-  static Widget _statusBadge(String label, Color color, Color bg, IconData icon) {
+  static Widget _statusBadge(
+    String label,
+    Color color,
+    Color bg,
+    IconData icon,
+  ) {
     return Container(
       width: 80,
       padding: const EdgeInsets.symmetric(vertical: 12),
@@ -771,12 +860,20 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
               color: kSurfaceContainerLow,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(Icons.person_rounded, size: 14, color: kOnSurfaceVariant),
+            child: const Icon(
+              Icons.person_rounded,
+              size: 14,
+              color: kOnSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 5),
           Text(
             name,
-            style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: kOnSurface),
+            style: const TextStyle(
+              fontSize: 8,
+              fontWeight: FontWeight.w600,
+              color: kOnSurface,
+            ),
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 3),
@@ -788,7 +885,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
             ),
             child: Text(
               group,
-              style: TextStyle(fontSize: 6.5, fontWeight: FontWeight.w700, color: groupColor),
+              style: TextStyle(
+                fontSize: 6.5,
+                fontWeight: FontWeight.w700,
+                color: groupColor,
+              ),
             ),
           ),
         ],
@@ -806,7 +907,11 @@ class _HowToUseScreenState extends State<HowToUseScreen> {
         const SizedBox(width: 16),
         Text(
           value,
-          style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: kOnSurface),
+          style: const TextStyle(
+            fontSize: 8,
+            fontWeight: FontWeight.w600,
+            color: kOnSurface,
+          ),
         ),
       ],
     );
@@ -866,7 +971,10 @@ class _AnimatedSectionCardState extends State<_AnimatedSectionCard>
       vsync: this,
       duration: const Duration(milliseconds: 500),
     );
-    _fadeAnimation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOut,
+    );
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.08),
       end: Offset.zero,
@@ -989,7 +1097,10 @@ class _AnimatedSectionCardState extends State<_AnimatedSectionCard>
                       ),
                       itemBuilder: (_, i) {
                         return Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: kSurfaceContainerLow,
                             borderRadius: BorderRadius.circular(8),

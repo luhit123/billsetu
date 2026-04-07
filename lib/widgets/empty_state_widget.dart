@@ -43,18 +43,18 @@ class EmptyStateWidget extends StatelessWidget {
             const SizedBox(height: 24),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               subtitle,
-              style: const TextStyle(
-                color: kOnSurfaceVariant,
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant,
                 fontSize: 14,
               ),
               textAlign: TextAlign.center,

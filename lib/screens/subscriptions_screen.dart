@@ -10,7 +10,11 @@ import 'package:billeasy/screens/plan_builder_screen.dart';
 import 'package:billeasy/screens/qr_attendance_screen.dart';
 import 'package:billeasy/services/membership_service.dart';
 import 'package:billeasy/services/remote_config_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/responsive.dart';
+import 'package:billeasy/widgets/aurora_app_backdrop.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -23,8 +27,11 @@ class SubscriptionsScreen extends StatefulWidget {
 
 class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   final MembershipService _service = MembershipService();
-  final NumberFormat _currencyFmt =
-      NumberFormat.currency(locale: 'en_IN', symbol: '\u20b9', decimalDigits: 0);
+  final NumberFormat _currencyFmt = NumberFormat.currency(
+    locale: 'en_IN',
+    symbol: '\u20b9',
+    decimalDigits: 0,
+  );
 
   StreamSubscription<List<SubscriptionPlan>>? _plansSub;
   StreamSubscription<List<Member>>? _membersSub;
@@ -54,23 +61,17 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       start: DateTime(now.year, now.month, 1),
       end: DateTime(now.year, now.month + 1, 0), // last day of current month
     );
-    _plansSub = _service.watchPlans().listen(
-      (plans) {
-        if (mounted) setState(() => _plans = plans);
-      },
-      onError: (_) {},
-    );
-    _membersSub = _service.watchMembers().listen(
-      (members) {
-        if (mounted) {
-          setState(() {
-            _members = members;
-            _recomputeStats();
-          });
-        }
-      },
-      onError: (_) {},
-    );
+    _plansSub = _service.watchPlans().listen((plans) {
+      if (mounted) setState(() => _plans = plans);
+    }, onError: (_) {});
+    _membersSub = _service.watchMembers().listen((members) {
+      if (mounted) {
+        setState(() {
+          _members = members;
+          _recomputeStats();
+        });
+      }
+    }, onError: (_) {});
     _loadTodayAttendance();
   }
 
@@ -84,11 +85,16 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     int rangeCount = 0;
 
     // Include end day fully by checking before start of next day
-    final rangeEnd = DateTime(_filterRange.end.year, _filterRange.end.month, _filterRange.end.day + 1);
+    final rangeEnd = DateTime(
+      _filterRange.end.year,
+      _filterRange.end.month,
+      _filterRange.end.day + 1,
+    );
 
     for (final m in _members) {
       revenue += m.amountPaid + m.joiningFeePaid;
-      if (!m.startDate.isBefore(_filterRange.start) && m.startDate.isBefore(rangeEnd)) {
+      if (!m.startDate.isBefore(_filterRange.start) &&
+          m.startDate.isBefore(rangeEnd)) {
         rangeRevenue += m.amountPaid + m.joiningFeePaid;
         rangeCount++;
       }
@@ -138,10 +144,12 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     final now = DateTime.now();
     final weekFromNow = now.add(const Duration(days: 7));
     return _members
-        .where((m) =>
-            m.status == MemberStatus.active &&
-            m.endDate.isAfter(now) &&
-            m.endDate.isBefore(weekFromNow))
+        .where(
+          (m) =>
+              m.status == MemberStatus.active &&
+              m.endDate.isAfter(now) &&
+              m.endDate.isBefore(weekFromNow),
+        )
         .toList()
       ..sort((a, b) => a.endDate.compareTo(b.endDate));
   }
@@ -149,8 +157,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: Colors.transparent,
       appBar: kBuildGradientAppBar(
         titleText: s.subscriptionsTitle,
         actions: [
@@ -165,27 +174,76 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
             ),
         ],
       ),
-      body: RefreshIndicator(
-        color: kPrimary,
-        onRefresh: _loadTodayAttendance,
-        child: ListView(
-          padding: const EdgeInsets.only(bottom: 100),
-          children: [
-            const SizedBox(height: 16),
-            _buildStatsRow(),
-            const SizedBox(height: 16),
-            _buildRevenueCard(),
-            const SizedBox(height: 24),
-            _buildQuickActionsGrid(),
-            const SizedBox(height: 28),
-            _buildPlansSection(),
-            const SizedBox(height: 28),
-            _buildExpiringSoonSection(),
-            const SizedBox(height: 28),
-            _buildRecentCheckInsSection(),
-            const SizedBox(height: 32),
-          ],
-        ),
+      body: Stack(
+        children: [
+          const Positioned.fill(child: AuroraAppBackdrop()),
+          RefreshIndicator(
+            color: kPrimary,
+            onRefresh: _loadTodayAttendance,
+            child: SafeArea(
+              top: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 1240),
+                  child: ListView(
+                    padding: const EdgeInsets.only(bottom: 100),
+                    children: [
+                      const SizedBox(height: 16),
+                      if (expanded)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                flex: 7,
+                                child: Column(
+                                  children: [
+                                    _buildStatsRow(),
+                                    const SizedBox(height: 20),
+                                    _buildQuickActionsGrid(),
+                                    const SizedBox(height: 28),
+                                    _buildExpiringSoonSection(),
+                                    const SizedBox(height: 28),
+                                    _buildRecentCheckInsSection(),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 20),
+                              Expanded(
+                                flex: 5,
+                                child: Column(
+                                  children: [
+                                    _buildRevenueCard(),
+                                    const SizedBox(height: 28),
+                                    _buildPlansSection(),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else ...[
+                        _buildStatsRow(),
+                        const SizedBox(height: 16),
+                        _buildRevenueCard(),
+                        const SizedBox(height: 24),
+                        _buildQuickActionsGrid(),
+                        const SizedBox(height: 28),
+                        _buildPlansSection(),
+                        const SizedBox(height: 28),
+                        _buildExpiringSoonSection(),
+                        const SizedBox(height: 28),
+                        _buildRecentCheckInsSection(),
+                      ],
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: _buildGradientFAB(),
     );
@@ -210,7 +268,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       initialDateRange: _filterRange,
       builder: (ctx, child) => Theme(
         data: Theme.of(ctx).copyWith(
-          colorScheme: const ColorScheme.light(primary: kPrimary, onPrimary: Colors.white),
+          colorScheme: const ColorScheme.light(
+            primary: kPrimary,
+            onPrimary: Colors.white,
+          ),
         ),
         child: child!,
       ),
@@ -226,45 +287,57 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   // ── Stats Row ───────────────────────────────────────────────────────────────
 
   Widget _buildStatsRow() {
+    final cards = [
+      _StatCard(
+        icon: Icons.people_rounded,
+        iconColor: kPrimary,
+        iconBg: context.cs.primaryContainer,
+        value: _totalMembers.toString(),
+        label: 'Total Members',
+      ),
+      _StatCard(
+        icon: Icons.check_circle_rounded,
+        iconColor: kPaid,
+        iconBg: kPaidBg,
+        value: _activeCount.toString(),
+        label: 'Active',
+      ),
+      _StatCard(
+        icon: Icons.warning_rounded,
+        iconColor: kPending,
+        iconBg: kPendingBg,
+        value: _expiringSoonCount.toString(),
+        label: 'Expiring Soon',
+      ),
+      _StatCard(
+        icon: Icons.cancel_rounded,
+        iconColor: kOverdue,
+        iconBg: kOverdueBg,
+        value: _expiredCount.toString(),
+        label: 'Expired',
+      ),
+    ];
+
+    if (windowSizeOf(context) == WindowSize.expanded) {
+      return GridView.count(
+        crossAxisCount: 4,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
+        childAspectRatio: 1.35,
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        children: cards,
+      );
+    }
+
     return SizedBox(
       height: 116,
-      child: ListView(
+      child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          _StatCard(
-            icon: Icons.people_rounded,
-            iconColor: kPrimary,
-            iconBg: kPrimaryContainer,
-            value: _totalMembers.toString(),
-            label: 'Total Members',
-          ),
-          const SizedBox(width: 12),
-          _StatCard(
-            icon: Icons.check_circle_rounded,
-            iconColor: kPaid,
-            iconBg: kPaidBg,
-            value: _activeCount.toString(),
-            label: 'Active',
-          ),
-          const SizedBox(width: 12),
-          _StatCard(
-            icon: Icons.warning_rounded,
-            iconColor: kPending,
-            iconBg: kPendingBg,
-            value: _expiringSoonCount.toString(),
-            label: 'Expiring Soon',
-          ),
-          const SizedBox(width: 12),
-          _StatCard(
-            icon: Icons.cancel_rounded,
-            iconColor: kOverdue,
-            iconBg: kOverdueBg,
-            value: _expiredCount.toString(),
-            label: 'Expired',
-          ),
-          const SizedBox(width: 4),
-        ],
+        itemCount: cards.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 12),
+        itemBuilder: (context, index) => cards[index],
       ),
     );
   }
@@ -283,12 +356,15 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     final rangeLabel = sameMonth
         ? DateFormat('MMM yyyy').format(s)
         : sameYear
-            ? '${fmt.format(s)} – ${fmtFull.format(e)}'
-            : '${fmtFull.format(s)} – ${fmtFull.format(e)}';
+        ? '${fmt.format(s)} – ${fmtFull.format(e)}'
+        : '${fmtFull.format(s)} – ${fmtFull.format(e)}';
 
     // Is this the current month (default range)?
-    final isCurrentMonth = s.year == now.year && s.month == now.month &&
-        e.year == now.year && e.month == now.month;
+    final isCurrentMonth =
+        s.year == now.year &&
+        s.month == now.month &&
+        e.year == now.year &&
+        e.month == now.month;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -300,7 +376,13 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
             colors: [Color(0xFF0057FF), Color(0xFF004CE1)],
           ),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: kPrimary.withOpacity(0.25), blurRadius: 20, offset: const Offset(0, 8))],
+          boxShadow: [
+            BoxShadow(
+              color: kPrimary.withOpacity(0.25),
+              blurRadius: 20,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
         child: Column(
@@ -311,8 +393,15 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               children: [
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                  icon: Icon(Icons.chevron_left_rounded, color: Colors.white.withOpacity(0.8), size: 22),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  icon: Icon(
+                    Icons.chevron_left_rounded,
+                    color: Colors.white.withOpacity(0.8),
+                    size: 22,
+                  ),
                   onPressed: () => _changeMonth(-1),
                 ),
                 Expanded(
@@ -322,27 +411,44 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       mainAxisAlignment: MainAxisAlignment.center,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.calendar_today_rounded, size: 12, color: Colors.white.withOpacity(0.7)),
+                        Icon(
+                          Icons.calendar_today_rounded,
+                          size: 12,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             rangeLabel,
-                            style: TextStyle(color: Colors.white.withOpacity(0.95), fontSize: 13, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.95),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
                         const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down_rounded, size: 16, color: Colors.white.withOpacity(0.7)),
+                        Icon(
+                          Icons.arrow_drop_down_rounded,
+                          size: 16,
+                          color: Colors.white.withOpacity(0.7),
+                        ),
                       ],
                     ),
                   ),
                 ),
                 IconButton(
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                   icon: Icon(
                     Icons.chevron_right_rounded,
-                    color: isCurrentMonth ? Colors.white.withOpacity(0.3) : Colors.white.withOpacity(0.8),
+                    color: isCurrentMonth
+                        ? Colors.white.withOpacity(0.3)
+                        : Colors.white.withOpacity(0.8),
                     size: 22,
                   ),
                   onPressed: isCurrentMonth ? null : () => _changeMonth(1),
@@ -357,16 +463,31 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(AppStrings.of(context).subscriptionsRevenue, style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w500)),
+                      Text(
+                        AppStrings.of(context).subscriptionsRevenue,
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.8),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         _currencyFmt.format(_rangeRevenue),
-                        style: const TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w700, letterSpacing: -0.5),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 30,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                       const SizedBox(height: 3),
                       Text(
                         '$_rangeMemberCount ${AppStrings.of(context).subscriptionsMembersJoined}',
-                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12),
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.7),
+                          fontSize: 12,
+                        ),
                       ),
                     ],
                   ),
@@ -374,12 +495,30 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(AppStrings.of(context).subscriptionsAllTime, style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11)),
+                    Text(
+                      AppStrings.of(context).subscriptionsAllTime,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 11,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(_currencyFmt.format(_totalRevenue),
-                        style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 16, fontWeight: FontWeight.w600)),
+                    Text(
+                      _currencyFmt.format(_totalRevenue),
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.85),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text('$_totalMembers total', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                    Text(
+                      '$_totalMembers total',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -393,81 +532,130 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
   // ── Quick Actions ───────────────────────────────────────────────────────────
 
   Widget _buildQuickActionsGrid() {
+    final cards = <Widget>[
+      _QuickActionCard(
+        icon: Icons.person_add_rounded,
+        label: 'Add Member',
+        iconColor: kPrimary,
+        iconBg: context.cs.primaryContainer,
+        onTap: () {
+          if (!PermissionDenied.check(
+            context,
+            TeamService.instance.can.canManageSubscription,
+            'add members',
+          )) {
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const MemberFormScreen()),
+          );
+        },
+      ),
+      _QuickActionCard(
+        icon: Icons.add_card_rounded,
+        label: 'Create Plan',
+        iconColor: kPaid,
+        iconBg: kPaidBg,
+        onTap: () {
+          if (!PermissionDenied.check(
+            context,
+            TeamService.instance.can.canManageSubscription,
+            'create membership plans',
+          )) {
+            return;
+          }
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const PlanBuilderScreen()),
+          );
+        },
+      ),
+      _QuickActionCard(
+        icon: Icons.groups_rounded,
+        label: 'View Members',
+        iconColor: const Color(0xFF7C3AED),
+        iconBg: const Color(0xFFEDE9FE),
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const MembersScreen()),
+        ),
+      ),
+    ];
+
+    if (RemoteConfigService.instance.featureQrAttendance) {
+      cards.add(
+        _QuickActionCard(
+          icon: Icons.qr_code_scanner_rounded,
+          label: 'Check-in',
+          iconColor: const Color(0xFFEA580C),
+          iconBg: const Color(0xFFFFF7ED),
+          onTap: () {
+            if (!PermissionDenied.check(
+              context,
+              TeamService.instance.can.canManageSubscription,
+              'mark attendance',
+            )) {
+              return;
+            }
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
+            );
+          },
+        ),
+      );
+    }
+
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: windowSizeOf(context) == WindowSize.expanded ? 0 : 16,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'QUICK ACTIONS',
             style: TextStyle(
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickActionCard(
-                  icon: Icons.person_add_rounded,
-                  label: 'Add Member',
-                  iconColor: kPrimary,
-                  iconBg: kPrimaryContainer,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MemberFormScreen()),
-                  ),
-                ),
+          if (windowSizeOf(context) == WindowSize.expanded)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: cards.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 76,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _QuickActionCard(
-                  icon: Icons.add_card_rounded,
-                  label: 'Create Plan',
-                  iconColor: kPaid,
-                  iconBg: kPaidBg,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const PlanBuilderScreen()),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _QuickActionCard(
-                  icon: Icons.groups_rounded,
-                  label: 'View Members',
-                  iconColor: const Color(0xFF7C3AED),
-                  iconBg: const Color(0xFFEDE9FE),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const MembersScreen()),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              if (RemoteConfigService.instance.featureQrAttendance)
-                Expanded(
-                  child: _QuickActionCard(
-                    icon: Icons.qr_code_scanner_rounded,
-                    label: 'Check-in',
-                    iconColor: const Color(0xFFEA580C),
-                    iconBg: const Color(0xFFFFF7ED),
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const QrAttendanceScreen()),
-                    ),
-                  ),
-                ),
-            ],
-          ),
+              itemBuilder: (context, index) => cards[index],
+            )
+          else ...[
+            Row(
+              children: [
+                Expanded(child: cards[0]),
+                const SizedBox(width: 12),
+                Expanded(child: cards[1]),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: cards[2]),
+                if (cards.length > 3) ...[
+                  const SizedBox(width: 12),
+                  Expanded(child: cards[3]),
+                ],
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -483,11 +671,11 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'YOUR PLANS',
                   style: TextStyle(
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 1.2,
@@ -498,7 +686,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 GestureDetector(
                   onTap: () => Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const PlanBuilderScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => const PlanBuilderScreen(),
+                    ),
                   ),
                   child: Text(
                     AppStrings.of(context).subscriptionsCreatePlan,
@@ -515,14 +705,19 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         const SizedBox(height: 12),
         if (_plans.isEmpty)
           _buildEmptyPlans()
-        else
-          SizedBox(
-            height: 170,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
+        else if (windowSizeOf(context) == WindowSize.expanded)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: _plans.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                mainAxisExtent: 170,
+              ),
               itemBuilder: (context, index) {
                 final plan = _plans[index];
                 return _PlanCard(
@@ -531,10 +726,39 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   onTap: () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => MembersScreen(
-                        planId: plan.id,
-                        planName: plan.name,
-                      ),
+                      builder: (_) =>
+                          MembersScreen(planId: plan.id, planName: plan.name),
+                    ),
+                  ),
+                  onEdit: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => PlanBuilderScreen(plan: plan),
+                    ),
+                  ),
+                  onDelete: () => _confirmDeletePlan(plan),
+                );
+              },
+            ),
+          )
+        else
+          SizedBox(
+            height: 170,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: _plans.length,
+              separatorBuilder: (context, index) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final plan = _plans[index];
+                return _PlanCard(
+                  plan: plan,
+                  currencyFmt: _currencyFmt,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          MembersScreen(planId: plan.id, planName: plan.name),
                     ),
                   ),
                   onEdit: () => Navigator.push(
@@ -564,7 +788,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 32),
           decoration: BoxDecoration(
-            color: kSurfaceLowest,
+            color: context.cs.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: kPrimary.withOpacity(0.15),
@@ -578,25 +802,29 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: const Icon(Icons.add_card_rounded, color: kPrimary, size: 24),
+                child: const Icon(
+                  Icons.add_card_rounded,
+                  color: kPrimary,
+                  size: 24,
+                ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Create your first plan',
                 style: TextStyle(
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
                 ),
               ),
               const SizedBox(height: 4),
-              const Text(
+              Text(
                 'Set up membership plans for your business',
                 style: TextStyle(
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                   fontSize: 13,
                 ),
               ),
@@ -616,10 +844,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'EXPIRING THIS WEEK',
             style: TextStyle(
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.2,
@@ -629,19 +857,21 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           if (expiring.isEmpty)
             _buildExpiringSoonEmpty()
           else
-            ...expiring.map((m) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: _ExpiringMemberCard(
-                    member: m,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => MemberDetailScreen(member: m),
-                      ),
+            ...expiring.map(
+              (m) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _ExpiringMemberCard(
+                  member: m,
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MemberDetailScreen(member: m),
                     ),
-                    onRenew: () => _showRenewDialog(m),
                   ),
-                )),
+                  onRenew: () => _showRenewDialog(m),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -664,13 +894,17 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               color: kPaidBg,
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.check_circle_rounded, color: kPaid, size: 24),
+            child: const Icon(
+              Icons.check_circle_rounded,
+              color: kPaid,
+              size: 24,
+            ),
           ),
           const SizedBox(height: 10),
-          const Text(
+          Text(
             'All members are in good standing',
             style: TextStyle(
-              color: kOnSurface,
+              color: context.cs.onSurface,
               fontSize: 14,
               fontWeight: FontWeight.w500,
             ),
@@ -685,12 +919,15 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: kSurfaceLowest,
+        backgroundColor: context.cs.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(s.subscriptionsDeletePlan, style: const TextStyle(color: kOnSurface)),
+        title: Text(
+          s.subscriptionsDeletePlan,
+          style: TextStyle(color: context.cs.onSurface),
+        ),
         content: Text(
           s.subscriptionsDeletePlanBody,
-          style: const TextStyle(color: kOnSurfaceVariant),
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
         actions: [
           TextButton(
@@ -706,6 +943,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       ),
     );
     if (confirmed != true) return;
+    if (!mounted) return;
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'delete membership plans',
+    )) {
+      return;
+    }
     try {
       await _service.deletePlan(plan.id);
       if (mounted) {
@@ -720,35 +965,58 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e'), behavior: SnackBarBehavior.floating),
+          SnackBar(
+            content: Text('Delete failed: $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
   }
 
   Future<void> _showRenewDialog(Member member) async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'renew memberships',
+    )) {
+      return;
+    }
+
     final plan = _plans.where((p) => p.id == member.planId).firstOrNull;
-    if (plan == null) return;
+    final durationDays = plan?.durationDays ?? member.planDurationDays;
+    final planName = plan?.name ?? member.planName;
+    final renewalAmount =
+        plan?.effectivePrice ??
+        (member.planEffectivePrice > 0
+            ? member.planEffectivePrice
+            : member.amountPaid);
 
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: kSurfaceLowest,
+        backgroundColor: context.cs.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Renew Membership', style: TextStyle(color: kOnSurface)),
+        title: Text(
+          'Renew Membership',
+          style: TextStyle(color: context.cs.onSurface),
+        ),
         content: Text(
-          'Renew ${member.name}\'s ${plan.name} plan for ${plan.durationLabel}?\n\n'
-          'Amount: ${_currencyFmt.format(plan.effectivePrice)}',
-          style: const TextStyle(color: kOnSurfaceVariant),
+          'Renew ${member.name}\'s $planName membership for $durationDays day${durationDays == 1 ? '' : 's'}?\n\n'
+          'Amount: ${_currencyFmt.format(renewalAmount)}',
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel', style: TextStyle(color: kOnSurfaceVariant)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: context.cs.onSurfaceVariant),
+            ),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: FilledButton.styleFrom(backgroundColor: kPrimary),
+            style: FilledButton.styleFrom(backgroundColor: context.cs.primary),
             child: const Text('Renew'),
           ),
         ],
@@ -756,15 +1024,16 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
     );
 
     if (confirmed == true) {
-      final newEnd = DateTime.now().add(Duration(days: plan.durationDays));
-      await _service.renewMember(member.id, newEnd, plan.effectivePrice);
+      await _service.renewMember(member.id);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('${member.name} renewed successfully'),
             backgroundColor: kPaid,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
         );
       }
@@ -780,10 +1049,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'TODAY\'S CHECK-INS',
             style: TextStyle(
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w600,
               letterSpacing: 1.2,
@@ -797,7 +1066,10 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                 child: SizedBox(
                   width: 24,
                   height: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: kPrimary),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: kPrimary,
+                  ),
                 ),
               ),
             )
@@ -806,18 +1078,23 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 28),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
-                  Icon(Icons.event_available_rounded,
-                      color: kTextTertiary.withOpacity(0.6), size: 32),
+                  Icon(
+                    Icons.event_available_rounded,
+                    color: context.cs.onSurfaceVariant
+                        .withAlpha(153)
+                        .withOpacity(0.6),
+                    size: 32,
+                  ),
                   const SizedBox(height: 8),
-                  const Text(
+                  Text(
                     'No check-ins today',
                     style: TextStyle(
-                      color: kOnSurfaceVariant,
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                     ),
@@ -828,7 +1105,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           else
             Container(
               decoration: BoxDecoration(
-                color: kSurfaceLowest,
+                color: context.cs.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: const [kWhisperShadow],
               ),
@@ -840,14 +1117,16 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 12),
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                         child: Row(
                           children: [
                             Container(
                               width: 36,
                               height: 36,
                               decoration: BoxDecoration(
-                                color: kPrimaryContainer,
+                                color: context.cs.primaryContainer,
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
@@ -865,8 +1144,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                                     log.memberName.isNotEmpty
                                         ? log.memberName
                                         : 'Member',
-                                    style: const TextStyle(
-                                      color: kOnSurface,
+                                    style: TextStyle(
+                                      color: context.cs.onSurface,
                                       fontSize: 14,
                                       fontWeight: FontWeight.w600,
                                     ),
@@ -874,8 +1153,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                                   const SizedBox(height: 2),
                                   Text(
                                     _methodLabel(log.method),
-                                    style: const TextStyle(
-                                      color: kOnSurfaceVariant,
+                                    style: TextStyle(
+                                      color: context.cs.onSurfaceVariant,
                                       fontSize: 12,
                                     ),
                                   ),
@@ -884,8 +1163,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                             ),
                             Text(
                               timeFmt.format(log.checkInTime),
-                              style: const TextStyle(
-                                color: kOnSurfaceVariant,
+                              style: TextStyle(
+                                color: context.cs.onSurfaceVariant,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500,
                               ),
@@ -897,7 +1176,9 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         Divider(
                           height: 1,
                           indent: 64,
-                          color: kSurfaceContainerLow.withOpacity(0.8),
+                          color: context.cs.surfaceContainerLow.withOpacity(
+                            0.8,
+                          ),
                         ),
                     ],
                   );
@@ -956,8 +1237,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       context: context,
       backgroundColor: Colors.transparent,
       builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: kSurfaceLowest,
+        decoration: BoxDecoration(
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
         ),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
@@ -969,14 +1250,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
               height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: kSurfaceContainer,
+                color: context.cs.surfaceContainer,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             _SheetOption(
               icon: Icons.person_add_rounded,
               iconColor: kPrimary,
-              iconBg: kPrimaryContainer,
+              iconBg: context.cs.primaryContainer,
               label: 'Add Member',
               subtitle: 'Register a new member',
               onTap: () {
@@ -1034,7 +1315,7 @@ class _StatCard extends StatelessWidget {
       width: 130,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kWhisperShadow],
       ),
@@ -1053,8 +1334,8 @@ class _StatCard extends StatelessWidget {
           const Spacer(),
           Text(
             value,
-            style: const TextStyle(
-              color: kOnSurface,
+            style: TextStyle(
+              color: context.cs.onSurface,
               fontSize: 24,
               fontWeight: FontWeight.w700,
               letterSpacing: -0.5,
@@ -1063,8 +1344,8 @@ class _StatCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
-              color: kOnSurfaceVariant,
+            style: TextStyle(
+              color: context.cs.onSurfaceVariant,
               fontSize: 11,
               fontWeight: FontWeight.w500,
             ),
@@ -1099,7 +1380,7 @@ class _QuickActionCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 14),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [kSubtleShadow],
         ),
@@ -1118,8 +1399,8 @@ class _QuickActionCard extends StatelessWidget {
             Flexible(
               child: Text(
                 label,
-                style: const TextStyle(
-                  color: kOnSurface,
+                style: TextStyle(
+                  color: context.cs.onSurface,
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -1196,7 +1477,9 @@ class _PlanCard extends StatelessWidget {
                   width: 8,
                   height: 8,
                   decoration: BoxDecoration(
-                    color: plan.isActive ? const Color(0xFF4ADE80) : Colors.white38,
+                    color: plan.isActive
+                        ? const Color(0xFF4ADE80)
+                        : Colors.white38,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -1206,7 +1489,10 @@ class _PlanCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -1222,7 +1508,10 @@ class _PlanCard extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(6),
@@ -1256,8 +1545,11 @@ class _PlanCard extends StatelessWidget {
             const Spacer(),
             Row(
               children: [
-                Icon(Icons.people_outline_rounded,
-                    color: Colors.white.withOpacity(0.7), size: 14),
+                Icon(
+                  Icons.people_outline_rounded,
+                  color: Colors.white.withOpacity(0.7),
+                  size: 14,
+                ),
                 const SizedBox(width: 4),
                 Text(
                   '${plan.memberCount} member${plan.memberCount == 1 ? '' : 's'}',
@@ -1293,27 +1585,40 @@ class _PlanCard extends StatelessWidget {
               height: 4,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey.shade300,
+                color: context.cs.surfaceContainerHigh,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              child: Row(children: [
-                Container(
-                  width: 10, height: 10,
-                  decoration: BoxDecoration(color: cardColor, shape: BoxShape.circle),
-                ),
-                const SizedBox(width: 10),
-                Text(plan.name,
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
-              ]),
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: cardColor,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    plan.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                  ),
+                ],
+              ),
             ),
             const Divider(height: 16),
             ListTile(
               leading: const Icon(Icons.edit_rounded, color: kPrimary),
-              title: Text(AppStrings.of(context).subscriptionsModifyPlan,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+              title: Text(
+                AppStrings.of(context).subscriptionsModifyPlan,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
               subtitle: const Text('Edit name, price, duration'),
               onTap: () {
                 Navigator.pop(context);
@@ -1321,9 +1626,17 @@ class _PlanCard extends StatelessWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline_rounded, color: kOverdue),
-              title: Text(AppStrings.of(context).subscriptionsDeletePlan,
-                style: const TextStyle(color: kOverdue, fontWeight: FontWeight.w600)),
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: kOverdue,
+              ),
+              title: Text(
+                AppStrings.of(context).subscriptionsDeletePlan,
+                style: const TextStyle(
+                  color: kOverdue,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               subtitle: const Text('Permanently remove this plan'),
               onTap: () {
                 Navigator.pop(context);
@@ -1367,7 +1680,7 @@ class _ExpiringMemberCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
           boxShadow: const [kSubtleShadow],
         ),
@@ -1377,7 +1690,7 @@ class _ExpiringMemberCard extends StatelessWidget {
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: kPrimaryContainer,
+                color: context.cs.primaryContainer,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Center(
@@ -1398,8 +1711,8 @@ class _ExpiringMemberCard extends StatelessWidget {
                 children: [
                   Text(
                     member.name,
-                    style: const TextStyle(
-                      color: kOnSurface,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1409,8 +1722,8 @@ class _ExpiringMemberCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     member.planName.isNotEmpty ? member.planName : 'No plan',
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
@@ -1440,10 +1753,14 @@ class _ExpiringMemberCard extends StatelessWidget {
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.refresh_rounded, color: kPrimary, size: 18),
+                child: const Icon(
+                  Icons.refresh_rounded,
+                  color: kPrimary,
+                  size: 18,
+                ),
               ),
             ),
           ],
@@ -1477,7 +1794,7 @@ class _SheetOption extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: kSurfaceContainerLow,
+          color: context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -1498,8 +1815,8 @@ class _SheetOption extends StatelessWidget {
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(
-                      color: kOnSurface,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
                     ),
@@ -1507,15 +1824,19 @@ class _SheetOption extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
+              size: 20,
+            ),
           ],
         ),
       ),

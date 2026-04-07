@@ -1,3 +1,4 @@
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/utils/firestore_helpers.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -7,7 +8,13 @@ class UsageTrackingService {
   UsageTrackingService._();
   static final UsageTrackingService instance = UsageTrackingService._();
 
-  String? get _uid => FirebaseAuth.instance.currentUser?.uid;
+  String? get _uid {
+    try {
+      return TeamService.instance.getEffectiveOwnerId();
+    } catch (_) {
+      return FirebaseAuth.instance.currentUser?.uid;
+    }
+  }
 
   String get _currentPeriodKey => DateFormat('yyyy-MM').format(DateTime.now());
 
@@ -41,9 +48,14 @@ class UsageTrackingService {
   Future<int> getInvoiceCount() async {
     final ref = _usageRef;
     if (ref == null) return 0;
-    final doc = await resilientGet(ref);
-    if (!doc.exists) return 0;
-    return doc.data()?['invoicesCreated'] as int? ?? 0;
+    try {
+      final doc = await resilientGet(ref);
+      if (!doc.exists) return 0;
+      return doc.data()?['invoicesCreated'] as int? ?? 0;
+    } catch (_) {
+      // If both server and cache fail, allow invoice creation
+      return 0;
+    }
   }
 
   Future<int> getWhatsAppShareCount() async {
@@ -112,7 +124,7 @@ class UsageTrackingService {
     invalidateCache();
     final ref = _usageRef;
     if (ref == null) return;
-    ref.set({
+    await ref.set({
       'invoicesCreated': FieldValue.increment(1),
       'updatedAt': Timestamp.now(),
     }, SetOptions(merge: true));
@@ -122,7 +134,7 @@ class UsageTrackingService {
     invalidateCache();
     final ref = _usageRef;
     if (ref == null) return;
-    ref.set({
+    await ref.set({
       'whatsappShares': FieldValue.increment(1),
       'updatedAt': Timestamp.now(),
     }, SetOptions(merge: true));

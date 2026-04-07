@@ -145,7 +145,7 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
           const SizedBox(height: 10),
           Container(
             width: 36, height: 4,
-            decoration: BoxDecoration(color: kSurfaceContainerHigh, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: context.cs.surfaceContainerHigh, borderRadius: BorderRadius.circular(2)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 14, 12, 0),
@@ -153,9 +153,9 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
               children: [
                 const Icon(Icons.draw_rounded, color: kPrimary, size: 22),
                 const SizedBox(width: 10),
-                const Expanded(
+                Expanded(
                   child: Text('Draw Your Signature',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: kOnSurface)),
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: context.cs.onSurface)),
                 ),
                 TextButton(
                   onPressed: _clear,
@@ -165,10 +165,10 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
             ),
           ),
           const SizedBox(height: 4),
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(horizontal: 20),
             child: Text('Sign with your finger below',
-              style: TextStyle(fontSize: 13, color: kTextTertiary)),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant.withAlpha(153))),
           ),
           const SizedBox(height: 10),
           // Canvas — uses Listener for low-latency touch input
@@ -178,7 +178,7 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: kOutlineVariant, width: 1.5),
+                border: Border.all(color: context.cs.outlineVariant, width: 1.5),
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(15),
@@ -210,7 +210,7 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
                   Container(
                     width: 60, height: 36,
                     decoration: BoxDecoration(
-                      border: Border.all(color: kOutlineVariant),
+                      border: Border.all(color: context.cs.outlineVariant),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: ClipRRect(
@@ -219,8 +219,8 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Text('Current signature',
-                    style: TextStyle(fontSize: 12, color: kTextTertiary)),
+                  Text('Current signature',
+                    style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant.withAlpha(153))),
                 ],
               ),
             ),
@@ -237,7 +237,7 @@ class _SignaturePadSheetState extends State<SignaturePadSheet> {
                   label: const Text('Save Signature',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     foregroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),

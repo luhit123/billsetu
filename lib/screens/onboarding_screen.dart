@@ -316,7 +316,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     final isLast = _currentPage == 3;
 
     return Scaffold(
-      backgroundColor: kSurfaceLowest,
+      backgroundColor: context.cs.surfaceContainerLowest,
       body: Stack(
         children: [
           // Background orbs
@@ -351,10 +351,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           ),
                         ),
                         const SizedBox(width: 12),
-                        const Text(
+                        Text(
                           'BillRaja',
                           style: TextStyle(
-                            color: kOnSurface,
+                            color: context.cs.onSurface,
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.5,
@@ -365,8 +365,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                           onPressed: _completeOnboarding,
                           child: Text(
                             _s.skip,
-                            style: const TextStyle(
-                              color: kTextTertiary,
+                            style: TextStyle(
+                              color: context.cs.onSurfaceVariant.withAlpha(153),
                               fontSize: 14,
                               fontWeight: FontWeight.w500,
                             ),
@@ -428,8 +428,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                       const SizedBox(height: 24),
                                       Text(
                                         page.title,
-                                        style: const TextStyle(
-                                          color: kOnSurface,
+                                        style: TextStyle(
+                                          color: context.cs.onSurface,
                                           fontSize: 44,
                                           fontWeight: FontWeight.w800,
                                           height: 1.12,
@@ -439,8 +439,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                       const SizedBox(height: 18),
                                       Text(
                                         page.subtitle,
-                                        style: const TextStyle(
-                                          color: kOnSurfaceVariant,
+                                        style: TextStyle(
+                                          color: context.cs.onSurfaceVariant,
                                           fontSize: 17,
                                           height: 1.6,
                                         ),
@@ -467,7 +467,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                                             padding: const EdgeInsets.symmetric(
                                                 horizontal: 20, vertical: 12),
                                             decoration: BoxDecoration(
-                                              color: kPrimaryContainer,
+                                              color: context.cs.primaryContainer,
                                               borderRadius:
                                                   BorderRadius.circular(30),
                                             ),
@@ -571,7 +571,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           width: 42,
           height: 42,
           decoration: BoxDecoration(
-            color: kPrimaryContainer,
+            color: context.cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Icon(icon, color: kPrimary, size: 20),
@@ -580,8 +580,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              color: kOnSurface,
+            style: TextStyle(
+              color: context.cs.onSurface,
               fontSize: 16,
               fontWeight: FontWeight.w500,
             ),
@@ -608,7 +608,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   height: 4,
                   margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
                   decoration: BoxDecoration(
-                    color: isActive ? kPrimary : kSurfaceContainer,
+                    color: isActive ? kPrimary : context.cs.surfaceContainer,
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -626,7 +626,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             },
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
             label: const Text('Back'),
-            style: TextButton.styleFrom(foregroundColor: kOnSurfaceVariant),
+            style: TextButton.styleFrom(foregroundColor: context.cs.onSurfaceVariant),
           ),
         const SizedBox(width: 12),
 
@@ -663,13 +663,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (isLast) ...[
-                    const Icon(Icons.rocket_launch_rounded, color: kOnPrimary, size: 20),
+                    Icon(Icons.rocket_launch_rounded, color: context.cs.onPrimary, size: 20),
                     const SizedBox(width: 10),
                   ],
                   Text(
                     isLast ? _s.getStarted : _s.next,
                     style: TextStyle(
-                      color: kOnPrimary,
+                      color: context.cs.onPrimary,
                       fontSize: isLast ? 17 : 15,
                       fontWeight: FontWeight.w800,
                       letterSpacing: isLast ? 0.5 : 0.2,
@@ -677,7 +677,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   ),
                   if (!isLast) ...[
                     const SizedBox(width: 8),
-                    const Icon(Icons.arrow_forward_rounded, color: kOnPrimary, size: 18),
+                    Icon(Icons.arrow_forward_rounded, color: context.cs.onPrimary, size: 18),
                   ],
                 ],
               ),
@@ -689,8 +689,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   }
 
   // Clean white background — blue is secondary accent only
-  BoxDecoration get _pageDecoration => const BoxDecoration(
-    color: kSurfaceLowest,
+  BoxDecoration get _pageDecoration => BoxDecoration(
+    color: context.cs.surfaceContainerLowest,
   );
 
   Widget _buildPage1() {
@@ -714,8 +714,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       onPressed: _completeOnboarding,
                       child: Text(
                         _s.skip,
-                        style: const TextStyle(
-                          color: kTextTertiary,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant.withAlpha(153),
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
                         ),
@@ -852,8 +852,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                       onPressed: _completeOnboarding,
                       child: Text(
                         _s.skip,
-                        style: const TextStyle(
-                          color: kTextTertiary,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant.withAlpha(153),
                           fontSize: 15,
                           fontWeight: FontWeight.w500,
                         ),
@@ -913,7 +913,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
       decoration: BoxDecoration(
-        color: kPrimaryContainer,
+        color: context.cs.primaryContainer,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
@@ -931,8 +931,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildTitle(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        color: kOnSurface,
+      style: TextStyle(
+        color: context.cs.onSurface,
         fontSize: 36,
         fontWeight: FontWeight.w800,
         height: 1.15,
@@ -944,8 +944,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
   Widget _buildSubtitle(String text) {
     return Text(
       text,
-      style: const TextStyle(
-        color: kOnSurfaceVariant,
+      style: TextStyle(
+        color: context.cs.onSurfaceVariant,
         fontSize: 15.5,
         height: 1.55,
       ),
@@ -995,7 +995,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 offset: Offset(0, _floatAnimation.value * 0.5),
                 child: child,
               ),
-              child: _buildGroupBadge(label: 'Retail', icon: Icons.storefront_rounded, color: kOnSurfaceVariant),
+              child: _buildGroupBadge(label: 'Retail', icon: Icons.storefront_rounded, color: context.cs.onSurfaceVariant),
             ),
           ),
           Positioned(
@@ -1035,7 +1035,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       width: 240,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
+        color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(22),
         boxShadow: const [kWhisperShadow],
       ),
@@ -1049,22 +1049,22 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 width: 34,
                 height: 34,
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.groups_2_rounded, color: kPrimary, size: 18),
               ),
               const SizedBox(width: 10),
-              const Column(
+              Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     'CUSTOMERS',
-                    style: TextStyle(color: kOnSurface, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+                    style: TextStyle(color: context.cs.onSurface, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5),
                   ),
                   Text(
                     '3 Groups \u00b7 12 clients',
-                    style: TextStyle(color: kTextTertiary, fontSize: 10),
+                    style: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 10),
                   ),
                 ],
               ),
@@ -1073,16 +1073,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const SizedBox(height: 12),
           _customerRow('Rajesh Kumar', 'VIP', kPending),
           const SizedBox(height: 6),
-          _customerRow('Priya Stores', 'Retail', kOnSurfaceVariant),
+          _customerRow('Priya Stores', 'Retail', context.cs.onSurfaceVariant),
           const SizedBox(height: 6),
           _customerRow('Mehta Traders', 'Wholesale', kPaid),
           const SizedBox(height: 10),
-          const Divider(color: kSurfaceContainer, height: 1),
+          Divider(color: context.cs.surfaceContainer, height: 1),
           const SizedBox(height: 10),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _groupStat('Total Billed', '\u20b91,24,500', kOnSurface),
+              _groupStat('Total Billed', '\u20b91,24,500', context.cs.onSurface),
               _groupStat('Collected', '\u20b998,200', kPaid),
             ],
           ),
@@ -1113,7 +1113,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: kOnSurface, fontSize: 12, fontWeight: FontWeight.w500),
+            style: TextStyle(color: context.cs.onSurface, fontSize: 12, fontWeight: FontWeight.w500),
           ),
         ),
         Container(
@@ -1136,7 +1136,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(value, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w800)),
-        Text(label, style: const TextStyle(color: kTextTertiary, fontSize: 10)),
+        Text(label, style: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 10)),
       ],
     );
   }
@@ -1168,7 +1168,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
-          colors: [Colors.transparent, kSurfaceLowest.withValues(alpha: 0.95)],
+          colors: [Colors.transparent, context.cs.surfaceContainerLowest.withValues(alpha: 0.95)],
         ),
       ),
       child: Row(
@@ -1183,7 +1183,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                 width: isActive ? 24 : 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: isActive ? kPrimary : kSurfaceContainer,
+                  color: isActive ? kPrimary : context.cs.surfaceContainer,
                   borderRadius: BorderRadius.circular(4),
                 ),
               );
@@ -1228,13 +1228,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (isLast) ...[
-                      const Icon(Icons.rocket_launch_rounded, color: kOnPrimary, size: 20),
+                      Icon(Icons.rocket_launch_rounded, color: context.cs.onPrimary, size: 20),
                       const SizedBox(width: 10),
                     ],
                     Text(
                       isLast ? _s.getStarted : _s.next,
                       style: TextStyle(
-                        color: kOnPrimary,
+                        color: context.cs.onPrimary,
                         fontSize: isLast ? 17 : 15,
                         fontWeight: FontWeight.w800,
                         letterSpacing: isLast ? 0.5 : 0.2,
@@ -1242,7 +1242,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     ),
                     if (!isLast) ...[
                       const SizedBox(width: 8),
-                      const Icon(Icons.arrow_forward_rounded, color: kOnPrimary, size: 18),
+                      Icon(Icons.arrow_forward_rounded, color: context.cs.onPrimary, size: 18),
                     ],
                   ],
                 ),
@@ -1261,7 +1261,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           width: 36,
           height: 36,
           decoration: BoxDecoration(
-            color: kPrimaryContainer,
+            color: context.cs.primaryContainer,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Icon(icon, color: kPrimary, size: 18),
@@ -1272,8 +1272,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             label,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: kOnSurface,
+            style: TextStyle(
+              color: context.cs.onSurface,
               fontSize: 14.5,
               fontWeight: FontWeight.w500,
             ),
@@ -1361,8 +1361,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               ),
               child: Container(
                 padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: kPrimaryContainer,
+                decoration: BoxDecoration(
+                  color: context.cs.primaryContainer,
                   shape: BoxShape.circle,
                 ),
                 child: const Text(
@@ -1382,7 +1382,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       width: 230,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
+        color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [kWhisperShadow],
       ),
@@ -1396,15 +1396,15 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('INVOICE', style: TextStyle(color: kOnSurface, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2)),
-                  Text('#INV-0042', style: const TextStyle(color: kTextTertiary, fontSize: 11)),
+                  Text('INVOICE', style: TextStyle(color: context.cs.onSurface, fontSize: 13, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                  Text('#INV-0042', style: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 11)),
                 ],
               ),
               Container(
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.receipt_long, color: kPrimary, size: 18),
@@ -1418,13 +1418,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           const SizedBox(height: 6),
           _invoiceRow('Sugar & Spices', '\u20b9420'),
           const SizedBox(height: 10),
-          const Divider(color: kSurfaceContainer, height: 1),
+          Divider(color: context.cs.surfaceContainer, height: 1),
           const SizedBox(height: 10),
-          const Row(
+          Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Total', style: TextStyle(color: kOnSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600)),
-              Text('\u20b91,850', style: TextStyle(color: kOnSurface, fontSize: 15, fontWeight: FontWeight.w800)),
+              Text('Total', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12, fontWeight: FontWeight.w600)),
+              Text('\u20b91,850', style: TextStyle(color: context.cs.onSurface, fontSize: 15, fontWeight: FontWeight.w800)),
             ],
           ),
         ],
@@ -1437,10 +1437,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
-          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: kOnSurfaceVariant, fontSize: 12)),
+          child: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 12)),
         ),
         const SizedBox(width: 8),
-        Text(amount, style: const TextStyle(color: kOnSurface, fontSize: 12, fontWeight: FontWeight.w600)),
+        Text(amount, style: TextStyle(color: context.cs.onSurface, fontSize: 12, fontWeight: FontWeight.w600)),
       ],
     );
   }
@@ -1493,16 +1493,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerLow,
+                  color: context.cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: const [kSubtleShadow],
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.calendar_today_rounded, color: kPrimary, size: 11),
                     SizedBox(width: 5),
-                    Text('This Month', style: TextStyle(color: kOnSurface, fontSize: 11, fontWeight: FontWeight.w600)),
+                    Text('This Month', style: TextStyle(color: context.cs.onSurface, fontSize: 11, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -1518,7 +1518,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
       width: 260,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceContainerLow,
+        color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(22),
         boxShadow: const [kWhisperShadow],
       ),
@@ -1526,10 +1526,10 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('Overview', style: TextStyle(color: kTextTertiary, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
+          Text('Overview', style: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5)),
           const SizedBox(height: 2),
-          const Text('\u20b91,24,500', style: TextStyle(color: kOnSurface, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -1)),
-          const Text('Total Billed', style: TextStyle(color: kOnSurfaceVariant, fontSize: 11)),
+          Text('\u20b91,24,500', style: TextStyle(color: context.cs.onSurface, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -1)),
+          Text('Total Billed', style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 11)),
           const SizedBox(height: 10),
           Row(
             children: [
@@ -1567,7 +1567,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         children: [
           Text(value, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w800)),
           const SizedBox(height: 2),
-          Text(label, style: const TextStyle(color: kOnSurfaceVariant, fontSize: 10)),
+          Text(label, style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 10)),
         ],
       ),
     );
@@ -1577,13 +1577,13 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: active ? kPrimary : kSurfaceContainer,
+        color: active ? kPrimary : context.cs.surfaceContainer,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
         label,
         style: TextStyle(
-          color: active ? kOnPrimary : kOnSurfaceVariant,
+          color: active ? context.cs.onPrimary : context.cs.onSurfaceVariant,
           fontSize: 10,
           fontWeight: FontWeight.w700,
         ),
@@ -1738,14 +1738,14 @@ class _OnboardingScreenState extends State<OnboardingScreen>
             width: 240,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
+              color: context.cs.surfaceContainerLow,
               borderRadius: BorderRadius.circular(22),
               boxShadow: const [kWhisperShadow],
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Row(
+                Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Icon(Icons.auto_awesome_rounded, size: 14, color: kPrimary),
@@ -1753,7 +1753,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
                     Text(
                       'ALL-IN-ONE TOOLKIT',
                       style: TextStyle(
-                        color: kOnSurface,
+                        color: context.cs.onSurface,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                         letterSpacing: 1.5,
@@ -1819,16 +1819,16 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerLow,
+                  color: context.cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: const [kSubtleShadow],
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(Icons.offline_bolt_rounded, color: kPrimary, size: 11),
                     SizedBox(width: 4),
-                    Text('Works Offline', style: TextStyle(color: kOnSurface, fontSize: 10, fontWeight: FontWeight.w600)),
+                    Text('Works Offline', style: TextStyle(color: context.cs.onSurface, fontSize: 10, fontWeight: FontWeight.w600)),
                   ],
                 ),
               ),
@@ -1846,7 +1846,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: kPrimaryContainer,
+            color: context.cs.primaryContainer,
             borderRadius: BorderRadius.circular(14),
           ),
           child: Icon(icon, color: kPrimary, size: 20),
@@ -1854,8 +1854,8 @@ class _OnboardingScreenState extends State<OnboardingScreen>
         const SizedBox(height: 5),
         Text(
           label,
-          style: const TextStyle(
-            color: kOnSurfaceVariant,
+          style: TextStyle(
+            color: context.cs.onSurfaceVariant,
             fontSize: 9,
             fontWeight: FontWeight.w600,
           ),

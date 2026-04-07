@@ -4,10 +4,10 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
-
 import '../modals/payment.dart';
 import 'razorpay_checkout.dart';
 import 'remote_config_service.dart';
+import 'team_service.dart';
 
 class PaymentService {
   PaymentService._() {
@@ -53,17 +53,36 @@ class PaymentService {
       if (user == null) {
         return const PaymentResult(success: false, message: 'Not signed in');
       }
+      String ownerId;
+      try {
+        ownerId = TeamService.instance.getEffectiveOwnerId();
+      } catch (_) {
+        ownerId = user.uid;
+      }
 
       // Step 1: Create Razorpay subscription via Cloud Function
-      final result = await _functions
-          .httpsCallable('createSubscription')
-          .call({'planId': planId, 'billingCycle': billingCycle});
+      final result = await _functions.httpsCallable('createSubscription').call({
+        'planId': planId,
+        'billingCycle': billingCycle,
+      });
 
       final data = result.data as Map<String, dynamic>;
       if (data['success'] != true) {
         return PaymentResult(
           success: false,
-          message: data['message'] as String? ?? 'Failed to create subscription',
+          message:
+              data['message'] as String? ?? 'Failed to create subscription',
+        );
+      }
+
+      // Handle scheduled downgrade (no payment needed — just scheduling)
+      if (data['downgradeScheduled'] == true) {
+        return PaymentResult(
+          success: true,
+          downgradeScheduled: true,
+          currentPeriodEnd: data['currentPeriodEnd'] as String?,
+          message: data['message'] as String? ??
+              'Your plan change has been scheduled.',
         );
       }
 
@@ -74,14 +93,16 @@ class PaymentService {
         'key': razorpayKey,
         'subscription_id': subscriptionId,
         'name': 'BillRaja',
-        'description': '${_planDisplayName(planId)} Plan — ${billingCycle == 'annual' ? 'Annual' : 'Monthly'}',
+        'description':
+            '${_planDisplayName(planId)} Plan — ${billingCycle == 'annual' ? 'Annual' : 'Monthly'}',
         'prefill': <String, String>{
           if (user.email != null) 'email': user.email!,
           if (user.phoneNumber != null) 'contact': user.phoneNumber!,
         },
         'theme': <String, String>{'color': '#0057FF'},
         'notes': <String, String>{
-          'userId': user.uid,
+          'userId': ownerId,
+          'actorUid': user.uid,
           'planId': planId,
           'billingCycle': billingCycle,
         },
@@ -93,7 +114,9 @@ class PaymentService {
       if (rzpResult.walletName != null) {
         return PaymentResult(
           success: true,
-          message: 'Redirecting to ${rzpResult.walletName}. Your plan will activate once payment completes.',
+          activationPending: true,
+          message:
+              'Redirecting to ${rzpResult.walletName}. Your plan will activate once payment completes.',
           paymentId: null,
         );
       }
@@ -101,7 +124,8 @@ class PaymentService {
       if (!rzpResult.success) {
         return PaymentResult(
           success: false,
-          message: rzpResult.errorMessage ?? 'Payment failed. Please try again.',
+          message:
+              rzpResult.errorMessage ?? 'Payment failed. Please try again.',
         );
       }
 
@@ -110,22 +134,31 @@ class PaymentService {
         final verifyResult = await _functions
             .httpsCallable('verifyPayment')
             .call({
-          'razorpayPaymentId': rzpResult.paymentId,
-          'razorpaySubscriptionId': subscriptionId,
-          'razorpaySignature': rzpResult.signature,
-        });
+              'razorpayPaymentId': rzpResult.paymentId,
+              'razorpaySubscriptionId': subscriptionId,
+              'razorpaySignature': rzpResult.signature,
+            });
 
         final verifyData = verifyResult.data as Map<String, dynamic>;
         if (verifyData['verified'] == true) {
+          final activationPending =
+              verifyData['activationPending'] as bool? ?? false;
           return PaymentResult(
             success: true,
-            message: 'Plan activated successfully!',
+            activationPending: activationPending,
+            message:
+                verifyData['message'] as String? ??
+                (activationPending
+                    ? 'Payment verified. Activation is still processing.'
+                    : 'Plan activated successfully!'),
             paymentId: rzpResult.paymentId,
           );
         } else {
           return PaymentResult(
             success: false,
-            message: verifyData['message'] as String? ?? 'Payment verification failed',
+            message:
+                verifyData['message'] as String? ??
+                'Payment verification failed',
           );
         }
       } catch (e) {
@@ -133,8 +166,10 @@ class PaymentService {
         // The webhook may still activate the plan later.
         debugPrint('Verify call failed: $e');
         return PaymentResult(
-          success: false,
-          message: 'Payment received but verification pending. Your plan will activate shortly.',
+          success: true,
+          activationPending: true,
+          message:
+              'Payment received but verification pending. Your plan will activate shortly.',
           paymentId: rzpResult.paymentId,
         );
       }
@@ -146,7 +181,10 @@ class PaymentService {
       );
     } catch (e) {
       debugPrint('PaymentService error: $e');
-      return PaymentResult(success: false, message: 'Payment failed. Please try again.');
+      return PaymentResult(
+        success: false,
+        message: 'Payment failed. Please try again.',
+      );
     } finally {
       _isProcessing = false;
     }
@@ -156,13 +194,10 @@ class PaymentService {
 
   /// Cancel subscription at period end (or immediately).
   Future<bool> cancelSubscription({bool immediate = false}) async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return false;
-
     try {
-      final result = await _functions
-          .httpsCallable('cancelSubscription')
-          .call({'immediate': immediate});
+      final result = await _functions.httpsCallable('cancelSubscription').call({
+        'immediate': immediate,
+      });
       final data = result.data as Map<String, dynamic>;
       return data['success'] == true;
     } catch (e) {
@@ -173,9 +208,6 @@ class PaymentService {
 
   /// Reactivate a subscription that was set to cancel at period end.
   Future<bool> reactivateSubscription() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return false;
-
     try {
       final result = await _functions
           .httpsCallable('reactivateSubscription')
@@ -190,7 +222,12 @@ class PaymentService {
 
   /// Stream of payment history
   Stream<List<Payment>> watchPayments() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    String? uid;
+    try {
+      uid = TeamService.instance.getEffectiveOwnerId();
+    } catch (_) {
+      uid = FirebaseAuth.instance.currentUser?.uid;
+    }
     if (uid == null) return Stream.value([]);
     return FirebaseFirestore.instance
         .collection('subscriptions')
@@ -199,9 +236,11 @@ class PaymentService {
         .orderBy('createdAt', descending: true)
         .limit(20)
         .snapshots()
-        .map((snap) => snap.docs
-            .map((d) => Payment.fromMap(d.data(), docId: d.id))
-            .toList());
+        .map(
+          (snap) => snap.docs
+              .map((d) => Payment.fromMap(d.data(), docId: d.id))
+              .toList(),
+        );
   }
 
   /// Clean up listeners (call from app dispose if needed)
@@ -213,6 +252,8 @@ class PaymentService {
     switch (planId) {
       case 'pro':
         return 'Pro';
+      case 'enterprise':
+        return 'Enterprise';
       default:
         return planId;
     }
@@ -221,11 +262,17 @@ class PaymentService {
 
 class PaymentResult {
   final bool success;
+  final bool activationPending;
+  final bool downgradeScheduled;
+  final String? currentPeriodEnd;
   final String message;
   final String? paymentId;
 
   const PaymentResult({
     required this.success,
+    this.activationPending = false,
+    this.downgradeScheduled = false,
+    this.currentPeriodEnd,
     required this.message,
     this.paymentId,
   });

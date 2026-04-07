@@ -7,6 +7,9 @@ class BusinessProfile {
     this.gstin = '',
     this.stateCode = '',
     this.logoUrl = '',
+    this.signatureUrl = '',
+    this.storeLatitude,
+    this.storeLongitude,
     this.bankAccountName = '',
     this.bankAccountNumber = '',
     this.bankIfsc = '',
@@ -29,6 +32,13 @@ class BusinessProfile {
 
   // Business logo
   final String logoUrl;
+
+  // Signature image
+  final String signatureUrl;
+
+  // Store GPS location
+  final double? storeLatitude;
+  final double? storeLongitude;
 
   // Bank account details
   final String bankAccountName;
@@ -56,6 +66,9 @@ class BusinessProfile {
       gstin: map['gstin'] as String? ?? '',
       stateCode: map['stateCode'] as String? ?? '',
       logoUrl: map['logoUrl'] as String? ?? '',
+      signatureUrl: map['signatureUrl'] as String? ?? '',
+      storeLatitude: (map['storeLatitude'] as num?)?.toDouble(),
+      storeLongitude: (map['storeLongitude'] as num?)?.toDouble(),
       bankAccountName: map['bankAccountName'] as String? ?? '',
       bankAccountNumber: map['bankAccountNumber'] as String? ?? '',
       bankIfsc: map['bankIfsc'] as String? ?? '',
@@ -79,6 +92,9 @@ class BusinessProfile {
       'gstin': gstin,
       'stateCode': stateCode,
       'logoUrl': logoUrl,
+      'signatureUrl': signatureUrl,
+      if (storeLatitude != null) 'storeLatitude': storeLatitude,
+      if (storeLongitude != null) 'storeLongitude': storeLongitude,
       'bankAccountName': bankAccountName,
       'bankAccountNumber': bankAccountNumber,
       'bankIfsc': bankIfsc,
@@ -101,6 +117,9 @@ class BusinessProfile {
     String? gstin,
     String? stateCode,
     String? logoUrl,
+    String? signatureUrl,
+    double? storeLatitude,
+    double? storeLongitude,
     String? bankAccountName,
     String? bankAccountNumber,
     String? bankIfsc,
@@ -121,6 +140,9 @@ class BusinessProfile {
       gstin: gstin ?? this.gstin,
       stateCode: stateCode ?? this.stateCode,
       logoUrl: logoUrl ?? this.logoUrl,
+      signatureUrl: signatureUrl ?? this.signatureUrl,
+      storeLatitude: storeLatitude ?? this.storeLatitude,
+      storeLongitude: storeLongitude ?? this.storeLongitude,
       bankAccountName: bankAccountName ?? this.bankAccountName,
       bankAccountNumber: bankAccountNumber ?? this.bankAccountNumber,
       bankIfsc: bankIfsc ?? this.bankIfsc,

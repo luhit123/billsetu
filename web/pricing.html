@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pricing - BillRaja | Billing, Attendance & Team Management App for Small Business</title>
+  <meta name="description" content="BillRaja pricing plans for Indian small businesses. Free trial with all features. Pro at Rs 59/month for billing, reports & teams. Enterprise at Rs 99/month for attendance, unlimited teams & membership management.">
+  <meta name="keywords" content="BillRaja pricing, billing app pricing India, small business app plans, GST billing software price, employee attendance app cost, team management app pricing">
+  <link rel="canonical" href="https://billraja.com/pricing.html">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://billraja.com/pricing.html">
+  <meta property="og:title" content="BillRaja Pricing — Plans for Every Business Size">
+  <meta property="og:description" content="Start free, upgrade when you grow. Billing, attendance, team management, GST, inventory — one app from Rs 59/month.">
+  <meta property="og:image" content="https://billraja.com/icons/Icon-512.png">
+  <meta property="og:site_name" content="BillRaja">
+
+  <style>
+    :root {
+      --bg: #f6f8fb;
+      --surface: #ffffff;
+      --surface-alt: #eef4ff;
+      --text: #20303b;
+      --muted: #5f6d79;
+      --line: #dde5f0;
+      --primary: #0057ff;
+      --primary-dark: #0047d2;
+      --accent: #0ea5e9;
+      --success: #16a34a;
+      --orange: #ea580c;
+      --shadow: 0 20px 50px rgba(17, 27, 43, 0.08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(0, 87, 255, 0.08), transparent 30%),
+        linear-gradient(180deg, #fbfcfe 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.65;
+    }
+
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 1120px; margin: 0 auto; padding: 24px; }
+
+    .topbar {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 20px; padding: 8px 0 24px;
+    }
+
+    .brand {
+      display: inline-flex; align-items: center; gap: 12px;
+      font-weight: 800; font-size: 18px; color: var(--text);
+    }
+
+    .brand-mark {
+      width: 42px; height: 42px; border-radius: 14px;
+      display: grid; place-items: center; color: #fff; font-weight: 900;
+      background: linear-gradient(135deg, var(--primary), var(--accent));
+      box-shadow: 0 16px 30px rgba(0, 87, 255, 0.18);
+    }
+
+    .nav { display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: 14px; }
+
+    .hero { padding: 18px 0 28px; }
+
+    .eyebrow {
+      display: inline-block; padding: 8px 12px; border-radius: 999px;
+      background: rgba(0, 87, 255, 0.08); color: var(--primary);
+      font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 16px 0 12px; font-size: clamp(34px, 5vw, 54px);
+      line-height: 1.04; letter-spacing: -0.04em;
+    }
+
+    .hero p { max-width: 760px; margin: 0; font-size: 18px; color: var(--muted); }
+
+    /* Trial banner */
+    .trial-banner {
+      margin-top: 24px; padding: 18px 22px; border-radius: 18px;
+      background: linear-gradient(135deg, rgba(22, 163, 74, 0.08), rgba(0, 87, 255, 0.06));
+      border: 1px solid rgba(22, 163, 74, 0.18);
+      display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    }
+    .trial-banner strong { color: var(--success); font-size: 16px; }
+    .trial-banner p { margin: 0; color: var(--muted); font-size: 15px; }
+
+    /* Pricing grid */
+    .pricing-grid {
+      display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 20px; margin-top: 28px;
+    }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--line);
+      border-radius: var(--radius); padding: 26px; box-shadow: var(--shadow);
+    }
+
+    .card.featured {
+      border-color: rgba(0, 87, 255, 0.24);
+      background: linear-gradient(180deg, rgba(0, 87, 255, 0.05), #fff 34%);
+      position: relative;
+    }
+
+    .popular-tag {
+      position: absolute; top: -12px; right: 20px;
+      background: var(--primary); color: #fff; font-size: 11px; font-weight: 700;
+      padding: 5px 12px; border-radius: 999px; letter-spacing: 0.06em; text-transform: uppercase;
+    }
+
+    .plan-badge {
+      display: inline-block; padding: 6px 10px; border-radius: 999px;
+      font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    }
+    .badge-free { background: #ecfdf5; color: #166534; }
+    .badge-pro { background: #edf2ff; color: #2449b6; }
+    .badge-enterprise { background: #fef3c7; color: #92400e; }
+
+    .price { margin: 18px 0 2px; font-size: 40px; font-weight: 800; letter-spacing: -0.04em; }
+    .price small { font-size: 16px; color: var(--muted); font-weight: 600; }
+    .price-note { color: var(--muted); font-size: 14px; margin-bottom: 18px; }
+
+    .card h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -0.02em; }
+    .card > p { margin: 0 0 16px; color: var(--muted); }
+
+    .feature-list { margin: 0; padding: 0; list-style: none; }
+    .feature-list li {
+      padding: 7px 0 7px 24px; position: relative; color: var(--muted); font-size: 14px;
+    }
+    .feature-list li::before {
+      content: ""; position: absolute; left: 0; top: 12px;
+      width: 16px; height: 16px; border-radius: 50%;
+      background: rgba(22, 163, 74, 0.12);
+      border: 2px solid var(--success);
+    }
+
+    /* Comparison table */
+    .compare-section { margin-top: 48px; }
+    .compare-section h2 {
+      font-size: clamp(26px, 4vw, 38px); letter-spacing: -0.03em; margin-bottom: 20px;
+    }
+
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    .compare-table th, .compare-table td {
+      padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line);
+    }
+    .compare-table thead th {
+      background: var(--surface-alt); font-weight: 700; font-size: 13px;
+      text-transform: uppercase; letter-spacing: 0.06em; color: var(--primary);
+      position: sticky; top: 0;
+    }
+    .compare-table .feature-name { font-weight: 600; color: var(--text); }
+    .compare-table .cat-row td {
+      background: #f9fbfe; font-weight: 700; font-size: 13px; color: var(--primary);
+      text-transform: uppercase; letter-spacing: 0.04em; padding-top: 18px;
+    }
+    .check { color: var(--success); font-weight: 700; }
+    .cross { color: #dc2626; }
+    .limit { color: var(--orange); font-weight: 600; }
+
+    /* Meta cards */
+    .meta-grid {
+      display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 20px; margin-top: 36px;
+    }
+
+    .meta-card {
+      background: var(--surface-alt); border: 1px solid rgba(0, 87, 255, 0.08);
+      border-radius: 20px; padding: 22px;
+    }
+    .meta-card h3 { margin: 0 0 10px; font-size: 20px; letter-spacing: -0.02em; }
+    .meta-card p, .meta-card li { color: var(--muted); font-size: 15px; }
+    .meta-card ul { margin: 0; padding-left: 20px; }
+    .meta-card li { margin-bottom: 8px; }
+
+    .notice {
+      margin-top: 28px; padding: 18px 20px; border-radius: 18px;
+      background: rgba(22, 163, 74, 0.08); border: 1px solid rgba(22, 163, 74, 0.16);
+      color: #1f5130; font-size: 15px;
+    }
+
+    .footer {
+      margin-top: 40px; padding-top: 24px; border-top: 1px solid var(--line);
+      display: flex; flex-wrap: wrap; justify-content: space-between;
+      gap: 12px; color: #8b96a2; font-size: 13px;
+    }
+    .footer-nav { display: flex; flex-wrap: wrap; gap: 14px; }
+
+    @media (max-width: 900px) {
+      .pricing-grid, .meta-grid { grid-template-columns: 1fr; }
+      .topbar, .footer { flex-direction: column; align-items: flex-start; }
+      .compare-table { font-size: 13px; }
+      .compare-table th, .compare-table td { padding: 10px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <span class="brand-mark">B</span>
+        <span>BillRaja</span>
+      </a>
+      <nav class="nav">
+        <a href="/pricing.html">Pricing</a>
+        <a href="/security.html">Security</a>
+        <a href="/support.html">Support</a>
+        <a href="/privacy-policy.html">Privacy</a>
+        <a href="/terms-conditions.html">Terms</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <span class="eyebrow">Pricing</span>
+      <h1>One app for billing, attendance, teams & GST. Simple pricing.</h1>
+      <p>BillRaja replaces 5 different apps. Billing, invoicing, employee attendance, team management, membership, inventory, GST reports — all in one place. Start with a free trial, upgrade when your business grows.</p>
+    </section>
+
+    <div class="trial-banner">
+      <strong>6-Month Free Trial</strong>
+      <p>Every new account gets full access to all Enterprise features for 6 months. No credit card required. No limits during trial.</p>
+    </div>
+
+    <section class="pricing-grid">
+      <!-- FREE -->
+      <article class="card">
+        <span class="plan-badge badge-free">After Trial</span>
+        <div class="price">&#8377;0</div>
+        <div class="price-note">Free forever with limits</div>
+        <h2>Free</h2>
+        <p>For solo businesses that need basic billing.</p>
+        <ul class="feature-list">
+          <li>5 invoices per month</li>
+          <li>5 customers</li>
+          <li>20 products</li>
+          <li>1 invoice template</li>
+          <li>GST billing (CGST, SGST, IGST)</li>
+          <li>UPI QR payment collection</li>
+          <li>Business profile & digital card</li>
+          <li>Offline mode with auto-sync</li>
+          <li>Multi-language support</li>
+        </ul>
+      </article>
+
+      <!-- PRO -->
+      <article class="card featured">
+        <span class="popular-tag">Most Popular</span>
+        <span class="plan-badge badge-pro">Best For Growth</span>
+        <div class="price">&#8377;59 <small>/ month</small></div>
+        <div class="price-note">Or &#8377;499/year (save 30%)</div>
+        <h2>Pro</h2>
+        <p>For growing businesses that need unlimited billing, reports, and small team collaboration.</p>
+        <ul class="feature-list">
+          <li>Unlimited invoices per month</li>
+          <li>Unlimited customers</li>
+          <li>Unlimited products</li>
+          <li>20+ invoice PDF templates</li>
+          <li>Up to 3 team members</li>
+          <li>Role-based access control</li>
+          <li>WhatsApp invoice sharing</li>
+          <li>Business reports & analytics</li>
+          <li>GST reports</li>
+          <li>Purchase order management</li>
+          <li>Membership & subscription plans</li>
+          <li>Data export (CSV)</li>
+          <li>Payment reminders</li>
+        </ul>
+      </article>
+
+      <!-- ENTERPRISE -->
+      <article class="card">
+        <span class="plan-badge badge-enterprise">For Staff-Led Businesses</span>
+        <div class="price">&#8377;99 <small>/ month</small></div>
+        <div class="price-note">Or &#8377;999/year (save 16%)</div>
+        <h2>Enterprise</h2>
+        <p>For businesses with staff, branches, or member-facing operations that need full control.</p>
+        <ul class="feature-list">
+          <li>Everything in Pro</li>
+          <li>Unlimited team members</li>
+          <li>Employee attendance — QR check-in</li>
+          <li>Geo-fenced attendance tracking</li>
+          <li>Attendance dashboard & reports</li>
+          <li>Team performance analytics</li>
+          <li>GSTR-3B compliance reports</li>
+          <li>Advanced team permissions</li>
+          <li>Office location management</li>
+        </ul>
+      </article>
+    </section>
+
+    <!-- FULL COMPARISON TABLE -->
+    <section class="compare-section">
+      <h2>Full feature comparison</h2>
+      <div style="overflow-x: auto;">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th style="width:40%">Feature</th>
+              <th style="width:20%">Free</th>
+              <th style="width:20%">Pro &#8377;59/mo</th>
+              <th style="width:20%">Enterprise &#8377;99/mo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <!-- Billing -->
+            <tr class="cat-row"><td colspan="4">Billing & Invoicing</td></tr>
+            <tr><td class="feature-name">Invoices per month</td><td class="limit">5</td><td class="check">Unlimited</td><td class="check">Unlimited</td></tr>
+            <tr><td class="feature-name">Invoice PDF templates</td><td class="limit">1</td><td class="check">20+</td><td class="check">20+</td></tr>
+            <tr><td class="feature-name">GST billing (CGST, SGST, IGST)</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Discounts (% or flat)</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Partial payment tracking</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">UPI QR on invoices</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Share via WhatsApp</td><td class="cross">No</td><td class="check">Unlimited</td><td class="check">Unlimited</td></tr>
+            <tr><td class="feature-name">Share via SMS, email, link</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Invoice search & filters</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Customers -->
+            <tr class="cat-row"><td colspan="4">Customer Management</td></tr>
+            <tr><td class="feature-name">Customers</td><td class="limit">5</td><td class="check">Unlimited</td><td class="check">Unlimited</td></tr>
+            <tr><td class="feature-name">Customer groups</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Contact import from phone</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Customer payment history</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Balance reminders</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Products & Inventory -->
+            <tr class="cat-row"><td colspan="4">Products & Inventory</td></tr>
+            <tr><td class="feature-name">Products</td><td class="limit">20</td><td class="check">Unlimited</td><td class="check">Unlimited</td></tr>
+            <tr><td class="feature-name">Stock tracking</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Stock movement history</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Low stock alerts</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Purchase orders</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Team -->
+            <tr class="cat-row"><td colspan="4">Team Management</td></tr>
+            <tr><td class="feature-name">Team members</td><td class="cross">No team</td><td class="limit">Up to 3</td><td class="check">Unlimited</td></tr>
+            <tr><td class="feature-name">Role-based access (Owner, Manager, Staff)</td><td class="cross">-</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Team invitations</td><td class="cross">-</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Permission overrides per member</td><td class="cross">-</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Team settings & management</td><td class="cross">-</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Attendance -->
+            <tr class="cat-row"><td colspan="4">Employee Attendance</td></tr>
+            <tr><td class="feature-name">QR code check-in/check-out</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Geo-fenced attendance</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Attendance dashboard</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Hours worked & on-time tracking</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Team performance reports</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Office location setup</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+
+            <!-- Membership -->
+            <tr class="cat-row"><td colspan="4">Membership & Subscriptions</td></tr>
+            <tr><td class="feature-name">Create membership plans</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Member management</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Recurring & package plans</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Membership invoicing</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Reports -->
+            <tr class="cat-row"><td colspan="4">Reports & Analytics</td></tr>
+            <tr><td class="feature-name">Revenue reports & dashboards</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Product performance reports</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">GST reports (output, input, net)</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">GSTR-3B compliance</td><td class="cross">No</td><td class="cross">No</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Data export (CSV)</td><td class="cross">No</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+
+            <!-- Platform -->
+            <tr class="cat-row"><td colspan="4">Platform & Extras</td></tr>
+            <tr><td class="feature-name">Android, iOS, Web</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Offline mode with auto-sync</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Multi-language (EN, HI, TA, GU, AS)</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Digital business card</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Push notifications & reminders</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+            <tr><td class="feature-name">Signature capture on invoices</td><td class="check">Yes</td><td class="check">Yes</td><td class="check">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="meta-grid">
+      <div class="meta-card">
+        <h3>Billing FAQ</h3>
+        <ul>
+          <li>All prices in INR. GST included.</li>
+          <li>6-month free trial — all Enterprise features, no card needed.</li>
+          <li>After trial, you move to Free plan unless you upgrade.</li>
+          <li>Subscriptions auto-renew until cancelled.</li>
+          <li>Cancel anytime from the app. Access continues until period ends.</li>
+          <li>No refunds for partial billing periods.</li>
+          <li>7-day grace period if payment fails.</li>
+        </ul>
+      </div>
+      <div class="meta-card">
+        <h3>Who is BillRaja for?</h3>
+        <ul>
+          <li>Shopkeepers and retail store owners</li>
+          <li>Freelancers and consultants</li>
+          <li>Gyms, salons, coaching centres, and clinics</li>
+          <li>Restaurants and food businesses</li>
+          <li>Agencies and service businesses with staff</li>
+          <li>Wholesale distributors and traders</li>
+          <li>Any Indian small business that bills customers</li>
+        </ul>
+      </div>
+    </section>
+
+    <div class="notice">
+      Need help choosing a plan or want a written quote? Email <a href="mailto:contact@billraja.com?subject=BillRaja%20Pricing%20Enquiry">contact@billraja.com</a>. We typically respond within 1 business day.
+    </div>
+
+    <footer class="footer">
+      <span>&copy; 2026 BillRaja. All rights reserved.</span>
+      <nav class="footer-nav">
+        <a href="/">Home</a>
+        <a href="/security.html">Security</a>
+        <a href="/support.html">Support</a>
+        <a href="/privacy-policy.html">Privacy Policy</a>
+        <a href="/terms-conditions.html">Terms</a>
+        <a href="/account-deletion.html">Account Deletion</a>
+      </nav>
+    </footer>
+  </div>
+</body>
+</html>

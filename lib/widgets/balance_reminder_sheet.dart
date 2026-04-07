@@ -1,9 +1,9 @@
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/modals/invoice.dart';
+import 'package:billeasy/services/payment_link_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
-import 'package:billeasy/utils/upi_utils.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -44,7 +44,22 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
   // ── Message builders ──────────────────────────────────────────────────
 
-  String _whatsAppMessage() {
+  Future<String?> _buildPayLink() async {
+    if (widget.upiId == null ||
+        widget.upiId!.isEmpty ||
+        widget.totalOutstanding <= 0) {
+      return null;
+    }
+
+    return PaymentLinkService.instance.createUpiWebPaymentLink(
+      upiId: widget.upiId!,
+      businessName: widget.businessName ?? '',
+      amount: widget.totalOutstanding,
+      invoiceNumber: 'Balance',
+    );
+  }
+
+  String _whatsAppMessage({String? payLink}) {
     final name = widget.client.name.trim().isNotEmpty
         ? widget.client.name.trim()
         : 'Customer';
@@ -80,15 +95,7 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
       ..writeln('*Total Outstanding: $total*');
 
     // Add UPI payment link if merchant has UPI configured
-    if (widget.upiId != null &&
-        widget.upiId!.isNotEmpty &&
-        widget.totalOutstanding > 0) {
-      final payLink = buildUpiWebPaymentLink(
-        upiId: widget.upiId!,
-        businessName: widget.businessName ?? '',
-        amount: widget.totalOutstanding,
-        invoiceNumber: 'Balance',
-      );
+    if (payLink != null && payLink.isNotEmpty) {
       buf
         ..writeln()
         ..writeln('Pay now: $payLink');
@@ -96,13 +103,15 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
     buf
       ..writeln()
-      ..writeln('Please arrange payment at your earliest convenience. '
-          'Thank you! 🙏');
+      ..writeln(
+        'Please arrange payment at your earliest convenience. '
+        'Thank you! 🙏',
+      );
 
     return buf.toString();
   }
 
-  String _smsMessage() {
+  String _smsMessage({String? payLink}) {
     final name = widget.client.name.trim().isNotEmpty
         ? widget.client.name.trim()
         : 'Customer';
@@ -110,15 +119,7 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
     final count = widget.unpaidInvoices.length;
 
     String payPart = '';
-    if (widget.upiId != null &&
-        widget.upiId!.isNotEmpty &&
-        widget.totalOutstanding > 0) {
-      final payLink = buildUpiWebPaymentLink(
-        upiId: widget.upiId!,
-        businessName: widget.businessName ?? '',
-        amount: widget.totalOutstanding,
-        invoiceNumber: 'Balance',
-      );
+    if (payLink != null && payLink.isNotEmpty) {
       payPart = ' Pay: $payLink';
     }
     return 'Hi $name, this is a reminder that you have $count unpaid '
@@ -143,8 +144,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
     final total = _currency.format(widget.totalOutstanding);
 
     return Container(
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -159,15 +160,15 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerHigh,
+                  color: context.cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const Text(
+            Text(
               'Send Balance Reminder',
               style: TextStyle(
-                color: kOnSurface,
+                color: context.cs.onSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
@@ -175,8 +176,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
             const SizedBox(height: 4),
             Text(
               '$count unpaid invoice${count > 1 ? 's' : ''}  •  $total outstanding',
-              style: const TextStyle(
-                color: kOnSurfaceVariant,
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
               ),
             ),
@@ -188,8 +189,9 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
               child: ListView.separated(
                 shrinkWrap: true,
                 padding: EdgeInsets.zero,
-                itemCount:
-                    widget.unpaidInvoices.length > 6 ? 6 : widget.unpaidInvoices.length,
+                itemCount: widget.unpaidInvoices.length > 6
+                    ? 6
+                    : widget.unpaidInvoices.length,
                 separatorBuilder: (_, __) => const SizedBox(height: 4),
                 itemBuilder: (_, i) {
                   if (i == 5 && widget.unpaidInvoices.length > 6) {
@@ -197,8 +199,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       child: Text(
                         '+${widget.unpaidInvoices.length - 5} more invoices',
-                        style: const TextStyle(
-                          color: kTextTertiary,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant.withAlpha(153),
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                         ),
@@ -209,12 +211,14 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                   final inv = widget.unpaidInvoices[i];
                   final isOverdue = inv.status == InvoiceStatus.overdue;
                   return Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       color: isOverdue
                           ? kOverdueBg
-                          : kSurfaceContainerLow,
+                          : context.cs.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -222,10 +226,10 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                         Expanded(
                           child: Text(
                             inv.invoiceNumber,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
-                              color: kOnSurface,
+                              color: context.cs.onSurface,
                             ),
                           ),
                         ),
@@ -234,16 +238,18 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                             'Due ${_dateFmt.format(inv.dueDate!)}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: isOverdue ? kOverdue : kTextTertiary,
+                              color: isOverdue
+                                  ? kOverdue
+                                  : context.cs.onSurfaceVariant.withAlpha(153),
                             ),
                           ),
                         const SizedBox(width: 10),
                         Text(
                           _currency.format(inv.grandTotal),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: kOnSurface,
+                            color: context.cs.onSurface,
                           ),
                         ),
                       ],
@@ -266,7 +272,7 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
               isLoading: _isSendingWhatsApp,
               onTap: _isSendingWhatsApp ? null : _sendWhatsApp,
             ),
-            const Divider(height: 1, color: kSurfaceContainerLow),
+            Divider(height: 1, color: context.cs.surfaceContainerLow),
             // SMS option
             _OptionTile(
               icon: Icons.sms_rounded,
@@ -289,12 +295,11 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
   Future<void> _sendWhatsApp() async {
     // Plan gate — reuse existing WhatsApp share limits
-    final shareCount =
-        await UsageTrackingService.instance.getWhatsAppShareCount();
+    final shareCount = await UsageTrackingService.instance
+        .getWhatsAppShareCount();
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!mounted) return;
-      final max =
-          PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
+      final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
       await LimitReachedDialog.show(
         context,
         title: 'WhatsApp Share Limit',
@@ -317,7 +322,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
     setState(() => _isSendingWhatsApp = true);
 
-    final message = Uri.encodeComponent(_whatsAppMessage());
+    final payLink = await _buildPayLink();
+    final message = Uri.encodeComponent(_whatsAppMessage(payLink: payLink));
     final uri = Uri.parse('https://wa.me/$phone?text=$message');
 
     if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
@@ -346,7 +352,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
     setState(() => _isSendingSms = true);
 
-    final body = Uri.encodeComponent(_smsMessage());
+    final payLink = await _buildPayLink();
+    final body = Uri.encodeComponent(_smsMessage(payLink: payLink));
     final uri = Uri.parse('sms:$phone?body=$body');
 
     try {
@@ -361,9 +368,9 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     }
 
@@ -420,8 +427,8 @@ class _OptionTile extends StatelessWidget {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: kOnSurface,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                     ),
@@ -429,16 +436,19 @@ class _OptionTile extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded,
-                color: kTextTertiary, size: 20),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
+              size: 20,
+            ),
           ],
         ),
       ),

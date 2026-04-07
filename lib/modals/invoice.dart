@@ -37,6 +37,9 @@ class Invoice {
     this.amountReceived = 0,
     this.paymentMethod = '',
     this.notes,
+    this.createdByUid = '',
+    this.createdByName = '',
+    this.createdBySignatureUrl = '',
   });
 
   final String id;
@@ -67,6 +70,61 @@ class Invoice {
   final double? storedTotalTax;
   final double? storedGrandTotal;
   final double amountReceived;
+
+  /// The UID of the team member who actually created this invoice.
+  /// For solo users this equals [ownerId]. For team members it's their own UID.
+  final String createdByUid;
+
+  /// Display name of the creator (for quick reference without lookup).
+  final String createdByName;
+
+  /// Firebase Storage URL of the creator's signature at time of creation.
+  final String createdBySignatureUrl;
+
+  // ── B2B / B2C classification (Phase 2 GST compliance) ─────────────────────
+
+  /// True if the customer has a valid GSTIN (B2B transaction).
+  /// A valid GSTIN is exactly 15 characters per GST format rules.
+  bool get isB2B => customerGstin.trim().length >= 15;
+
+  /// "B2B" or "B2C" for GSTR-1 classification.
+  String get gstTransactionType => isB2B ? 'B2B' : 'B2C';
+
+  /// Schema version for forward-compatible data migrations.
+  /// Version history:
+  ///   1 = original (order-level GST only)
+  ///   2 = per-item GST rates
+  ///   3 = B2B/B2C classification + schema field + RCM foundation
+  static const int currentSchemaVersion = 3;
+
+  // ── Reverse Charge Mechanism (RCM) foundation ─────────────────────────────
+
+  /// Whether this invoice is under reverse charge mechanism.
+  /// When true, the recipient (buyer) is liable to pay GST instead of supplier.
+  /// Commonly applies to services from unregistered dealers or specified services.
+  bool get isReverseCharge => false; // TODO: wire to a field when RCM is enabled
+
+  // ── Place of Supply helpers ────────────────────────────────────────────────
+
+  /// Extracts the 2-digit state code from the customer's GSTIN (first 2 digits).
+  /// Returns empty string if GSTIN is not set or invalid.
+  String get customerStateCode {
+    if (customerGstin.length < 2) return '';
+    return customerGstin.substring(0, 2);
+  }
+
+  /// Determines if the supply is inter-state based on placeOfSupply vs
+  /// the business's registered state. If placeOfSupply differs from business
+  /// state code, it's inter-state (IGST applies).
+  /// Returns null if determination cannot be made (missing data).
+  bool? isInterStateSupply(String businessStateCode) {
+    if (placeOfSupply.isEmpty || businessStateCode.isEmpty) return null;
+    // placeOfSupply may be a 2-digit code or a full state name
+    final supplyCode = placeOfSupply.length == 2
+        ? placeOfSupply
+        : placeOfSupply; // TODO: map state names to codes
+    return supplyCode != businessStateCode;
+  }
 
   double get balanceDue => _roundCurrency(grandTotal - amountReceived);
   bool get isFullyPaid => amountReceived >= grandTotal && grandTotal > 0;
@@ -205,6 +263,9 @@ class Invoice {
       amountReceived: _doubleFromMapValue(map['amountReceived']),
       paymentMethod: map['paymentMethod'] as String? ?? '',
       notes: map['notes'] as String?,
+      createdByUid: map['createdByUid'] as String? ?? '',
+      createdByName: map['createdByName'] as String? ?? '',
+      createdBySignatureUrl: map['createdBySignatureUrl'] as String? ?? '',
     );
   }
 
@@ -280,6 +341,11 @@ class Invoice {
       'balanceDue': mapBalanceDue,
       if (paymentMethod.isNotEmpty) 'paymentMethod': paymentMethod,
       if (notes != null) 'notes': notes,
+      'createdByUid': createdByUid,
+      'createdByName': createdByName,
+      'createdBySignatureUrl': createdBySignatureUrl,
+      'schemaVersion': currentSchemaVersion,
+      'gstTransactionType': customerGstin.trim().isNotEmpty ? 'B2B' : 'B2C',
     };
   }
 

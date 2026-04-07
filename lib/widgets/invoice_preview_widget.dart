@@ -92,7 +92,9 @@ class InvoicePreviewWidget extends StatelessWidget {
         final params = Map<String, String>.from(uri.queryParameters)..remove('token');
         return uri.replace(queryParameters: params).toString();
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[InvoicePreview] URL token strip failed: $e');
+    }
     return url;
   }
 

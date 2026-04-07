@@ -14,7 +14,7 @@ class ForceUpdateScreen extends StatelessWidget {
     final rc = RemoteConfigService.instance;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -37,19 +37,19 @@ class ForceUpdateScreen extends StatelessWidget {
               const SizedBox(height: 32),
               Text(
                 rc.forceUpdateTitle,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 14),
               Text(
                 rc.forceUpdateMessage,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 15,
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -57,9 +57,9 @@ class ForceUpdateScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 'Current: v${rc.currentAppVersion}  •  Required: v${rc.minSupportedVersion}',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
-                  color: kTextTertiary,
+                  color: context.cs.onSurfaceVariant.withAlpha(153),
                 ),
               ),
               const SizedBox(height: 36),
@@ -75,7 +75,7 @@ class ForceUpdateScreen extends StatelessWidget {
                     ),
                   ),
                   style: FilledButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(

@@ -1,16 +1,13 @@
 import 'package:billeasy/modals/analytics_models.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class AnalyticsService {
-  AnalyticsService({
-    FirebaseFirestore? firestore,
-    FirebaseAuth? firebaseAuth,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  AnalyticsService({FirebaseFirestore? firestore, FirebaseAuth? firebaseAuth})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _firebaseAuth;
 
   DocumentReference<Map<String, dynamic>> _dashboardDoc(String ownerId) {
     return _firestore
@@ -63,11 +60,17 @@ class AnalyticsService {
     });
   }
 
-  String _requireOwnerId() {
-    final currentUser = _firebaseAuth.currentUser;
-    if (currentUser == null) {
-      throw StateError('Sign in is required to access analytics.');
-    }
-    return currentUser.uid;
+  /// Returns the last time the dashboard analytics were updated.
+  /// Useful for showing a "last synced" indicator in the UI.
+  Future<DateTime?> getLastSyncedAt() async {
+    final ownerId = _requireOwnerId();
+    final snapshot = await _dashboardDoc(ownerId).get();
+    final data = snapshot.data();
+    if (data == null) return null;
+    final ts = data['updatedAt'];
+    if (ts is Timestamp) return ts.toDate();
+    return null;
   }
+
+  String _requireOwnerId() => TeamService.instance.getEffectiveOwnerId();
 }

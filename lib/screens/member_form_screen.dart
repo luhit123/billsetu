@@ -1,7 +1,10 @@
 import 'package:billeasy/modals/member.dart';
 import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/utils/error_helpers.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
@@ -32,8 +35,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
     decimalDigits: 0,
   );
 
-  bool get _isEditing =>
-      widget.member != null && widget.member!.id.isNotEmpty;
+  bool get _isEditing => widget.member != null && widget.member!.id.isNotEmpty;
 
   List<SubscriptionPlan> _plans = [];
   bool _loadingPlans = true;
@@ -115,11 +117,11 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
-                  primary: kPrimary,
-                  onPrimary: Colors.white,
-                  surface: kSurfaceLowest,
-                  onSurface: kOnSurface,
-                ),
+              primary: kPrimary,
+              onPrimary: Colors.white,
+              surface: context.cs.surfaceContainerLowest,
+              onSurface: context.cs.onSurface,
+            ),
           ),
           child: child!,
         );
@@ -131,12 +133,19 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
   }
 
   Future<void> _save() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'manage members',
+    )) {
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     if (_selectedPlan == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a plan')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Please select a plan')));
       return;
     }
 
@@ -145,6 +154,13 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
     try {
       final now = DateTime.now();
       final plan = _selectedPlan!;
+      final planChanged = _isEditing && widget.member!.planId != plan.id;
+      final amountPaid = (!_isEditing || planChanged)
+          ? plan.effectivePrice
+          : widget.member!.amountPaid;
+      final joiningFeePaid = (!_isEditing || planChanged)
+          ? plan.joiningFee
+          : widget.member!.joiningFeePaid;
 
       final member = Member(
         id: widget.member?.id ?? '',
@@ -159,8 +175,8 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
         startDate: _startDate,
         endDate: _endDate,
         autoRenew: _autoRenew,
-        amountPaid: _isEditing ? widget.member!.amountPaid : plan.effectivePrice,
-        joiningFeePaid: _isEditing ? widget.member!.joiningFeePaid : plan.joiningFee,
+        amountPaid: amountPaid,
+        joiningFeePaid: joiningFeePaid,
         attendanceCount: widget.member?.attendanceCount ?? 0,
         lastCheckIn: widget.member?.lastCheckIn,
         frozenUntil: widget.member?.frozenUntil,
@@ -173,9 +189,9 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       Navigator.of(context).pop(saved);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFriendlyError(e, fallback: 'Failed to save member. Please try again.'))));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -192,12 +208,12 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      prefixIcon: Icon(icon, color: kOnSurfaceVariant, size: 20),
+      prefixIcon: Icon(icon, color: context.cs.onSurfaceVariant, size: 20),
       prefixText: prefix,
-      prefixStyle: const TextStyle(color: kOnSurface, fontSize: 15),
+      prefixStyle: TextStyle(color: context.cs.onSurface, fontSize: 15),
       suffixIcon: suffixIcon,
       filled: true,
-      fillColor: kSurfaceContainerLow,
+      fillColor: context.cs.surfaceContainerLow,
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
         borderSide: BorderSide.none,
@@ -206,8 +222,11 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
         borderRadius: BorderRadius.circular(10),
         borderSide: const BorderSide(color: kPrimary, width: 1.8),
       ),
-      labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 14),
-      hintStyle: const TextStyle(color: kTextTertiary, fontSize: 14),
+      labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
+      hintStyle: TextStyle(
+        color: context.cs.onSurfaceVariant.withAlpha(153),
+        fontSize: 14,
+      ),
     );
   }
 
@@ -218,8 +237,12 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
 
       Contact? fullContact;
       if (await FlutterContacts.requestPermission()) {
-        fullContact = await FlutterContacts.getContact(contact.id,
-            withProperties: true, withAccounts: false, withPhoto: false);
+        fullContact = await FlutterContacts.getContact(
+          contact.id,
+          withProperties: true,
+          withAccounts: false,
+          withPhoto: false,
+        );
       }
 
       if (!mounted) return;
@@ -228,11 +251,10 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       final name = source.displayName;
       final phone = source.phones.isNotEmpty
           ? source.phones.first.number
-              .replaceAll(RegExp(r'[\s\-()]'), '')
-              .replaceFirst(RegExp(r'^\+91'), '')
+                .replaceAll(RegExp(r'[\s\-()]'), '')
+                .replaceFirst(RegExp(r'^\+91'), '')
           : '';
-      final email =
-          source.emails.isNotEmpty ? source.emails.first.address : '';
+      final email = source.emails.isNotEmpty ? source.emails.first.address : '';
 
       setState(() {
         if (name.isNotEmpty && _nameController.text.isEmpty) {
@@ -256,7 +278,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: kBuildGradientAppBar(
         titleText: _isEditing ? 'Edit Member' : 'Add Member',
       ),
@@ -280,8 +302,9 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                         label: 'Name',
                         icon: Icons.person_outline,
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Name is required'
+                          : null,
                     ),
                     const SizedBox(height: 14),
                     TextFormField(
@@ -294,8 +317,11 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                         suffixIcon: kIsWeb
                             ? null
                             : IconButton(
-                                icon: const Icon(Icons.contacts_rounded,
-                                    color: kPrimary, size: 20),
+                                icon: const Icon(
+                                  Icons.contacts_rounded,
+                                  color: kPrimary,
+                                  size: 20,
+                                ),
                                 tooltip: 'Pick from contacts',
                                 onPressed: _pickFromContacts,
                               ),
@@ -360,10 +386,10 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
   Widget _sectionHeader(String title) {
     return Text(
       title,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 12,
         fontWeight: FontWeight.w700,
-        color: kOnSurfaceVariant,
+        color: context.cs.onSurfaceVariant,
         letterSpacing: 1.1,
       ),
     );
@@ -385,26 +411,33 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 16),
         decoration: BoxDecoration(
-          color: kSurfaceContainerLow,
+          color: context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
           children: [
-            Icon(Icons.info_outline, color: kTextTertiary, size: 32),
+            Icon(
+              Icons.info_outline,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
+              size: 32,
+            ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'No plans created yet',
               style: TextStyle(
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
                 fontSize: 15,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Create a subscription plan first, then add members.',
               textAlign: TextAlign.center,
-              style: TextStyle(color: kTextTertiary, fontSize: 13),
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant.withAlpha(153),
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -427,7 +460,9 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
               duration: const Duration(milliseconds: 200),
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: isSelected ? kPrimaryContainer : kSurfaceLowest,
+                color: isSelected
+                    ? context.cs.primaryContainer
+                    : context.cs.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isSelected ? kPrimary : Colors.transparent,
@@ -444,7 +479,9 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                        color: isSelected ? kPrimary : kOutlineVariant,
+                        color: isSelected
+                            ? kPrimary
+                            : context.cs.outlineVariant,
                         width: isSelected ? 6 : 2,
                       ),
                       color: isSelected ? Colors.white : Colors.transparent,
@@ -462,15 +499,15 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w600,
-                            color: isSelected ? kPrimary : kOnSurface,
+                            color: isSelected ? kPrimary : context.cs.onSurface,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           plan.durationLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -486,7 +523,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: isSelected ? kPrimary : kOnSurface,
+                          color: isSelected ? kPrimary : context.cs.onSurface,
                         ),
                       ),
                       if (plan.discountPercent > 0)
@@ -531,18 +568,22 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
           onTap: _pickStartDate,
           child: AbsorbPointer(
             child: TextFormField(
-              decoration: _inputDecoration(
-                label: 'Start Date',
-                icon: Icons.calendar_today_outlined,
-              ).copyWith(
-                hintText: dateFormat.format(_startDate),
-                hintStyle: const TextStyle(color: kOnSurface, fontSize: 15),
-                suffixIcon: const Icon(
-                  Icons.edit_calendar,
-                  color: kPrimary,
-                  size: 20,
-                ),
-              ),
+              decoration:
+                  _inputDecoration(
+                    label: 'Start Date',
+                    icon: Icons.calendar_today_outlined,
+                  ).copyWith(
+                    hintText: dateFormat.format(_startDate),
+                    hintStyle: TextStyle(
+                      color: context.cs.onSurface,
+                      fontSize: 15,
+                    ),
+                    suffixIcon: const Icon(
+                      Icons.edit_calendar,
+                      color: kPrimary,
+                      size: 20,
+                    ),
+                  ),
               controller: TextEditingController(
                 text: dateFormat.format(_startDate),
               ),
@@ -554,19 +595,18 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
 
         // End Date (read-only, auto-calculated)
         TextFormField(
-          decoration: _inputDecoration(
-            label: 'End Date (auto-calculated)',
-            icon: Icons.event_outlined,
-          ).copyWith(
-            filled: true,
-            fillColor: kSurfaceDim,
-          ),
-          controller: TextEditingController(
-            text: dateFormat.format(_endDate),
-          ),
+          decoration:
+              _inputDecoration(
+                label: 'End Date (auto-calculated)',
+                icon: Icons.event_outlined,
+              ).copyWith(
+                filled: true,
+                fillColor: context.cs.surfaceContainerHighest,
+              ),
+          controller: TextEditingController(text: dateFormat.format(_endDate)),
           readOnly: true,
           enabled: false,
-          style: const TextStyle(color: kOnSurfaceVariant),
+          style: TextStyle(color: context.cs.onSurfaceVariant),
         ),
         const SizedBox(height: 14),
 
@@ -574,19 +614,23 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: kSurfaceContainerLow,
+            color: context.cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(10),
           ),
           child: Row(
             children: [
-              const Icon(Icons.autorenew, color: kOnSurfaceVariant, size: 20),
+              Icon(
+                Icons.autorenew,
+                color: context.cs.onSurfaceVariant,
+                size: 20,
+              ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Auto-Renew',
                   style: TextStyle(
                     fontSize: 15,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -609,7 +653,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kPrimaryContainer.withOpacity(0.35),
+        color: context.cs.primaryContainer.withOpacity(0.35),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -627,19 +671,19 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
               valueColor: kPaid,
             ),
           ],
-          const Padding(
+          Padding(
             padding: EdgeInsets.symmetric(vertical: 10),
-            child: Divider(height: 1, color: kOutlineVariant),
+            child: Divider(height: 1, color: context.cs.outlineVariant),
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Total',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w700,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
               ),
               Text(
@@ -663,14 +707,14 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant),
+          style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
         ),
         Text(
           value,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: valueColor ?? kOnSurface,
+            color: valueColor ?? context.cs.onSurface,
           ),
         ),
       ],
@@ -681,8 +725,8 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
   Widget _buildSaveButton() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         boxShadow: [
           BoxShadow(
             color: Color(0x0A000000),

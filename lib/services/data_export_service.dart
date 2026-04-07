@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:csv/csv.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show debugPrint, kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
+import 'team_service.dart';
 import '../modals/invoice.dart';
 import '../modals/client.dart';
 import '../modals/product.dart';
@@ -17,11 +20,19 @@ class DataExportService {
   final _db = FirebaseFirestore.instance;
 
   Future<void> exportInvoicesCSV() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = TeamService.instance.getEffectiveOwnerId();
 
     final rows = <List<dynamic>>[
-      ['Invoice #', 'Date', 'Customer', 'Status', 'Subtotal', 'Tax', 'Total', 'Due Date'],
+      [
+        'Invoice #',
+        'Date',
+        'Customer',
+        'Status',
+        'Subtotal',
+        'Tax',
+        'Total',
+        'Due Date',
+      ],
     ];
 
     const pageSize = 500;
@@ -64,8 +75,7 @@ class DataExportService {
   }
 
   Future<void> exportCustomersCSV() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = TeamService.instance.getEffectiveOwnerId();
 
     final rows = <List<dynamic>>[
       ['Name', 'Phone', 'Email', 'GSTIN', 'Address'],
@@ -91,13 +101,7 @@ class DataExportService {
 
       for (final doc in snap.docs) {
         final c = Client.fromMap(doc.data(), docId: doc.id);
-        rows.add([
-          c.name,
-          c.phone,
-          c.email,
-          c.gstin,
-          c.address,
-        ]);
+        rows.add([c.name, c.phone, c.email, c.gstin, c.address]);
       }
 
       if (snap.docs.length < pageSize) break;
@@ -109,8 +113,7 @@ class DataExportService {
   }
 
   Future<void> exportProductsCSV() async {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
+    final uid = TeamService.instance.getEffectiveOwnerId();
 
     final rows = <List<dynamic>>[
       [
@@ -168,14 +171,20 @@ class DataExportService {
   }
 
   /// Write CSV to a temp file, share it, then delete the file.
-  Future<void> _shareAndCleanup(String csv, String fileName, String subject) async {
+  Future<void> _shareAndCleanup(
+    String csv,
+    String fileName,
+    String subject,
+  ) async {
     if (kIsWeb) {
       // On web, share from bytes directly (no temp file)
-      final bytes = Uint8List.fromList(csv.codeUnits);
-      await SharePlus.instance.share(ShareParams(
-        files: [XFile.fromData(bytes, mimeType: 'text/csv', name: fileName)],
-        text: subject,
-      ));
+      final bytes = Uint8List.fromList(utf8.encode(csv));
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile.fromData(bytes, mimeType: 'text/csv', name: fileName)],
+          text: subject,
+        ),
+      );
       return;
     }
     final dir = await getTemporaryDirectory();
@@ -186,7 +195,9 @@ class DataExportService {
     } finally {
       try {
         if (await file.exists()) await file.delete();
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[DataExport] Temp file cleanup failed: $e');
+      }
     }
   }
 }

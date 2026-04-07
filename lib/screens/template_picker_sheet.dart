@@ -80,8 +80,8 @@ class _TemplatePickerState extends State<TemplatePicker> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       child: SafeArea(
@@ -96,24 +96,24 @@ class _TemplatePickerState extends State<TemplatePicker> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerHigh,
+                  color: context.cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             // Title
-            const Text(
+            Text(
               'Choose Template',
               style: TextStyle(
-                color: kOnSurface,
+                color: context.cs.onSurface,
                 fontSize: 17,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Select a design for your invoice PDF',
-              style: TextStyle(color: kOnSurfaceVariant, fontSize: 13),
+              style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
             ),
             const SizedBox(height: 16),
             // Template grid — scrollable
@@ -205,10 +205,10 @@ class _TemplateGridCard extends StatelessWidget {
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: locked
-              ? kSurfaceDim
+              ? context.cs.surfaceContainerHighest
               : selected
-                  ? kPrimaryContainer
-                  : kSurfaceContainerLow,
+                  ? context.cs.primaryContainer
+                  : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
           border: selected
               ? Border.all(color: kPrimary, width: 2)
@@ -221,11 +221,11 @@ class _TemplateGridCard extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                _swatch(meta.swatch1),
+                _swatch(context, meta.swatch1),
                 const SizedBox(width: 4),
-                _swatch(meta.swatch2),
+                _swatch(context, meta.swatch2),
                 const SizedBox(width: 4),
-                _swatch(meta.swatch3),
+                _swatch(context, meta.swatch3),
               ],
             ),
             const SizedBox(height: 8),
@@ -236,7 +236,7 @@ class _TemplateGridCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: selected ? kPrimary : (locked ? kTextTertiary : kOnSurface),
+                color: selected ? kPrimary : (locked ? context.cs.onSurfaceVariant.withAlpha(153) : context.cs.onSurface),
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
               ),
@@ -253,14 +253,14 @@ class _TemplateGridCard extends StatelessWidget {
     );
   }
 
-  Widget _swatch(Color color) {
+  Widget _swatch(BuildContext context, Color color) {
     return Container(
       width: 16,
       height: 16,
       decoration: BoxDecoration(
         color: color,
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.black12, width: 0.5),
+        border: Border.all(color: context.cs.outline.withAlpha(31), width: 0.5),
       ),
     );
   }

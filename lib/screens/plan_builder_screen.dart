@@ -3,7 +3,9 @@ import 'package:flutter/services.dart';
 
 import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 
 class PlanBuilderScreen extends StatefulWidget {
   const PlanBuilderScreen({super.key, this.plan});
@@ -37,18 +39,18 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
   bool get _isEditing => widget.plan != null;
 
   static const List<_PlanColor> _planColors = [
-    _PlanColor('#1E3A8A', 'Navy',    Color(0xFF1E3A8A)),
-    _PlanColor('#0057FF', 'Blue',    Color(0xFF0057FF)),
-    _PlanColor('#7C3AED', 'Purple',  Color(0xFF7C3AED)),
-    _PlanColor('#DB2777', 'Pink',    Color(0xFFDB2777)),
-    _PlanColor('#DC2626', 'Red',     Color(0xFFDC2626)),
-    _PlanColor('#EA580C', 'Orange',  Color(0xFFEA580C)),
-    _PlanColor('#CA8A04', 'Gold',    Color(0xFFCA8A04)),
-    _PlanColor('#16A34A', 'Green',   Color(0xFF16A34A)),
-    _PlanColor('#0D9488', 'Teal',    Color(0xFF0D9488)),
-    _PlanColor('#475569', 'Slate',   Color(0xFF475569)),
-    _PlanColor('#1E1E1E', 'Black',   Color(0xFF1E1E1E)),
-    _PlanColor('#92400E', 'Brown',   Color(0xFF92400E)),
+    _PlanColor('#1E3A8A', 'Navy', Color(0xFF1E3A8A)),
+    _PlanColor('#0057FF', 'Blue', Color(0xFF0057FF)),
+    _PlanColor('#7C3AED', 'Purple', Color(0xFF7C3AED)),
+    _PlanColor('#DB2777', 'Pink', Color(0xFFDB2777)),
+    _PlanColor('#DC2626', 'Red', Color(0xFFDC2626)),
+    _PlanColor('#EA580C', 'Orange', Color(0xFFEA580C)),
+    _PlanColor('#CA8A04', 'Gold', Color(0xFFCA8A04)),
+    _PlanColor('#16A34A', 'Green', Color(0xFF16A34A)),
+    _PlanColor('#0D9488', 'Teal', Color(0xFF0D9488)),
+    _PlanColor('#475569', 'Slate', Color(0xFF475569)),
+    _PlanColor('#1E1E1E', 'Black', Color(0xFF1E1E1E)),
+    _PlanColor('#92400E', 'Brown', Color(0xFF92400E)),
   ];
 
   @override
@@ -59,10 +61,12 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       _nameCtrl.text = p.name;
       _descCtrl.text = p.description;
       _priceCtrl.text = p.price > 0 ? p.price.toStringAsFixed(0) : '';
-      _joiningFeeCtrl.text =
-          p.joiningFee > 0 ? p.joiningFee.toStringAsFixed(0) : '';
-      _discountCtrl.text =
-          p.discountPercent > 0 ? p.discountPercent.toStringAsFixed(0) : '';
+      _joiningFeeCtrl.text = p.joiningFee > 0
+          ? p.joiningFee.toStringAsFixed(0)
+          : '';
+      _discountCtrl.text = p.discountPercent > 0
+          ? p.discountPercent.toStringAsFixed(0)
+          : '';
       _gracePeriodCtrl.text = p.gracePeriodDays.toString();
       _customDaysCtrl.text = p.customDays.toString();
       _duration = p.duration;
@@ -118,10 +122,13 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
     return InputDecoration(
       labelText: label,
       hintText: hint,
-      labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 14),
-      hintStyle: const TextStyle(color: kTextTertiary, fontSize: 14),
+      labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
+      hintStyle: TextStyle(
+        color: context.cs.onSurfaceVariant.withAlpha(153),
+        fontSize: 14,
+      ),
       filled: true,
-      fillColor: kSurfaceContainerLow,
+      fillColor: context.cs.surfaceContainerLow,
       prefix: prefix,
       suffix: suffix,
       border: OutlineInputBorder(
@@ -149,10 +156,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       padding: const EdgeInsets.only(bottom: 10, top: 4),
       child: Text(
         title,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w700,
-          color: kTextTertiary,
+          color: context.cs.onSurfaceVariant.withAlpha(153),
           letterSpacing: 0.8,
         ),
       ),
@@ -164,7 +171,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kWhisperShadow],
       ),
@@ -183,7 +190,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? kPrimary : kSurfaceContainerLow,
+          color: selected ? kPrimary : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(10),
         ),
         child: Text(
@@ -191,7 +198,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: selected ? kOnPrimary : kOnSurfaceVariant,
+            color: selected
+                ? context.cs.onPrimary
+                : context.cs.onSurfaceVariant,
           ),
         ),
       ),
@@ -199,6 +208,13 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
   }
 
   Future<void> _save() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'manage membership plans',
+    )) {
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _saving = true);
@@ -217,7 +233,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       duration: _duration,
       customDays: int.tryParse(_customDaysCtrl.text) ?? 30,
       price: double.tryParse(_priceCtrl.text) ?? 0,
-      joiningFee: _planType == PlanType.package ? 0 : (double.tryParse(_joiningFeeCtrl.text) ?? 0),
+      joiningFee: _planType == PlanType.package
+          ? 0
+          : (double.tryParse(_joiningFeeCtrl.text) ?? 0),
       discountPercent: double.tryParse(_discountCtrl.text) ?? 0,
       gracePeriodDays: int.tryParse(_gracePeriodCtrl.text) ?? 3,
       planType: _planType,
@@ -259,7 +277,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
         content: Text(
           plan.memberCount > 0
               ? 'This plan has ${plan.memberCount} active member${plan.memberCount == 1 ? '' : 's'}. '
-                'Deleting it will not remove existing members, but they won\'t have an assigned plan.'
+                    'Deleting it will archive the plan for existing members and hide it from new enrollments.'
               : 'Are you sure you want to delete "${plan.name}"? This cannot be undone.',
         ),
         actions: [
@@ -277,6 +295,13 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
     );
 
     if (confirmed != true || !mounted) return;
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'delete membership plans',
+    )) {
+      return;
+    }
 
     setState(() => _saving = true);
     try {
@@ -287,7 +312,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to delete: $e'), backgroundColor: kOverdue),
+        SnackBar(
+          content: Text('Failed to delete: $e'),
+          backgroundColor: kOverdue,
+        ),
       );
     }
   }
@@ -295,7 +323,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: kBuildGradientAppBar(
         titleText: _isEditing ? 'Edit Plan' : 'Create Plan',
         actions: [
@@ -338,8 +366,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     hint: 'e.g. Gold Membership',
                   ),
                   textCapitalization: TextCapitalization.words,
-                  validator: (v) =>
-                      (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                  validator: (v) => (v == null || v.trim().isEmpty)
+                      ? 'Name is required'
+                      : null,
                 ),
                 const SizedBox(height: 14),
                 TextFormField(
@@ -365,14 +394,15 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () => setState(() => _planType = PlanType.recurring),
+                        onTap: () =>
+                            setState(() => _planType = PlanType.recurring),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           decoration: BoxDecoration(
                             color: _planType == PlanType.recurring
                                 ? kPrimary
-                                : kSurfaceContainerLow,
+                                : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(
@@ -381,8 +411,8 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 Icons.autorenew_rounded,
                                 size: 22,
                                 color: _planType == PlanType.recurring
-                                    ? kOnPrimary
-                                    : kOnSurfaceVariant,
+                                    ? context.cs.onPrimary
+                                    : context.cs.onSurfaceVariant,
                               ),
                               const SizedBox(height: 6),
                               Text(
@@ -391,8 +421,8 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: _planType == PlanType.recurring
-                                      ? kOnPrimary
-                                      : kOnSurfaceVariant,
+                                      ? context.cs.onPrimary
+                                      : context.cs.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -401,8 +431,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: _planType == PlanType.recurring
-                                      ? kOnPrimary.withOpacity(0.7)
-                                      : kTextTertiary,
+                                      ? context.cs.onPrimary.withOpacity(0.7)
+                                      : context.cs.onSurfaceVariant.withAlpha(
+                                          153,
+                                        ),
                                 ),
                               ),
                             ],
@@ -424,7 +456,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                           decoration: BoxDecoration(
                             color: _planType == PlanType.package
                                 ? kPrimary
-                                : kSurfaceContainerLow,
+                                : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(10),
                           ),
                           child: Column(
@@ -433,8 +465,8 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 Icons.card_giftcard_rounded,
                                 size: 22,
                                 color: _planType == PlanType.package
-                                    ? kOnPrimary
-                                    : kOnSurfaceVariant,
+                                    ? context.cs.onPrimary
+                                    : context.cs.onSurfaceVariant,
                               ),
                               const SizedBox(height: 6),
                               Text(
@@ -443,8 +475,8 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                   color: _planType == PlanType.package
-                                      ? kOnPrimary
-                                      : kOnSurfaceVariant,
+                                      ? context.cs.onPrimary
+                                      : context.cs.onSurfaceVariant,
                                 ),
                               ),
                               const SizedBox(height: 2),
@@ -453,8 +485,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: _planType == PlanType.package
-                                      ? kOnPrimary.withOpacity(0.7)
-                                      : kTextTertiary,
+                                      ? context.cs.onPrimary.withOpacity(0.7)
+                                      : context.cs.onSurfaceVariant.withAlpha(
+                                          153,
+                                        ),
                                 ),
                               ),
                             ],
@@ -509,7 +543,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
             const SizedBox(height: 20),
 
             // ── PRICING ─────────────────────────────────────────────────
-            _sectionTitle(_planType == PlanType.package ? 'PACKAGE FEE' : 'PRICING'),
+            _sectionTitle(
+              _planType == PlanType.package ? 'PACKAGE FEE' : 'PRICING',
+            ),
             _sectionCard(
               children: [
                 TextFormField(
@@ -519,10 +555,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                         ? 'Package Fee'
                         : 'Price per cycle',
                     hint: '0',
-                    prefix: const Text(
+                    prefix: Text(
                       '₹ ',
                       style: TextStyle(
-                        color: kOnSurface,
+                        color: context.cs.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
                       ),
@@ -539,10 +575,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     decoration: _inputDecoration(
                       label: 'Joining Fee (one-time)',
                       hint: '0',
-                      prefix: const Text(
+                      prefix: Text(
                         '₹ ',
                         style: TextStyle(
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
@@ -558,10 +594,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                   decoration: _inputDecoration(
                     label: 'Discount',
                     hint: '0',
-                    suffix: const Text(
+                    suffix: Text(
                       '%',
                       style: TextStyle(
-                        color: kOnSurface,
+                        color: context.cs.onSurface,
                         fontWeight: FontWeight.w600,
                         fontSize: 15,
                       ),
@@ -574,10 +610,12 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
                   decoration: BoxDecoration(
-                    color: kPrimaryContainer.withOpacity(0.35),
+                    color: context.cs.primaryContainer.withOpacity(0.35),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -585,21 +623,32 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
+                          Text(
                             'Effective Price',
-                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: kOnSurfaceVariant),
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: context.cs.onSurfaceVariant,
+                            ),
                           ),
                           if (_gstEnabled)
                             Text(
                               'incl. ${_gstRate.toStringAsFixed(0)}% GST',
-                              style: const TextStyle(fontSize: 10, color: kOnSurfaceVariant),
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: context.cs.onSurfaceVariant,
+                              ),
                             ),
                         ],
                       ),
                       const Spacer(),
                       Text(
                         '₹ ${_effectivePrice.toStringAsFixed(0)}',
-                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: kPrimary),
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: kPrimary,
+                        ),
                       ),
                     ],
                   ),
@@ -618,10 +667,10 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                   decoration: _inputDecoration(
                     label: 'Grace Period',
                     hint: '3',
-                    suffix: const Text(
+                    suffix: Text(
                       'days',
                       style: TextStyle(
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
                       ),
@@ -637,13 +686,13 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Text(
                               'Auto-Renew',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w500,
-                                color: kOnSurface,
+                                color: context.cs.onSurface,
                               ),
                             ),
                             SizedBox(height: 2),
@@ -651,7 +700,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                               'Automatically renew when the plan expires',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: kOnSurfaceVariant,
+                                color: context.cs.onSurfaceVariant,
                               ),
                             ),
                           ],
@@ -679,12 +728,23 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('Enable GST',
-                              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: kOnSurface)),
+                        children: [
+                          Text(
+                            'Enable GST',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: context.cs.onSurface,
+                            ),
+                          ),
                           SizedBox(height: 2),
-                          Text('Add GST to invoice/receipt',
-                              style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                          Text(
+                            'Add GST to invoice/receipt',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: context.cs.onSurfaceVariant,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -698,7 +758,13 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                 if (_gstEnabled) ...[
                   const SizedBox(height: 14),
                   // Rate selector
-                  const Text('GST Rate', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                  Text(
+                    'GST Rate',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -708,24 +774,39 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                         onTap: () => setState(() => _gstRate = rate),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
                           decoration: BoxDecoration(
-                            color: selected ? kPrimary : kSurfaceContainerLow,
+                            color: selected
+                                ? kPrimary
+                                : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: Text('${rate.toStringAsFixed(0)}%',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                                color: selected ? kOnPrimary : kOnSurfaceVariant,
-                              )),
+                          child: Text(
+                            '${rate.toStringAsFixed(0)}%',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: selected
+                                  ? context.cs.onPrimary
+                                  : context.cs.onSurfaceVariant,
+                            ),
+                          ),
                         ),
                       );
                     }).toList(),
                   ),
                   const SizedBox(height: 14),
                   // GST type
-                  const Text('GST Type', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                  Text(
+                    'GST Type',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: context.cs.onSurfaceVariant,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -736,22 +817,36 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                             duration: const Duration(milliseconds: 150),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              color: _gstType == 'cgst_sgst' ? kPrimary : kSurfaceContainerLow,
+                              color: _gstType == 'cgst_sgst'
+                                  ? kPrimary
+                                  : context.cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Column(children: [
-                              Text('CGST + SGST',
+                            child: Column(
+                              children: [
+                                Text(
+                                  'CGST + SGST',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: _gstType == 'cgst_sgst' ? kOnPrimary : kOnSurfaceVariant,
-                                  )),
-                              Text('Intra-state',
+                                    color: _gstType == 'cgst_sgst'
+                                        ? context.cs.onPrimary
+                                        : context.cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  'Intra-state',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: _gstType == 'cgst_sgst' ? kOnPrimary.withOpacity(0.7) : kTextTertiary,
-                                  )),
-                            ]),
+                                    color: _gstType == 'cgst_sgst'
+                                        ? context.cs.onPrimary.withOpacity(0.7)
+                                        : context.cs.onSurfaceVariant.withAlpha(
+                                            153,
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -763,22 +858,36 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                             duration: const Duration(milliseconds: 150),
                             padding: const EdgeInsets.symmetric(vertical: 10),
                             decoration: BoxDecoration(
-                              color: _gstType == 'igst' ? kPrimary : kSurfaceContainerLow,
+                              color: _gstType == 'igst'
+                                  ? kPrimary
+                                  : context.cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: Column(children: [
-                              Text('IGST',
+                            child: Column(
+                              children: [
+                                Text(
+                                  'IGST',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w600,
-                                    color: _gstType == 'igst' ? kOnPrimary : kOnSurfaceVariant,
-                                  )),
-                              Text('Inter-state',
+                                    color: _gstType == 'igst'
+                                        ? context.cs.onPrimary
+                                        : context.cs.onSurfaceVariant,
+                                  ),
+                                ),
+                                Text(
+                                  'Inter-state',
                                   style: TextStyle(
                                     fontSize: 10,
-                                    color: _gstType == 'igst' ? kOnPrimary.withOpacity(0.7) : kTextTertiary,
-                                  )),
-                            ]),
+                                    color: _gstType == 'igst'
+                                        ? context.cs.onPrimary.withOpacity(0.7)
+                                        : context.cs.onSurfaceVariant.withAlpha(
+                                            153,
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -786,34 +895,63 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                   ),
                   const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: kPrimaryContainer.withOpacity(0.3),
+                      color: context.cs.primaryContainer.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Base Price', style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
-                        Text('₹ ${_baseEffectivePrice.toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurface)),
+                        Text(
+                          'Base Price',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          '₹ ${_baseEffectivePrice.toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: context.cs.onSurface,
+                          ),
+                        ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
-                      color: kPrimaryContainer.withOpacity(0.3),
+                      color: context.cs.primaryContainer.withOpacity(0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('GST (${_gstRate.toStringAsFixed(0)}%)',
-                            style: TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
-                        Text('₹ ${(_baseEffectivePrice * _gstRate / 100).toStringAsFixed(0)}',
-                            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: kOnSurface)),
+                        Text(
+                          'GST (${_gstRate.toStringAsFixed(0)}%)',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: context.cs.onSurfaceVariant,
+                          ),
+                        ),
+                        Text(
+                          '₹ ${(_baseEffectivePrice * _gstRate / 100).toStringAsFixed(0)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: context.cs.onSurface,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -877,10 +1015,12 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     });
                   },
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 10,
+                      horizontal: 14,
+                    ),
                     decoration: BoxDecoration(
-                      color: kSurfaceContainerLow,
+                      color: context.cs.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Row(
@@ -931,7 +1071,9 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              _nameCtrl.text.isEmpty ? 'Plan Name' : _nameCtrl.text,
+                              _nameCtrl.text.isEmpty
+                                  ? 'Plan Name'
+                                  : _nameCtrl.text,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 18,
@@ -940,13 +1082,18 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                             ),
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              _planType == PlanType.package ? 'Package' : 'Recurring',
+                              _planType == PlanType.package
+                                  ? 'Package'
+                                  : 'Recurring',
                               style: TextStyle(
                                 color: Colors.white.withOpacity(0.9),
                                 fontSize: 10,
@@ -960,7 +1107,8 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       Text(
                         _duration == PlanDuration.custom
                             ? '${_customDaysCtrl.text} Days'
-                            : _duration.name[0].toUpperCase() + _duration.name.substring(1),
+                            : _duration.name[0].toUpperCase() +
+                                  _duration.name.substring(1),
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.8),
                           fontSize: 13,
@@ -999,14 +1147,30 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                           color: pc.color,
                           borderRadius: BorderRadius.circular(12),
                           border: selected
-                              ? Border.all(color: kOnSurface, width: 2.5)
-                              : Border.all(color: Colors.transparent, width: 2.5),
+                              ? Border.all(
+                                  color: context.cs.onSurface,
+                                  width: 2.5,
+                                )
+                              : Border.all(
+                                  color: Colors.transparent,
+                                  width: 2.5,
+                                ),
                           boxShadow: selected
-                              ? [BoxShadow(color: pc.color.withOpacity(0.4), blurRadius: 8, offset: const Offset(0, 2))]
+                              ? [
+                                  BoxShadow(
+                                    color: pc.color.withOpacity(0.4),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ]
                               : null,
                         ),
                         child: selected
-                            ? const Icon(Icons.check_rounded, color: Colors.white, size: 20)
+                            ? const Icon(
+                                Icons.check_rounded,
+                                color: Colors.white,
+                                size: 20,
+                              )
                             : null,
                       ),
                     );
@@ -1025,26 +1189,26 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 decoration: BoxDecoration(
                   gradient: _saving ? null : kSignatureGradient,
-                  color: _saving ? kSurfaceDim : null,
+                  color: _saving ? context.cs.surfaceContainerHighest : null,
                   borderRadius: BorderRadius.circular(12),
                   boxShadow: _saving ? null : const [kWhisperShadow],
                 ),
                 child: Center(
                   child: _saving
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
                             strokeWidth: 2.5,
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         )
                       : Text(
                           _isEditing ? 'Update Plan' : 'Create Plan',
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
-                            color: kOnPrimary,
+                            color: context.cs.onPrimary,
                             letterSpacing: 0.3,
                           ),
                         ),

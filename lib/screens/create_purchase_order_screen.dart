@@ -4,14 +4,16 @@ import 'package:billeasy/modals/purchase_order.dart';
 import 'package:billeasy/screens/purchase_order_details_screen.dart';
 import 'package:billeasy/screens/products_screen.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/error_helpers.dart';
 import 'package:billeasy/utils/number_utils.dart' as nu;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-BoxDecoration _cardDecoration() => BoxDecoration(
-      color: kSurfaceLowest,
+BoxDecoration _cardDecoration(BuildContext context) => BoxDecoration(
+      color: context.cs.surfaceContainerLowest,
       borderRadius: BorderRadius.circular(20),
       boxShadow: const [kWhisperShadow],
     );
@@ -100,18 +102,18 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
       InputDecoration(
         labelText: label,
         hintText: hint,
-        labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
+        labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
         suffixText: suffix,
         filled: true,
-        fillColor: kSurfaceContainerLow,
+        fillColor: context.cs.surfaceContainerLow,
         contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: kOutlineVariant),
+          borderSide: BorderSide(color: context.cs.outlineVariant),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: kOutlineVariant),
+          borderSide: BorderSide(color: context.cs.outlineVariant),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
@@ -156,17 +158,17 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
     final grandTotal = taxableAmount + totalTax;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: context.cs.surface,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        title: const Text(
+        title: Text(
           'New Purchase Order',
           style: TextStyle(
-            color: kOnSurface, fontWeight: FontWeight.w700, fontSize: 18,
+            color: context.cs.onSurface, fontWeight: FontWeight.w700, fontSize: 18,
           ),
         ),
       ),
@@ -208,7 +210,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               _sectionLabel('Notes', step: 6),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: _cardDecoration(),
+                decoration: _cardDecoration(context),
                 child: TextFormField(
                   controller: _notesCtrl,
                   maxLines: 3,
@@ -259,8 +261,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               const SizedBox(width: 8),
             ],
             Text(text,
-                style: const TextStyle(
-                    color: kOnSurface, fontSize: 14,
+                style: TextStyle(
+                    color: context.cs.onSurface, fontSize: 14,
                     fontWeight: FontWeight.w700)),
           ],
         ),
@@ -271,7 +273,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   Widget _buildSupplierSection() {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(context),
       child: Column(
         children: [
           TextFormField(
@@ -326,13 +328,13 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
       borderRadius: BorderRadius.circular(16),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        decoration: _cardDecoration(),
+        decoration: _cardDecoration(context),
         child: Row(
           children: [
             Container(
               width: 52, height: 52,
               decoration: BoxDecoration(
-                color: hasDate ? kPrimary : kSurfaceContainerLow,
+                color: hasDate ? kPrimary : context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
@@ -341,13 +343,13 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                   Text(
                     DateFormat('dd').format(displayDate),
                     style: TextStyle(
-                        color: hasDate ? Colors.white : kOnSurfaceVariant,
+                        color: hasDate ? Colors.white : context.cs.onSurfaceVariant,
                         fontSize: 18, fontWeight: FontWeight.w800, height: 1),
                   ),
                   Text(
                     DateFormat('MMM').format(displayDate).toUpperCase(),
                     style: TextStyle(
-                        color: hasDate ? Colors.white70 : kTextTertiary,
+                        color: hasDate ? Colors.white70 : context.cs.onSurfaceVariant.withAlpha(153),
                         fontSize: 9, fontWeight: FontWeight.w600,
                         letterSpacing: 0.5),
                   ),
@@ -359,9 +361,9 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Expected Delivery',
+                  Text('Expected Delivery',
                       style: TextStyle(fontSize: 12,
-                          fontWeight: FontWeight.w600, color: kOnSurfaceVariant)),
+                          fontWeight: FontWeight.w600, color: context.cs.onSurfaceVariant)),
                   const SizedBox(height: 3),
                   Text(
                     hasDate
@@ -369,18 +371,18 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                         : 'Tap to set date',
                     style: TextStyle(
                         fontSize: 15, fontWeight: FontWeight.w700,
-                        color: hasDate ? kOnSurface : kTextTertiary),
+                        color: hasDate ? context.cs.onSurface : context.cs.onSurfaceVariant.withAlpha(153)),
                   ),
                   if (hasDate)
                     Text(DateFormat('EEEE').format(_expectedDate!),
-                        style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant)),
+                        style: TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant)),
                 ],
               ),
             ),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(hasDate ? 'Change' : 'Set',
@@ -407,8 +409,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         children: [
           Container(
             padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
-            decoration: const BoxDecoration(
-              color: kSurfaceLowest,
+            decoration: BoxDecoration(
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.all(Radius.circular(20)),
               boxShadow: [kWhisperShadow],
             ),
@@ -434,9 +436,9 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text('Item ${index + 1}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontWeight: FontWeight.w700, fontSize: 13,
-                              color: kOnSurface)),
+                              color: context.cs.onSurface)),
                     ),
                     // Pick from products
                     GestureDetector(
@@ -445,7 +447,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: kSurfaceContainerLow,
+                          color: context.cs.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: const Row(
@@ -513,9 +515,9 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                 ),
                 ...[
                   const SizedBox(height: 10),
-                  const Text('GST Rate',
+                  Text('GST Rate',
                       style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600,
-                          color: kOnSurfaceVariant)),
+                          color: context.cs.onSurfaceVariant)),
                   const SizedBox(height: 6),
                   Wrap(
                     spacing: 6, runSpacing: 6,
@@ -527,13 +529,13 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
                           decoration: BoxDecoration(
-                            color: selected ? const Color(0xFFFF9500) : kSurfaceContainerLow,
+                            color: selected ? Color(0xFFFF9500) : context.cs.surfaceContainerLow,
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: Text(
                             '${rate.toStringAsFixed(0)}%',
                             style: TextStyle(
-                              color: selected ? Colors.white : kOnSurface,
+                              color: selected ? Colors.white : context.cs.onSurface,
                               fontWeight: FontWeight.w600, fontSize: 12,
                             ),
                           ),
@@ -647,7 +649,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         width: double.infinity,
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: const Color(0xFFFF9500), width: 1.5),
         ),
@@ -672,7 +674,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   Widget _buildDiscountSection(double subtotal, double discountAmount) {
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: _cardDecoration(),
+      decoration: _cardDecoration(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -688,16 +690,16 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                   duration: const Duration(milliseconds: 150),
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   decoration: BoxDecoration(
-                    color: isSelected ? kPrimary : kSurfaceContainerLow,
+                    color: isSelected ? kPrimary : context.cs.surfaceContainerLow,
                     borderRadius: BorderRadius.circular(20),
                     border: isSelected
                         ? Border.all(color: kPrimary)
-                        : Border.all(color: kOutlineVariant),
+                        : Border.all(color: context.cs.outlineVariant),
                   ),
                   child: Text(
                     label,
                     style: TextStyle(
-                      color: isSelected ? Colors.white : kOnSurface,
+                      color: isSelected ? Colors.white : context.cs.onSurface,
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
@@ -726,8 +728,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
             const SizedBox(height: 10),
             Text(
               'Discount: ${_currencyFormat.format(discountAmount)}',
-              style: const TextStyle(
-                color: kOnSurfaceVariant,
+              style: TextStyle(
+                color: context.cs.onSurfaceVariant,
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
               ),
@@ -751,14 +753,14 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         _sectionLabel('GST (Input Tax)', step: 5),
         Container(
           padding: const EdgeInsets.all(16),
-          decoration: _cardDecoration(),
+          decoration: _cardDecoration(context),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // GST type selector
-              const Text('GST TYPE',
+              Text('GST TYPE',
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                      color: kOnSurfaceVariant, letterSpacing: 0.8)),
+                      color: context.cs.onSurfaceVariant, letterSpacing: 0.8)),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -784,7 +786,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerLow,
+                  color: context.cs.surfaceContainerLow,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Column(
@@ -809,10 +811,10 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label,
-              style: const TextStyle(fontSize: 13, color: kOnSurfaceVariant,
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant,
                   fontWeight: FontWeight.w500)),
           Text(value,
-              style: const TextStyle(fontSize: 13, color: kOnSurface,
+              style: TextStyle(fontSize: 13, color: context.cs.onSurface,
                   fontWeight: FontWeight.w600)),
         ],
       );
@@ -890,8 +892,8 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
   Widget _buildBottomBar(double subtotal) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-      decoration: const BoxDecoration(
-        color: kSurfaceLowest,
+      decoration: BoxDecoration(
+        color: context.cs.surfaceContainerLowest,
         boxShadow: [kWhisperShadow],
       ),
       child: SafeArea(
@@ -901,11 +903,11 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Total',
-                    style: TextStyle(fontSize: 11, color: kOnSurfaceVariant)),
+                Text('Total',
+                    style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant)),
                 Text(_currencyFormat.format(subtotal),
-                    style: const TextStyle(fontSize: 22,
-                        fontWeight: FontWeight.w800, color: kOnSurface)),
+                    style: TextStyle(fontSize: 22,
+                        fontWeight: FontWeight.w800, color: context.cs.onSurface)),
               ],
             ),
             const SizedBox(width: 16),
@@ -919,7 +921,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
                         : const LinearGradient(
                             begin: Alignment.topLeft, end: Alignment.bottomRight,
                             colors: [Color(0xFFFF9500), Color(0xFFE8850A)]),
-                    color: _isSaving ? kSurfaceDim : null,
+                    color: _isSaving ? context.cs.surfaceContainerHighest : null,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: ElevatedButton.icon(
@@ -1055,6 +1057,16 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
     final isFormValid = _formKey.currentState?.validate() ?? false;
     if (!isFormValid) return;
 
+    if (!TeamService.instance.can.canManagePurchaseOrders) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You don\'t have permission to create purchase orders.'),
+        ),
+      );
+      return;
+    }
+
     if (itemRows.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Add at least one item')),
@@ -1122,7 +1134,7 @@ class _CreatePurchaseOrderScreenState extends State<CreatePurchaseOrderScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save: $error')),
+        SnackBar(content: Text(userFriendlyError(error, fallback: 'Failed to save purchase order. Please try again.'))),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -1153,7 +1165,7 @@ class _GstTypeChip extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: selected ? kPrimary : kSurfaceContainerLow,
+          color: selected ? kPrimary : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Column(
@@ -1161,12 +1173,12 @@ class _GstTypeChip extends StatelessWidget {
             Text(label,
                 style: TextStyle(
                     fontSize: 13, fontWeight: FontWeight.w700,
-                    color: selected ? Colors.white : kOnSurface)),
+                    color: selected ? Colors.white : context.cs.onSurface)),
             const SizedBox(height: 2),
             Text(subtitle,
                 style: TextStyle(
                     fontSize: 10,
-                    color: selected ? Colors.white70 : kOnSurfaceVariant)),
+                    color: selected ? Colors.white70 : context.cs.onSurfaceVariant)),
           ],
         ),
       ),

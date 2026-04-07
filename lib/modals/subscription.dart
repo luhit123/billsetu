@@ -1,6 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-enum SubscriptionStatus { created, active, pending, halted, cancelled, expired }
+enum SubscriptionStatus {
+  created,
+  active,
+  pending,
+  halted,
+  paused,
+  cancelled,
+  expired,
+}
 
 class Subscription {
   final String id;
@@ -77,11 +85,19 @@ class Subscription {
       'razorpaySubscriptionId': razorpaySubscriptionId,
       'razorpayPlanId': razorpayPlanId,
       'razorpayCustomerId': razorpayCustomerId,
-      'currentPeriodStart': currentPeriodStart != null ? Timestamp.fromDate(currentPeriodStart!) : null,
-      'currentPeriodEnd': currentPeriodEnd != null ? Timestamp.fromDate(currentPeriodEnd!) : null,
-      'cancelledAt': cancelledAt != null ? Timestamp.fromDate(cancelledAt!) : null,
+      'currentPeriodStart': currentPeriodStart != null
+          ? Timestamp.fromDate(currentPeriodStart!)
+          : null,
+      'currentPeriodEnd': currentPeriodEnd != null
+          ? Timestamp.fromDate(currentPeriodEnd!)
+          : null,
+      'cancelledAt': cancelledAt != null
+          ? Timestamp.fromDate(cancelledAt!)
+          : null,
       'cancelAtPeriodEnd': cancelAtPeriodEnd,
-      'graceExpiresAt': graceExpiresAt != null ? Timestamp.fromDate(graceExpiresAt!) : null,
+      'graceExpiresAt': graceExpiresAt != null
+          ? Timestamp.fromDate(graceExpiresAt!)
+          : null,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
       'priceInPaise': priceInPaise,

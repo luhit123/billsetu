@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+// ignore_for_file: non_constant_identifier_names
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // Design System: "Metric Clarity"
@@ -102,12 +103,22 @@ const kTextPrimary = kOnSurface;
 const kGradientColors = [kPrimary, kPrimaryDark];
 const kGradient = kSignatureGradient;
 
+// ── Context-aware color accessors ────────────────────────────────────────────
+// Use these in build() methods instead of the compile-time k* constants so
+// widgets correctly re-color when the user switches between light and dark.
+//
+// Usage:  final cs = context.cs;
+//         Container(color: cs.surfaceContainerLowest)
+extension AppColorsX on BuildContext {
+  ColorScheme get cs => Theme.of(this).colorScheme;
+  bool get isDark => Theme.of(this).brightness == Brightness.dark;
+}
+
 // ── BillRaja logo widget ─────────────────────────────────────────────────────
 Widget kBillRajaLogo({double fontSize = 20}) {
   return Text(
     'BillRaja',
     style: TextStyle(
-      color: kOnSurface,
       fontWeight: FontWeight.w700,
       fontSize: fontSize,
       letterSpacing: -0.4,
@@ -126,8 +137,6 @@ PreferredSizeWidget kBuildGradientAppBar({
   PreferredSizeWidget? bottom,
 }) {
   return AppBar(
-    backgroundColor: kSurface,
-    foregroundColor: kOnSurface,
     elevation: 0,
     scrolledUnderElevation: scrolledUnderElevation,
     surfaceTintColor: Colors.transparent,
@@ -138,7 +147,6 @@ PreferredSizeWidget kBuildGradientAppBar({
             ? Text(
                 titleText,
                 style: const TextStyle(
-                  color: kOnSurface,
                   fontWeight: FontWeight.w600,
                   fontSize: 18,
                 ),
@@ -146,7 +154,5 @@ PreferredSizeWidget kBuildGradientAppBar({
             : kBillRajaLogo()),
     actions: actions,
     bottom: bottom,
-    iconTheme: const IconThemeData(color: kOnSurface),
-    actionsIconTheme: const IconThemeData(color: kOnSurfaceVariant),
   );
 }

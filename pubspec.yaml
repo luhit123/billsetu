@@ -65,8 +65,12 @@ dependencies:
   crypto: ^3.0.6
   firebase_crashlytics: ^5.1.0
   permission_handler: ^12.0.1
+  geolocator: ^13.0.2
+  geocoding: ^3.0.0
+  google_maps_flutter: ^2.10.0
   device_info_plus: ^12.3.0
   font_awesome_flutter: ^11.0.0
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
@@ -124,8 +128,8 @@ flutter:
 # Run: dart run flutter_launcher_icons
 flutter_launcher_icons:
   android: true
-  ios: false
+  ios: true
   image_path: "assets/icon/ic_launcher.png"
   adaptive_icon_foreground: "assets/icon/ic_launcher_foreground.png"
-  adaptive_icon_background: "#1E3A5F"
+  adaptive_icon_background: "#EDE0C4"
   min_sdk_android: 21

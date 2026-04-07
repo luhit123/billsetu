@@ -1,0 +1,494 @@
+{
+  "parameters": {
+    "maintenance_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Enable maintenance mode.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_products": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Pro plan: products (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "upgrade_features_json": {
+      "defaultValue": {
+        "value": "[{\"icon\":\"receipt_long\",\"label\":\"Unlimited Invoices\"},{\"icon\":\"people\",\"label\":\"Unlimited Customers\"},{\"icon\":\"inventory_2\",\"label\":\"Unlimited Products\"},{\"icon\":\"picture_as_pdf\",\"label\":\"20 PDF Templates\"},{\"icon\":\"chat\",\"label\":\"Unlimited WhatsApp Sharing\"},{\"icon\":\"shopping_cart\",\"label\":\"Purchase Orders\"},{\"icon\":\"bar_chart\",\"label\":\"Reports & Analytics\"},{\"icon\":\"download\",\"label\":\"Data Export\"},{\"icon\":\"palette\",\"label\":\"Custom Branding\"}]"
+      },
+      "description": "Pro features list JSON.",
+      "valueType": "JSON"
+    },
+    "upgrade_cta_text": {
+      "defaultValue": {
+        "value": "Upgrade to Pro"
+      },
+      "description": "Upgrade button text.",
+      "valueType": "STRING"
+    },
+    "pro_max_invoices": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Pro plan: invoices (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "promo_banner_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Show promo banner.",
+      "valueType": "BOOLEAN"
+    },
+    "feature_qr_attendance": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: QR Attendance for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "0"
+      },
+      "description": "Free plan: WhatsApp shares/month (0=disabled).",
+      "valueType": "NUMBER"
+    },
+    "feature_whatsapp_share": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: WhatsApp Sharing for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "force_update_title": {
+      "defaultValue": {
+        "value": "Update Required"
+      },
+      "description": "Force-update title.",
+      "valueType": "STRING"
+    },
+    "force_update_store_url": {
+      "defaultValue": {
+        "value": "https://play.google.com/store/apps/details?id=com.luhit.billeasy"
+      },
+      "description": "Play Store URL.",
+      "valueType": "STRING"
+    },
+    "expired_max_pdf_templates": {
+      "defaultValue": {
+        "value": "1"
+      },
+      "description": "Free plan: unlocked templates.",
+      "valueType": "NUMBER"
+    },
+    "feature_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: Data Export for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "maintenance_title": {
+      "defaultValue": {
+        "value": "Under Maintenance"
+      },
+      "description": "Maintenance title.",
+      "valueType": "STRING"
+    },
+    "pro_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Pro plan: WhatsApp (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "pro_price_monthly": {
+      "defaultValue": {
+        "value": "59"
+      },
+      "description": "Pro monthly price INR (incl GST).",
+      "valueType": "NUMBER"
+    },
+    "enabled_languages": {
+      "defaultValue": {
+        "value": ""
+      },
+      "description": "Enabled languages (empty=all).",
+      "valueType": "STRING"
+    },
+    "expired_has_reports": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Free plan: Reports access.",
+      "valueType": "BOOLEAN"
+    },
+    "expired_has_data_export": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Free plan: CSV export access.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_has_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Pro plan: Reports access.",
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_customers": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "description": "Free plan: max customers.",
+      "valueType": "NUMBER"
+    },
+    "plan_comparison_json": {
+      "defaultValue": {
+        "value": "[{\"icon\":\"receipt_long\",\"label\":\"Invoices\",\"free\":\"5/month\",\"pro\":\"Unlimited\"},{\"icon\":\"people\",\"label\":\"Customers\",\"free\":\"5\",\"pro\":\"Unlimited\"},{\"icon\":\"inventory_2\",\"label\":\"Products & Inventory\",\"free\":\"20\",\"pro\":\"Unlimited\"},{\"icon\":\"picture_as_pdf\",\"label\":\"PDF Templates\",\"free\":\"1\",\"pro\":\"All 20+\"},{\"icon\":\"currency_rupee\",\"label\":\"GST Invoicing\",\"free\":true,\"pro\":true},{\"icon\":\"qr_code\",\"label\":\"UPI Payment Links & QR\",\"free\":true,\"pro\":true},{\"icon\":\"language\",\"label\":\"Multi-language Support\",\"free\":true,\"pro\":true},{\"icon\":\"cloud_off\",\"label\":\"Offline Mode\",\"free\":true,\"pro\":true},{\"icon\":\"badge\",\"label\":\"Digital Business Card\",\"free\":true,\"pro\":true},{\"icon\":\"chat\",\"label\":\"WhatsApp Sharing\",\"free\":false,\"pro\":true},{\"icon\":\"shopping_cart\",\"label\":\"Purchase Orders\",\"free\":false,\"pro\":true},{\"icon\":\"bar_chart\",\"label\":\"Reports & Analytics\",\"free\":false,\"pro\":true},{\"icon\":\"assessment\",\"label\":\"GST Reports & GSTR-3B\",\"free\":false,\"pro\":true},{\"icon\":\"card_membership\",\"label\":\"Membership Management\",\"free\":false,\"pro\":true},{\"icon\":\"qr_code_scanner\",\"label\":\"QR Attendance\",\"free\":false,\"pro\":true},{\"icon\":\"download\",\"label\":\"Data Export (CSV)\",\"free\":false,\"pro\":true},{\"icon\":\"palette\",\"label\":\"Custom Branding & Logo\",\"free\":false,\"pro\":true}]"
+      },
+      "description": "Free vs Pro comparison table JSON.",
+      "valueType": "JSON"
+    },
+    "force_update_message": {
+      "defaultValue": {
+        "value": "A new version of BillRaja is available. Please update to continue using the app."
+      },
+      "description": "Force-update message.",
+      "valueType": "STRING"
+    },
+    "upgrade_title": {
+      "defaultValue": {
+        "value": "Upgrade to Pro"
+      },
+      "description": "Upgrade screen header.",
+      "valueType": "STRING"
+    },
+    "review_invoice_threshold": {
+      "defaultValue": {
+        "value": "3"
+      },
+      "description": "Invoices before review prompt.",
+      "valueType": "NUMBER"
+    },
+    "pro_price_annual": {
+      "defaultValue": {
+        "value": "499"
+      },
+      "description": "Pro annual price INR (incl GST).",
+      "valueType": "NUMBER"
+    },
+    "force_update_enabled": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Enable force-update screen.",
+      "valueType": "BOOLEAN"
+    },
+    "promo_banner_color": {
+      "defaultValue": {
+        "value": "#0057FF"
+      },
+      "description": "Promo color hex.",
+      "valueType": "STRING"
+    },
+    "review_session_threshold": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "description": "Sessions before review prompt.",
+      "valueType": "NUMBER"
+    },
+    "promo_banner_text": {
+      "defaultValue": {
+        "value": ""
+      },
+      "description": "Promo text.",
+      "valueType": "STRING"
+    },
+    "feature_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: Reports for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_has_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Pro plan: Purchase Orders access.",
+      "valueType": "BOOLEAN"
+    },
+    "maintenance_message": {
+      "defaultValue": {
+        "value": "We are performing scheduled maintenance. We will be back shortly!"
+      },
+      "description": "Maintenance message.",
+      "valueType": "STRING"
+    },
+    "expired_has_purchase_orders": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Free plan: Purchase Orders access.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_customers": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Pro plan: customers (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "min_supported_version": {
+      "defaultValue": {
+        "value": "1.0.0"
+      },
+      "description": "Minimum app version required.",
+      "valueType": "STRING"
+    },
+    "pro_has_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Pro plan: CSV export access.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_max_team_members": {
+      "defaultValue": {
+        "value": "3"
+      },
+      "description": "Pro plan: max team members (3).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_invoices": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: invoices (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_customers": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: customers (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_products": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: products (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_pdf_templates": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: templates (-1=all).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: WhatsApp (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_team_members": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: team members (-1=unlimited).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_has_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Enterprise plan: Reports access.",
+      "valueType": "BOOLEAN"
+    },
+    "enterprise_has_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Enterprise plan: Purchase Orders access.",
+      "valueType": "BOOLEAN"
+    },
+    "enterprise_has_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Enterprise plan: CSV export access.",
+      "valueType": "BOOLEAN"
+    },
+    "enterprise_has_attendance": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Enterprise plan: Attendance system access.",
+      "valueType": "BOOLEAN"
+    },
+    "enterprise_price_monthly": {
+      "defaultValue": {
+        "value": "99"
+      },
+      "description": "Enterprise monthly price INR (incl GST).",
+      "valueType": "NUMBER"
+    },
+    "enterprise_price_annual": {
+      "defaultValue": {
+        "value": "999"
+      },
+      "description": "Enterprise annual price INR (incl GST).",
+      "valueType": "NUMBER"
+    },
+    "feature_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: Purchase Orders for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "feature_membership": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "KILL SWITCH: Membership for ALL users.",
+      "valueType": "BOOLEAN"
+    },
+    "expired_max_products": {
+      "defaultValue": {
+        "value": "20"
+      },
+      "description": "Free plan: max products.",
+      "valueType": "NUMBER"
+    },
+    "pro_max_pdf_templates": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Pro plan: templates (-1=all).",
+      "valueType": "NUMBER"
+    },
+    "expired_max_invoices": {
+      "defaultValue": {
+        "value": "5"
+      },
+      "description": "Free plan: max invoices/month.",
+      "valueType": "NUMBER"
+    },
+    "trial_duration_months": {
+      "defaultValue": {
+        "value": "6"
+      },
+      "description": "How many months the free trial lasts for new users.",
+      "valueType": "NUMBER"
+    },
+    "grace_period_days": {
+      "defaultValue": {
+        "value": "7"
+      },
+      "description": "Extra days a Pro subscriber keeps access after their subscription lapses.",
+      "valueType": "NUMBER"
+    },
+    "razorpay_key": {
+      "defaultValue": {
+        "value": ""
+      },
+      "description": "Razorpay publishable key ID (rzp_live_... or rzp_test_...).",
+      "valueType": "STRING"
+    },
+    "free_max_invoices": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Free plan: invoices/month (-1=unlimited). Controls both trial and expired users.",
+      "valueType": "NUMBER"
+    },
+    "free_max_customers": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Free plan: max customers (-1=unlimited). Controls both trial and expired users.",
+      "valueType": "NUMBER"
+    },
+    "free_max_products": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Free plan: max products (-1=unlimited). Controls both trial and expired users.",
+      "valueType": "NUMBER"
+    },
+    "free_max_pdf_templates": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Free plan: unlocked templates (-1=all). Controls both trial and expired users.",
+      "valueType": "NUMBER"
+    },
+    "free_max_whatsapp_shares": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Free plan: WhatsApp shares/month (-1=unlimited). Controls both trial and expired users.",
+      "valueType": "NUMBER"
+    },
+    "free_max_team_members": {
+      "defaultValue": {
+        "value": "0"
+      },
+      "description": "Legacy free tier: max team members (-1=unlimited). Trial and expired access are enforced separately by the app/backend.",
+      "valueType": "NUMBER"
+    },
+    "free_has_reports": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Free plan: Reports access. Controls both trial and expired users.",
+      "valueType": "BOOLEAN"
+    },
+    "free_has_purchase_orders": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Free plan: Purchase Orders access. Controls both trial and expired users.",
+      "valueType": "BOOLEAN"
+    },
+    "free_has_data_export": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Free plan: CSV export access. Controls both trial and expired users.",
+      "valueType": "BOOLEAN"
+    },
+    "free_has_attendance": {
+      "defaultValue": {
+        "value": "true"
+      },
+      "description": "Free plan: Attendance system access. Controls both trial and expired users.",
+      "valueType": "BOOLEAN"
+    },
+    "pro_has_attendance": {
+      "defaultValue": {
+        "value": "false"
+      },
+      "description": "Pro plan: Attendance system access.",
+      "valueType": "BOOLEAN"
+    },
+    "google_maps_api_key": {
+      "defaultValue": {
+        "value": ""
+      },
+      "description": "Google Maps API key for geofencing/location features.",
+      "valueType": "STRING"
+    }
+  }
+}

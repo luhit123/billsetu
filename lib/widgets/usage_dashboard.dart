@@ -31,15 +31,16 @@ class _UsageDashboardState extends State<UsageDashboard> {
     try {
       final usage = await UsageTrackingService.instance.getUsageSummary();
       if (mounted) setState(() => _usage = usage);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[UsageDashboard] Failed to load usage: $e');
+    }
     if (mounted) setState(() => _isLoading = false);
   }
 
   @override
   Widget build(BuildContext context) {
-    final plan = PlanService.instance.currentPlan;
     final limits = PlanService.instance.currentLimits;
-    final isFree = plan == AppPlan.expired;
+    final isFree = !PlanService.instance.isFullAccess;
 
     return GestureDetector(
       onTap: () {
@@ -50,7 +51,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: kSurfaceLowest,
+          color: context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(22),
           boxShadow: const [kWhisperShadow],
         ),
@@ -71,9 +72,7 @@ class _UsageDashboardState extends State<UsageDashboard> {
                       Icon(
                         isFree
                             ? Icons.star_border_rounded
-                            : plan == AppPlan.trial
-                                ? Icons.star_rounded
-                                : Icons.diamond_rounded,
+                            : Icons.diamond_rounded,
                         color: Colors.white,
                         size: 14,
                       ),
@@ -191,7 +190,7 @@ class _CompactButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
           decoration: BoxDecoration(
-            color: kPrimaryContainer,
+            color: context.cs.primaryContainer,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Row(

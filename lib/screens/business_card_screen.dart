@@ -190,16 +190,16 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: AppBar(
-        title: const Text('Business Card',
-            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: kOnSurface)),
-        backgroundColor: kSurface,
+        title: Text('Business Card',
+            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 18, color: context.cs.onSurface)),
+        backgroundColor: context.cs.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        foregroundColor: kOnSurface,
-        iconTheme: const IconThemeData(color: kOnSurface),
+        foregroundColor: context.cs.onSurface,
+        iconTheme: IconThemeData(color: context.cs.onSurface),
         actions: [
           if (!_loading)
             TextButton.icon(
@@ -221,9 +221,9 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Choose Style',
+                      Text('Choose Style',
                           style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700,
-                              color: kOnSurfaceVariant, letterSpacing: 0.8)),
+                              color: context.cs.onSurfaceVariant, letterSpacing: 0.8)),
                       const SizedBox(height: 10),
                       SizedBox(
                         height: 48,
@@ -259,8 +259,8 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(20),
                             boxShadow: [
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 40, offset: const Offset(0, 16)),
-                              BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, 4)),
+                              BoxShadow(color: context.cs.onSurface.withValues(alpha: 0.2), blurRadius: 40, offset: Offset(0, 16)),
+                              BoxShadow(color: context.cs.onSurface.withValues(alpha: 0.08), blurRadius: 10, offset: Offset(0, 4)),
                             ],
                           ),
                           child: RepaintBoundary(
@@ -341,7 +341,7 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 16, offset: const Offset(0, -4))],
+        boxShadow: [BoxShadow(color: context.cs.onSurface.withValues(alpha: 0.06), blurRadius: 16, offset: Offset(0, -4))],
         border: const Border(top: BorderSide(color: Color(0xFFEEF2F6))),
       ),
       child: SafeArea(
@@ -351,12 +351,12 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
             Container(
               height: 52,
               decoration: BoxDecoration(
-                color: kSurfaceContainerLow,
+                color: context.cs.surfaceContainerLow,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: IconButton(
                 onPressed: _showCustomiseSheet,
-                icon: const Icon(Icons.tune_rounded, color: kOnSurface),
+                icon: Icon(Icons.tune_rounded, color: context.cs.onSurface),
                 tooltip: 'Customise',
               ),
             ),
@@ -373,9 +373,9 @@ class _BusinessCardScreenState extends State<BusinessCardScreen> {
                   label: Text(_sharing ? 'Preparing…' : 'Share as Image',
                       style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor: kSurfaceDim,
+                    disabledBackgroundColor: context.cs.surfaceContainerHighest,
                     elevation: 0,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
@@ -432,14 +432,14 @@ class _CustomiseSheetState extends State<_CustomiseSheet> {
           Container(
             margin: const EdgeInsets.only(top: 12),
             width: 40, height: 4,
-            decoration: BoxDecoration(color: kSurfaceContainer, borderRadius: BorderRadius.circular(2)),
+            decoration: BoxDecoration(color: context.cs.surfaceContainer, borderRadius: BorderRadius.circular(2)),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
             child: Row(
-              children: const [
+              children: [
                 Text('Customise Card',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: kOnSurface)),
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: context.cs.onSurface)),
               ],
             ),
           ),
@@ -466,7 +466,7 @@ class _CustomiseSheetState extends State<_CustomiseSheet> {
                             decoration: BoxDecoration(
                               color: c,
                               shape: BoxShape.circle,
-                              border: selected ? Border.all(color: kOnSurface, width: 2.5) : null,
+                              border: selected ? Border.all(color: context.cs.onSurface, width: 2.5) : null,
                               boxShadow: selected
                                   ? [BoxShadow(color: c.withValues(alpha: 0.5), blurRadius: 10, offset: const Offset(0, 3))]
                                   : null,
@@ -527,8 +527,8 @@ class _CustomiseSheetState extends State<_CustomiseSheet> {
   }
 
   Widget _sheetLabel(String text) => Text(text,
-      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
-          color: kOnSurfaceVariant, letterSpacing: 0.7));
+      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700,
+          color: context.cs.onSurfaceVariant, letterSpacing: 0.7));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -553,8 +553,8 @@ class _ThemePill extends StatelessWidget {
           gradient: selected
               ? LinearGradient(colors: meta.swatch.length >= 2 ? [meta.swatch.first, meta.swatch.last] : [meta.swatch.first, meta.swatch.first])
               : null,
-          color: selected ? null : kSurfaceLowest,
-          border: selected ? null : Border.all(color: kOutlineVariant),
+          color: selected ? null : context.cs.surfaceContainerLowest,
+          border: selected ? null : Border.all(color: context.cs.outlineVariant),
           boxShadow: selected
               ? [BoxShadow(color: meta.swatch.first.withValues(alpha: 0.35), blurRadius: 12, offset: const Offset(0, 4))]
               : null,
@@ -568,8 +568,8 @@ class _ThemePill extends StatelessWidget {
             Text(meta.label, style: TextStyle(
               fontSize: 13, fontWeight: FontWeight.w700,
               color: selected
-                  ? (meta.swatch.first.computeLuminance() > 0.4 ? kOnSurface : Colors.white)
-                  : kOnSurface,
+                  ? (meta.swatch.first.computeLuminance() > 0.4 ? context.cs.onSurface : Colors.white)
+                  : context.cs.onSurface,
             )),
           ],
         ),
@@ -593,19 +593,19 @@ class _ToggleChip extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: value ? kPrimaryContainer : kSurfaceContainerLow,
+          color: value ? context.cs.primaryContainer : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: value ? kPrimary.withValues(alpha: 0.4) : kOutlineVariant.withValues(alpha: 0.5)),
+          border: Border.all(color: value ? kPrimary.withValues(alpha: 0.4) : context.cs.outlineVariant.withValues(alpha: 0.5)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(value ? icon : Icons.visibility_off_outlined,
-                size: 14, color: value ? kPrimary : kOnSurfaceVariant),
+                size: 14, color: value ? kPrimary : context.cs.onSurfaceVariant),
             const SizedBox(width: 6),
             Text(label, style: TextStyle(
               fontSize: 13, fontWeight: FontWeight.w600,
-              color: value ? kPrimary : kOnSurfaceVariant,
+              color: value ? kPrimary : context.cs.onSurfaceVariant,
             )),
           ],
         ),
@@ -630,21 +630,21 @@ class _ShapeOption extends StatelessWidget {
           duration: const Duration(milliseconds: 180),
           height: 72,
           decoration: BoxDecoration(
-            color: selected ? kPrimaryContainer : kSurfaceContainerLow,
+            color: selected ? context.cs.primaryContainer : context.cs.surfaceContainerLow,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: selected ? kPrimary : kOutlineVariant.withValues(alpha: 0.5),
+              color: selected ? kPrimary : context.cs.outlineVariant.withValues(alpha: 0.5),
               width: selected ? 2.0 : 1.0,
             ),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 28, color: selected ? kPrimary : kOnSurfaceVariant),
+              Icon(icon, size: 28, color: selected ? kPrimary : context.cs.onSurfaceVariant),
               const SizedBox(height: 4),
               Text(label, style: TextStyle(
                 fontSize: 12, fontWeight: FontWeight.w700,
-                color: selected ? kPrimary : kOnSurfaceVariant,
+                color: selected ? kPrimary : context.cs.onSurfaceVariant,
               )),
             ],
           ),
@@ -665,16 +665,16 @@ class _SummaryChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: kOutlineVariant.withValues(alpha: 0.4)),
+        border: Border.all(color: context.cs.outlineVariant.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: iconColor ?? kOnSurfaceVariant),
+          Icon(icon, size: 12, color: iconColor ?? context.cs.onSurfaceVariant),
           const SizedBox(width: 5),
-          Text(label, style: const TextStyle(fontSize: 11, color: kOnSurfaceVariant, fontWeight: FontWeight.w500)),
+          Text(label, style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -984,7 +984,7 @@ class _FreshCard extends StatelessWidget {
                           if (options.showAddress && d.address.isNotEmpty) ...[const SizedBox(height: 5), _row(Icons.location_on_rounded, d.address, accent)],
                           if (options.showUpi && d.upi.isNotEmpty)         ...[const SizedBox(height: 5), _row(Icons.currency_rupee_rounded, d.upi, accent)],
                           const SizedBox(height: 8),
-                          if (options.showWatermark) Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: Colors.black.withValues(alpha: 0.2), letterSpacing: 0.5)),
+                          if (options.showWatermark) Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: context.cs.onSurface.withValues(alpha: 0.2), letterSpacing: 0.5)),
                         ],
                       ),
                     ),
@@ -1102,7 +1102,7 @@ class _SunsetCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.15),
+                      color: context.cs.onSurface.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Column(
@@ -1281,7 +1281,7 @@ class _MinimalCard extends StatelessWidget {
               if (options.showWatermark) ...[
                 const SizedBox(height: 6),
                 Align(alignment: Alignment.centerRight,
-                  child: Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: Colors.black.withValues(alpha: 0.2), letterSpacing: 0.5))),
+                  child: Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: context.cs.onSurface.withValues(alpha: 0.2), letterSpacing: 0.5))),
               ],
             ],
           ),
@@ -1504,7 +1504,7 @@ class _SaffronCard extends StatelessWidget {
                         Container(width: 24, height: 2.5, decoration: BoxDecoration(color: _green, borderRadius: BorderRadius.circular(2))),
                         const Spacer(),
                         if (options.showWatermark)
-                          Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: Colors.black.withValues(alpha: 0.2), letterSpacing: 0.5)),
+                          Text('via BillRaja', style: TextStyle(fontSize: 8.5, color: context.cs.onSurface.withValues(alpha: 0.2), letterSpacing: 0.5)),
                       ],
                     ),
                   ],

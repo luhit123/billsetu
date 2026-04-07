@@ -1,7 +1,13 @@
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'logo_cache_service.dart';
 import 'plan_service.dart';
+import 'profile_service.dart';
+import 'session_service.dart';
+import 'signature_service.dart';
+import 'team_service.dart';
 
 class AuthService {
   // Web OAuth 2.0 client ID (client_type: 3) from google-services.json.
@@ -12,13 +18,55 @@ class AuthService {
   AuthService({
     FirebaseAuth? firebaseAuth,
     GoogleSignIn? googleSignIn,
+    FirebaseFunctions? functions,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
        _googleSignIn =
            googleSignIn ??
-           GoogleSignIn(serverClientId: kIsWeb ? null : _webClientId);
+           GoogleSignIn(serverClientId: kIsWeb ? null : _webClientId),
+       _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseAuth _firebaseAuth;
   final GoogleSignIn _googleSignIn;
+  final FirebaseFunctions _functions;
+
+  static String friendlyErrorMessage(
+    Object error, {
+    String fallback = 'Something went wrong. Please try again.',
+  }) {
+    if (error is FirebaseAuthException) {
+      switch (error.code) {
+        case 'invalid-phone-number':
+          return 'The phone number looks invalid. Please check it and try again.';
+        case 'invalid-verification-code':
+        case 'session-expired':
+          return 'The OTP is invalid or expired. Please try again.';
+        case 'too-many-requests':
+        case 'quota-exceeded':
+          return 'Too many attempts right now. Please try again later.';
+        case 'network-request-failed':
+          return 'Network issue detected. Please check your connection and try again.';
+        case 'popup-blocked':
+          return 'Your browser blocked the Google sign-in popup. Please allow popups and try again.';
+        case 'popup-closed-by-user':
+        case 'cancelled-popup-request':
+          return 'Google sign-in was cancelled before it could finish.';
+        case 'account-exists-with-different-credential':
+          return 'This account already uses a different sign-in method.';
+        case 'invalid-credential':
+        case 'credential-already-in-use':
+          return 'That sign-in session is no longer valid. Please try again.';
+        case 'user-disabled':
+          return 'This account has been disabled. Please contact support.';
+        case 'operation-not-allowed':
+          return 'This sign-in method is not available right now.';
+        case 'missing-google-tokens':
+          return 'Google sign-in could not be completed. Please try again.';
+        default:
+          return fallback;
+      }
+    }
+    return fallback;
+  }
 
   // ── Phone OTP Auth ──────────────────────────────────────────────────────────
 
@@ -59,7 +107,8 @@ class AuthService {
         String message;
         switch (e.code) {
           case 'invalid-phone-number':
-            message = 'The phone number is invalid. Please check and try again.';
+            message =
+                'The phone number is invalid. Please check and try again.';
             break;
           case 'too-many-requests':
             message = 'Too many attempts. Please try again later.';
@@ -68,19 +117,26 @@ class AuthService {
             message = 'SMS quota exceeded. Please try again later.';
             break;
           default:
-            message = e.message ?? 'Phone verification failed. Please try again.';
+            message = friendlyErrorMessage(
+              e,
+              fallback: 'Phone verification failed. Please try again.',
+            );
         }
         onError(message);
       },
       codeSent: (String verificationId, int? resendToken) {
         if (kDebugMode) {
-          debugPrint('[AuthService] OTP code sent. verificationId: $verificationId');
+          debugPrint(
+            '[AuthService] OTP code sent. verificationId: $verificationId',
+          );
         }
         onCodeSent(verificationId);
       },
       codeAutoRetrievalTimeout: (String verificationId) {
         if (kDebugMode) {
-          debugPrint('[AuthService] Auto-retrieval timeout for: $verificationId');
+          debugPrint(
+            '[AuthService] Auto-retrieval timeout for: $verificationId',
+          );
         }
       },
     );
@@ -173,19 +229,55 @@ class AuthService {
   Future<void> signOut() async {
     try {
       if (!kIsWeb) {
+        // Only attempt Google sign-out if user signed in with Google.
+        // OTP-only users don't have a Google session — calling disconnect/signOut
+        // on them throws a PlatformException (channel-error).
         try {
-          await _googleSignIn.disconnect();
+          final isGoogleUser =
+              _firebaseAuth.currentUser?.providerData.any(
+                (p) => p.providerId == 'google.com',
+              ) ??
+              false;
+          if (isGoogleUser) {
+            try {
+              await _googleSignIn.disconnect();
+            } catch (_) {
+              await _googleSignIn.signOut();
+            }
+          }
         } catch (_) {
-          await _googleSignIn.signOut();
+          // Swallow any remaining errors — sign-out must not fail
         }
       }
     } finally {
-      PlanService.instance.reset();
+      await _clearLocalSession();
       await _firebaseAuth.signOut();
     }
   }
 
+  Future<void> deleteAccount() async {
+    final currentUser = _firebaseAuth.currentUser;
+    if (currentUser == null) {
+      throw FirebaseAuthException(
+        code: 'not-signed-in',
+        message: 'Sign in required.',
+      );
+    }
+
+    await currentUser.getIdToken(true);
+    await _functions.httpsCallable('deleteMyAccount').call();
+    await signOut();
+  }
+
   User? getCurrentUser() {
     return _firebaseAuth.currentUser;
+  }
+
+  Future<void> _clearLocalSession() async {
+    SessionService.instance.reset();
+    TeamService.instance.reset();
+    PlanService.instance.reset();
+    ProfileService.instance.reset();
+    await Future.wait([LogoCacheService.clear(), SignatureService.clear()]);
   }
 }

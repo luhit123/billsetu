@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // START: FlutterFire Configuration
@@ -9,6 +11,31 @@ plugins {
 }
 
 android {
+    val signingProperties = Properties()
+    val signingPropertiesFile = rootProject.file("key.properties")
+    if (signingPropertiesFile.exists()) {
+        signingPropertiesFile.inputStream().use(signingProperties::load)
+    }
+
+    val releaseStoreFile =
+        signingProperties.getProperty("storeFile")
+            ?: System.getenv("BILLRAJA_UPLOAD_STORE_FILE")
+    val releaseStorePassword =
+        signingProperties.getProperty("storePassword")
+            ?: System.getenv("BILLRAJA_UPLOAD_STORE_PASSWORD")
+    val releaseKeyAlias =
+        signingProperties.getProperty("keyAlias")
+            ?: System.getenv("BILLRAJA_UPLOAD_KEY_ALIAS")
+    val releaseKeyPassword =
+        signingProperties.getProperty("keyPassword")
+            ?: System.getenv("BILLRAJA_UPLOAD_KEY_PASSWORD")
+
+    val hasReleaseSigning =
+        !releaseStoreFile.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
     namespace = "com.luhit.billeasy"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
@@ -32,6 +59,17 @@ android {
         multiDexEnabled = true
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = file(releaseStoreFile!!)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
@@ -40,8 +78,16 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            // TODO: Replace with your keystore signing config before publishing
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseSigning) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "Release signing credentials not found. " +
+                        "Using debug signing for local release builds only. " +
+                        "Add android/key.properties or BILLRAJA_UPLOAD_* env vars before publishing."
+                )
+                signingConfigs.getByName("debug")
+            }
         }
         debug {
             isDebuggable = true

@@ -1,18 +1,58 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <!-- Homepage — highest priority, changes frequently -->
   <url>
-    <loc>https://billeasy-3a6ad.web.app/</loc>
+    <loc>https://billraja.com/</loc>
+    <lastmod>2026-04-03</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
+
+  <!-- Pricing — key conversion page -->
   <url>
-    <loc>https://billeasy-3a6ad.web.app/privacy-policy.html</loc>
-    <changefreq>monthly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://billraja.com/pricing.html</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
   </url>
+
+  <!-- Support — trust signal, high value -->
   <url>
-    <loc>https://billeasy-3a6ad.web.app/terms-conditions.html</loc>
+    <loc>https://billraja.com/support.html</loc>
+    <lastmod>2026-04-03</lastmod>
     <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Security — trust signal -->
+  <url>
+    <loc>https://billraja.com/security.html</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <!-- Privacy Policy — legal, required for Play Store / App Store -->
+  <url>
+    <loc>https://billraja.com/privacy-policy.html</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- Terms & Conditions — legal -->
+  <url>
+    <loc>https://billraja.com/terms-conditions.html</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- Account Deletion — required by Google Play policy -->
+  <url>
+    <loc>https://billraja.com/account-deletion.html</loc>
+    <lastmod>2026-04-03</lastmod>
+    <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
 </urlset>

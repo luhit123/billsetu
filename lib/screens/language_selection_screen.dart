@@ -82,7 +82,7 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
     final languages = _availableLanguages;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       body: SafeArea(
         child: FadeTransition(
           opacity: _fadeAnimation,
@@ -112,20 +112,20 @@ class _LanguageSelectionScreenState extends State<LanguageSelectionScreen>
                 const SizedBox(height: 24),
 
                 // Title
-                const Text(
+                Text(
                   'Select Language',
                   style: TextStyle(
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     letterSpacing: 2,
                   ),
                 ),
                 const SizedBox(height: 6),
-                const Text(
+                Text(
                   '\u092d\u093e\u0937\u093e \u091a\u0941\u0928\u0947\u0902  \u2022  \u09ad\u09be\u09b7\u09be \u09ac\u09be\u099b\u0995  \u2022  \u0aad\u0abe\u0ab7\u0abe \u0aaa\u0ab8\u0a82\u0aa6 \u0a95\u0ab0\u0acb  \u2022  \u0bae\u0bca\u0bb4\u0bbf \u0ba4\u0bc7\u0bb0\u0bcd\u0ba8\u0bcd\u0ba4\u0bc6\u0b9f\u0bc1',
                   style: TextStyle(
-                    color: kTextTertiary,
+                    color: context.cs.onSurfaceVariant.withAlpha(153),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -233,7 +233,7 @@ class _LanguageCard extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? kPrimaryContainer : kSurfaceLowest,
+          color: isSelected ? context.cs.primaryContainer : context.cs.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
           border: isSelected
               ? Border.all(color: kPrimary.withAlpha(80), width: 1.5)
@@ -251,8 +251,8 @@ class _LanguageCard extends StatelessWidget {
                 children: [
                   Text(
                     nativeLabel,
-                    style: const TextStyle(
-                      color: kOnSurface,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       height: 1.1,
@@ -263,8 +263,8 @@ class _LanguageCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subLabel,
-                    style: const TextStyle(
-                      color: kTextTertiary,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant.withAlpha(153),
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 0.3,

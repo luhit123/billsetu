@@ -1,4 +1,5 @@
 import 'package:billeasy/modals/customer_group.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -6,11 +7,9 @@ class CustomerGroupService {
   CustomerGroupService({
     FirebaseFirestore? firestore,
     FirebaseAuth? firebaseAuth,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _firebaseAuth;
 
   CollectionReference<Map<String, dynamic>> _groupsCollection(String ownerId) {
     return _firestore
@@ -100,13 +99,5 @@ class CustomerGroupService {
     }
   }
 
-  String _requireOwnerId() {
-    final currentUser = _firebaseAuth.currentUser;
-
-    if (currentUser == null) {
-      throw StateError('Sign in is required to manage customer groups.');
-    }
-
-    return currentUser.uid;
-  }
+  String _requireOwnerId() => TeamService.instance.getEffectiveOwnerId();
 }

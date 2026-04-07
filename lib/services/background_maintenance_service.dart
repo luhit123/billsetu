@@ -16,7 +16,15 @@ class BackgroundMaintenanceService {
       return;
     }
 
-    await _functions.httpsCallable('backfillMyInvoiceData').call();
-    await prefs.setBool(_invoiceSearchBackfillKey, true);
+    try {
+      await _functions
+          .httpsCallable('backfillMyInvoiceData')
+          .call()
+          .timeout(const Duration(seconds: 30));
+      // Only mark as complete after confirmed success.
+      await prefs.setBool(_invoiceSearchBackfillKey, true);
+    } catch (_) {
+      // Don't set the flag — next app start will retry.
+    }
   }
 }

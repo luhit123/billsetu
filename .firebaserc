@@ -1,5 +1,18 @@
 {
   "projects": {
     "default": "billeasy-3a6ad"
-  }
+  },
+  "targets": {
+    "billeasy-3a6ad": {
+      "hosting": {
+        "app": [
+          "billeasy-3a6ad"
+        ],
+        "admin": [
+          "billraja-admin"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

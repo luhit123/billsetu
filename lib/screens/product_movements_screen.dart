@@ -57,10 +57,10 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: context.cs.surface,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -69,18 +69,18 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
           children: [
             Text(
               widget.product.name,
-              style: const TextStyle(
-                color: kOnSurface,
+              style: TextStyle(
+                color: context.cs.onSurface,
                 fontWeight: FontWeight.w700,
                 fontSize: 17,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-            const Text(
+            Text(
               'Stock Movements',
               style: TextStyle(
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
                 fontSize: 12,
                 fontWeight: FontWeight.w400,
               ),
@@ -109,8 +109,8 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
                 ),
               ),
             ),
-            backgroundColor: kSurfaceLowest,
-            foregroundColor: kPrimary,
+            backgroundColor: context.cs.surfaceContainerLowest,
+            foregroundColor: context.cs.primary,
             elevation: 2,
             icon: const Icon(Icons.shopping_cart_outlined, size: 20),
             label: const Text('Create PO'),
@@ -120,7 +120,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
           FloatingActionButton.extended(
             heroTag: 'adjust-stock',
             onPressed: _showAdjustSheet,
-            backgroundColor: kPrimary,
+            backgroundColor: context.cs.primary,
             foregroundColor: Colors.white,
             elevation: 2,
             icon: const Icon(Icons.edit_rounded),
@@ -144,7 +144,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
             const SizedBox(height: 12),
             Text(
               'Failed to load movements',
-              style: TextStyle(color: kOnSurfaceVariant),
+              style: TextStyle(color: context.cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -157,26 +157,26 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
           children: [
             Container(
               padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: kSurfaceContainerLow,
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLow,
                 shape: BoxShape.circle,
               ),
               child: Icon(Icons.swap_vert_rounded,
                   size: 48, color: kPrimary),
             ),
             const SizedBox(height: 16),
-            const Text(
+            Text(
               'No movements yet',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'Stock adjustments will appear here',
-              style: TextStyle(fontSize: 13, color: kOnSurfaceVariant),
+              style: TextStyle(fontSize: 13, color: context.cs.onSurfaceVariant),
             ),
           ],
         ),
@@ -196,7 +196,7 @@ class _ProductMovementsScreenState extends State<ProductMovementsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: context.cs.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -232,7 +232,7 @@ class _StockSummaryBar extends StatelessWidget {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kWhisperShadow],
       ),
@@ -248,7 +248,7 @@ class _StockSummaryBar extends StatelessWidget {
           Container(
             width: 1,
             height: 40,
-            color: kOutlineVariant.withAlpha(51),
+            color: context.cs.outlineVariant.withAlpha(51),
             margin: const EdgeInsets.symmetric(horizontal: 16),
           ),
           Expanded(
@@ -257,7 +257,7 @@ class _StockSummaryBar extends StatelessWidget {
               value: product.minStockAlert > 0
                   ? _fmtQty(product.minStockAlert, product.unit)
                   : '\u2014',
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
           if (isLow) ...[
@@ -316,7 +316,7 @@ class _StatChip extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label,
-            style: const TextStyle(fontSize: 11, color: kOnSurfaceVariant)),
+            style: TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant)),
         const SizedBox(height: 2),
         Text(
           value,
@@ -353,7 +353,7 @@ class _MovementTile extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -379,10 +379,10 @@ class _MovementTile extends StatelessWidget {
               children: [
                 Text(
                   movement.typeLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 13,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
                 if (movement.notes.isNotEmpty) ...[
@@ -390,7 +390,7 @@ class _MovementTile extends StatelessWidget {
                   Text(
                     movement.notes,
                     style:
-                        const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+                        TextStyle(fontSize: 12, color: context.cs.onSurfaceVariant),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -399,7 +399,7 @@ class _MovementTile extends StatelessWidget {
                 Text(
                   dateFormat.format(movement.createdAt),
                   style:
-                      const TextStyle(fontSize: 11, color: kTextTertiary),
+                      TextStyle(fontSize: 11, color: context.cs.onSurfaceVariant.withAlpha(153)),
                 ),
               ],
             ),
@@ -417,8 +417,8 @@ class _MovementTile extends StatelessWidget {
               ),
               Text(
                 'After: ${_fmt(movement.balanceAfter)}',
-                style: const TextStyle(
-                    fontSize: 11, color: kTextTertiary),
+                style: TextStyle(
+                    fontSize: 11, color: context.cs.onSurfaceVariant.withAlpha(153)),
               ),
             ],
           ),
@@ -478,7 +478,7 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: kOutlineVariant,
+                color: context.cs.outlineVariant,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -486,10 +486,10 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
           const SizedBox(height: 20),
           Text(
             'Adjust Stock \u2014 ${widget.product.name}',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 17,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 16),
@@ -535,7 +535,7 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
             child: ElevatedButton(
               onPressed: _saving ? null : _submit,
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.cs.primary,
                 foregroundColor: Colors.white,
                 elevation: 0,
                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -578,10 +578,10 @@ class _AdjustStockSheetState extends State<_AdjustStockSheet> {
         decoration: InputDecoration(
           labelText: label,
           hintText: hint,
-          labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
-          hintStyle: const TextStyle(color: kTextTertiary, fontSize: 12),
+          labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
+          hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 12),
           filled: true,
-          fillColor: kSurfaceContainerLow,
+          fillColor: context.cs.surfaceContainerLow,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
             borderSide: BorderSide.none,
@@ -648,7 +648,7 @@ class _TypeBtn extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? color.withValues(alpha: 0.1)
-              : kSurfaceContainerLow,
+              : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
           border: selected
               ? Border.all(color: color, width: 1.5)
@@ -657,14 +657,14 @@ class _TypeBtn extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: selected ? color : kOnSurfaceVariant, size: 18),
+            Icon(icon, color: selected ? color : context.cs.onSurfaceVariant, size: 18),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w600,
-                color: selected ? color : kOnSurfaceVariant,
+                color: selected ? color : context.cs.onSurfaceVariant,
               ),
             ),
           ],

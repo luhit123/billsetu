@@ -9,6 +9,8 @@ import 'package:billeasy/screens/customer_form_screen.dart';
 import 'package:billeasy/screens/invoice_details_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/firebase_service.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/widgets/balance_reminder_sheet.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
@@ -122,7 +124,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
         .fold<double>(0, (total, invoice) => total + invoice.grandTotal);
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: _buildAppBar(s, client),
       bottomNavigationBar: _buildBottomBar(s, client),
       body: SafeArea(
@@ -286,8 +288,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                 children: [
                   Text(
                     client.notes.trim(),
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 14,
                       height: 1.6,
                     ),
@@ -302,8 +304,8 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                   s.customerDetailsLastUpdated(
                     _dateFmt.format(client.updatedAt!),
                   ),
-                  style: const TextStyle(
-                    color: kTextTertiary,
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant.withAlpha(153),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -326,15 +328,15 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
                     children: [
                       Icon(
                         Icons.inbox_rounded,
-                        color: kTextTertiary,
+                        color: context.cs.onSurfaceVariant.withAlpha(153),
                         size: 32,
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           s.customerDetailsHistoryEmpty,
-                          style: const TextStyle(
-                            color: kOnSurfaceVariant,
+                          style: TextStyle(
+                            color: context.cs.onSurfaceVariant,
                             fontSize: 14,
                           ),
                         ),
@@ -463,17 +465,17 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
     final hasOutstanding = unpaidInvoices.isNotEmpty;
 
     return AppBar(
-      backgroundColor: kSurface,
-      foregroundColor: kOnSurface,
+      backgroundColor: context.cs.surface,
+      foregroundColor: context.cs.onSurface,
       elevation: 0,
       scrolledUnderElevation: 0,
       surfaceTintColor: Colors.transparent,
       title: Text(
         s.customerDetailsTitle,
-        style: const TextStyle(
+        style: TextStyle(
           fontWeight: FontWeight.w700,
           fontSize: 18,
-          color: kOnSurface,
+          color: context.cs.onSurface,
         ),
       ),
       actions: [
@@ -483,17 +485,18 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             tooltip: 'Send balance reminder',
             icon: const Icon(Icons.notifications_active_outlined, color: kOverdue),
           ),
+        if (TeamService.instance.can.canEditCustomer)
         IconButton(
           onPressed: () => _editCustomer(client),
           tooltip: s.customerDetailsEditTooltip,
-          icon: const Icon(Icons.edit_outlined, color: kOnSurfaceVariant),
+          icon: Icon(Icons.edit_outlined, color: context.cs.onSurfaceVariant),
         ),
         IconButton(
           onPressed: () => _moveCustomerToGroup(client),
           tooltip: client.groupId.isEmpty
               ? s.customerDetailsMoveGroup
               : s.customerDetailsChangeGroup,
-          icon: const Icon(Icons.folder_open_rounded, color: kOnSurfaceVariant),
+          icon: Icon(Icons.folder_open_rounded, color: context.cs.onSurfaceVariant),
         ),
       ],
     );
@@ -503,7 +506,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
 
   Widget _buildBottomBar(AppStrings s, Client client) {
     return Container(
-      color: kSurfaceLowest,
+      color: context.cs.surfaceContainerLowest,
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
       child: SafeArea(
         top: false,
@@ -515,7 +518,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
             icon: const Icon(Icons.receipt_long_outlined, size: 18),
             label: Text(s.customerDetailsCreateInvoice),
             style: ElevatedButton.styleFrom(
-              backgroundColor: kPrimary,
+              backgroundColor: context.cs.primary,
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -535,6 +538,7 @@ class _CustomerDetailsScreenState extends State<CustomerDetailsScreen> {
   // --- Actions (logic unchanged) ---
 
   Future<void> _editCustomer(Client client) async {
+    if (!PermissionDenied.check(context, TeamService.instance.can.canEditCustomer, 'edit customers')) return;
     await Navigator.push<Client>(
       context,
       MaterialPageRoute(
@@ -633,7 +637,7 @@ class _HeroCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [kWhisperShadow],
       ),
@@ -641,7 +645,7 @@ class _HeroCard extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 32,
-            backgroundColor: kPrimary,
+            backgroundColor: context.cs.primary,
             foregroundColor: Colors.white,
             child: Text(
               client.initials,
@@ -655,8 +659,8 @@ class _HeroCard extends StatelessWidget {
               children: [
                 Text(
                   client.name,
-                  style: const TextStyle(
-                    color: kOnSurface,
+                  style: TextStyle(
+                    color: context.cs.onSurface,
                     fontSize: 20,
                     fontWeight: FontWeight.w800,
                   ),
@@ -665,8 +669,8 @@ class _HeroCard extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     client.subtitle,
-                    style: const TextStyle(
-                      color: kOnSurfaceVariant,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
                       fontSize: 13,
                       height: 1.4,
                     ),
@@ -680,7 +684,7 @@ class _HeroCard extends StatelessWidget {
                       vertical: 4,
                     ),
                     decoration: BoxDecoration(
-                      color: kPrimaryContainer,
+                      color: context.cs.primaryContainer,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -720,7 +724,7 @@ class _MiniStatCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
         boxShadow: const [kSubtleShadow],
       ),
@@ -738,10 +742,10 @@ class _MiniStatCard extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w500,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -749,10 +753,10 @@ class _MiniStatCard extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -774,7 +778,7 @@ class _SectionCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kWhisperShadow],
       ),
@@ -783,14 +787,14 @@ class _SectionCard extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 12),
-          Divider(height: 1, color: kOutlineVariant.withAlpha(51)),
+          Divider(height: 1, color: context.cs.outlineVariant.withAlpha(51)),
           const SizedBox(height: 12),
           ...children,
         ],
@@ -835,19 +839,19 @@ class _ContactRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
@@ -906,7 +910,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          color: kSurfaceContainerLow,
+          color: context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
@@ -915,7 +919,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
               width: 36,
               height: 36,
               decoration: BoxDecoration(
-                color: kPrimaryContainer,
+                color: context.cs.primaryContainer,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(
@@ -931,17 +935,17 @@ class _HistoryInvoiceTile extends StatelessWidget {
                 children: [
                   Text(
                     invoice.invoiceNumber,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w600,
-                      color: kOnSurface,
+                      color: context.cs.onSurface,
                     ),
                   ),
                   Text(
                     _timeAgo(invoice.createdAt),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: kTextTertiary,
+                      color: context.cs.onSurfaceVariant.withAlpha(153),
                     ),
                   ),
                 ],
@@ -952,10 +956,10 @@ class _HistoryInvoiceTile extends StatelessWidget {
               children: [
                 Text(
                   currency.format(invoice.grandTotal),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1014,6 +1018,7 @@ class _HistoryInvoiceTile extends StatelessWidget {
                   onStatusChange(InvoiceStatus.overdue);
                 },
               ),
+            if (TeamService.instance.can.canDeleteInvoice)
             ListTile(
               leading: const Icon(Icons.delete_outline, color: kOverdue),
               title: Text(s.cardDelete),

@@ -11,6 +11,8 @@ import 'package:billeasy/screens/customer_details_screen.dart';
 import 'package:billeasy/screens/customer_form_screen.dart';
 import 'package:billeasy/services/client_service.dart';
 import 'package:billeasy/services/customer_group_service.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:billeasy/widgets/customer_groups_sheet.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
@@ -20,16 +22,17 @@ import 'package:billeasy/services/usage_tracking_service.dart';
 import 'package:billeasy/widgets/limit_reached_dialog.dart';
 import 'package:flutter_contacts/flutter_contacts.dart';
 
-
 class CustomersScreen extends StatefulWidget {
   const CustomersScreen({
     super.key,
     this.selectionMode = false,
     this.preselectedClientId,
+    this.embeddedInHomeShell = false,
   });
 
   final bool selectionMode;
   final String? preselectedClientId;
+  final bool embeddedInHomeShell;
 
   @override
   State<CustomersScreen> createState() => _CustomersScreenState();
@@ -63,7 +66,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
     super.initState();
     _groupsSub = _groupService.getGroupsStream().listen(
       (groups) {
-        if (mounted) setState(() { _groups = groups; _groupsLoadError = null; });
+        if (mounted) {
+          setState(() {
+            _groups = groups;
+            _groupsLoadError = null;
+          });
+        }
       },
       onError: (Object error) {
         if (mounted) setState(() => _groupsLoadError = error);
@@ -83,13 +91,18 @@ class _CustomersScreenState extends State<CustomersScreen> {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final title = widget.selectionMode ? s.customersSelectTitle : s.customersTitle;
+    final title = widget.selectionMode
+        ? s.customersSelectTitle
+        : s.customersTitle;
+    final pageColor = widget.embeddedInHomeShell
+        ? Colors.transparent
+        : context.cs.surface;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: pageColor,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: pageColor,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
@@ -98,21 +111,23 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 controller: _searchController,
                 autofocus: true,
                 cursorColor: kPrimary,
-                style: const TextStyle(
-                  color: kOnSurface,
+                style: TextStyle(
+                  color: context.cs.onSurface,
                   fontWeight: FontWeight.w600,
                 ),
                 decoration: InputDecoration(
                   hintText: s.customersSearchHint,
-                  hintStyle: const TextStyle(color: kTextTertiary),
+                  hintStyle: TextStyle(
+                    color: context.cs.onSurfaceVariant.withAlpha(153),
+                  ),
                   border: InputBorder.none,
                 ),
                 onChanged: _handleSearchChanged,
               )
             : Text(
                 title,
-                style: const TextStyle(
-                  color: kOnSurface,
+                style: TextStyle(
+                  color: context.cs.onSurface,
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
                 ),
@@ -120,16 +135,21 @@ class _CustomersScreenState extends State<CustomersScreen> {
         actions: [
           IconButton(
             onPressed: _manageGroups,
-            icon: const Icon(Icons.folder_open_rounded, color: kOnSurfaceVariant),
+            icon: Icon(
+              Icons.folder_open_rounded,
+              color: context.cs.onSurfaceVariant,
+            ),
             tooltip: s.customersManageGroupsTooltip,
           ),
           IconButton(
             onPressed: _toggleSearch,
             icon: Icon(
               _isSearching ? Icons.close_rounded : Icons.search,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
-            tooltip: _isSearching ? s.customersCloseSearch : s.customersSearchTooltip,
+            tooltip: _isSearching
+                ? s.customersCloseSearch
+                : s.customersSearchTooltip,
           ),
         ],
       ),
@@ -138,116 +158,117 @@ class _CustomersScreenState extends State<CustomersScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
             child: _isLoadingClients && _clients.isEmpty
-            ? const Center(
-                child: CircularProgressIndicator(color: kPrimary),
-              )
-            : RefreshIndicator(
-                onRefresh: () => _loadClients(reset: true),
-                child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    _CustomersIntroCard(selectionMode: widget.selectionMode),
-                    if (_groups.isNotEmpty || _selectedGroupFilterId.isNotEmpty) ...[
-                      const SizedBox(height: 16),
-                      _GroupsToolbar(
-                        groups: _groups,
-                        selectedGroupFilterId: _selectedGroupFilterId,
-                        onSelected: (value) {
-                          setState(() {
-                            _selectedGroupFilterId = value;
-                          });
-                          _loadClients(reset: true);
-                        },
-                        onManageGroups: _manageGroups,
-                      ),
-                    ],
-                    if (_groupsLoadError != null) ...[
-                      const SizedBox(height: 10),
-                      Text(
-                        s.customersGroupsError,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                    if (_clientsLoadError != null && _clients.isEmpty) ...[
-                      const SizedBox(height: 16),
-                      ErrorRetryWidget(
-                        message: s.customersLoadError,
-                        onRetry: () => _loadClients(reset: true),
-                      ),
-                    ] else if (_clients.isEmpty) ...[
-                      const SizedBox(height: 16),
-                      if (!_searchQuery.isNotEmpty && !_selectedGroupFilterId.isNotEmpty && !widget.selectionMode)
-                        EmptyStateWidget(
-                          icon: Icons.people_outline,
-                          title: 'No customers yet',
-                          subtitle: 'Add your first customer to get started',
-                          actionLabel: 'Add Customer',
-                          iconColor: kPrimary,
-                          onAction: _openCustomerForm,
-                        )
-                      else
-                        _EmptyCustomersState(
+                ? const Center(
+                    child: CircularProgressIndicator(color: kPrimary),
+                  )
+                : RefreshIndicator(
+                    onRefresh: () => _loadClients(reset: true),
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        _CustomersIntroCard(
                           selectionMode: widget.selectionMode,
-                          hasSearchQuery: _searchQuery.isNotEmpty,
-                          searchQuery: _searchQuery,
-                          hasGroupFilter: _selectedGroupFilterId.isNotEmpty,
-                          onAddCustomer: _openCustomerForm,
                         ),
-                    ] else ...[
-                      const SizedBox(height: 16),
-                      ..._clients.map((client) {
-                        return _CustomerCard(
-                          client: client,
-                          isSelected: client.id == widget.preselectedClientId,
-                          selectionMode: widget.selectionMode,
-                          onTap: () => _handleClientTap(client),
-                          onLongPress: widget.selectionMode
-                              ? null
-                              : () => _showCustomerActions(client),
-                        );
-                      }),
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: _hasMoreClients && !_isLoadingMoreClients
-                              ? () => _loadClients(reset: false)
-                              : null,
-                          child: _isLoadingMoreClients
-                              ? const SizedBox(
-                                  width: 18,
-                                  height: 18,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : Text(
-                                  _hasMoreClients
-                                      ? 'Load more customers'
-                                      : 'No more customers',
-                                ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+                        if (_groups.isNotEmpty ||
+                            _selectedGroupFilterId.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          _GroupsToolbar(
+                            groups: _groups,
+                            selectedGroupFilterId: _selectedGroupFilterId,
+                            onSelected: (value) {
+                              setState(() {
+                                _selectedGroupFilterId = value;
+                              });
+                              _loadClients(reset: true);
+                            },
+                            onManageGroups: _manageGroups,
+                          ),
+                        ],
+                        if (_groupsLoadError != null) ...[
+                          const SizedBox(height: 10),
+                          Text(
+                            s.customersGroupsError,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.error,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                        if (_clientsLoadError != null && _clients.isEmpty) ...[
+                          const SizedBox(height: 16),
+                          ErrorRetryWidget(
+                            message: s.customersLoadError,
+                            onRetry: () => _loadClients(reset: true),
+                          ),
+                        ] else if (_clients.isEmpty) ...[
+                          const SizedBox(height: 16),
+                          if (!_searchQuery.isNotEmpty &&
+                              !_selectedGroupFilterId.isNotEmpty &&
+                              !widget.selectionMode)
+                            EmptyStateWidget(
+                              icon: Icons.people_outline,
+                              title: 'No customers yet',
+                              subtitle:
+                                  'Add your first customer to get started',
+                              actionLabel: 'Add Customer',
+                              iconColor: kPrimary,
+                              onAction: _openCustomerForm,
+                            )
+                          else
+                            _EmptyCustomersState(
+                              selectionMode: widget.selectionMode,
+                              hasSearchQuery: _searchQuery.isNotEmpty,
+                              searchQuery: _searchQuery,
+                              hasGroupFilter: _selectedGroupFilterId.isNotEmpty,
+                              onAddCustomer: _openCustomerForm,
+                            ),
+                        ] else ...[
+                          const SizedBox(height: 16),
+                          _buildCustomersCollection(),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed:
+                                  _hasMoreClients && !_isLoadingMoreClients
+                                  ? () => _loadClients(reset: false)
+                                  : null,
+                              child: _isLoadingMoreClients
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Text(
+                                      _hasMoreClients
+                                          ? 'Load more customers'
+                                          : 'No more customers',
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
           ),
-          ),
+        ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        heroTag: widget.selectionMode ? 'pick-customer-fab' : 'customers-fab',
-        backgroundColor: kPrimary,
-        foregroundColor: Colors.white,
-        elevation: 2,
-        onPressed: _openCustomerForm,
-        icon: const Icon(Icons.person_add_alt_1_rounded),
-        label: Text(AppStrings.of(context).customersAddButton),
-      ),
+      floatingActionButton: TeamService.instance.can.canAddCustomer
+          ? FloatingActionButton.extended(
+              heroTag: widget.selectionMode
+                  ? 'pick-customer-fab'
+                  : 'customers-fab',
+              backgroundColor: context.cs.primary,
+              foregroundColor: Colors.white,
+              elevation: 2,
+              onPressed: _openCustomerForm,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+              label: Text(AppStrings.of(context).customersAddButton),
+            )
+          : null,
     );
   }
 
@@ -299,9 +320,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
       return;
     }
 
+    if (!mounted) return;
+    final sheetColor = context.cs.surfaceContainerLowest;
+
     await showModalBottomSheet(
       context: context,
-      backgroundColor: kSurfaceLowest,
+      backgroundColor: sheetColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -313,15 +337,22 @@ class _CustomersScreenState extends State<CustomersScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 12),
               child: Container(
-                width: 40, height: 4,
+                width: 40,
+                height: 4,
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerHigh,
+                  color: context.cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
-            const Text('Add Customer',
-                style: TextStyle(color: kOnSurface, fontSize: 17, fontWeight: FontWeight.w700)),
+            Text(
+              'Add Customer',
+              style: TextStyle(
+                color: context.cs.onSurface,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
             const SizedBox(height: 16),
             _AddOptionTile(
               icon: Icons.contacts_rounded,
@@ -332,7 +363,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 Navigator.pop(ctx, 'contacts');
               },
             ),
-            const Divider(height: 1, color: kSurfaceContainerLow),
+            Divider(height: 1, color: context.cs.surfaceContainerLow),
             _AddOptionTile(
               icon: Icons.edit_rounded,
               iconColor: kPrimary,
@@ -364,8 +395,12 @@ class _CustomersScreenState extends State<CustomersScreen> {
     // Try to get full details (needs READ_CONTACTS permission)
     Contact? fullContact;
     if (await FlutterContacts.requestPermission()) {
-      fullContact = await FlutterContacts.getContact(contact.id,
-          withProperties: true, withAccounts: false, withPhoto: false);
+      fullContact = await FlutterContacts.getContact(
+        contact.id,
+        withProperties: true,
+        withAccounts: false,
+        withPhoto: false,
+      );
     }
 
     if (!mounted) return;
@@ -376,9 +411,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
     final phone = source.phones.isNotEmpty
         ? source.phones.first.number.replaceAll(RegExp(r'[\s\-()]'), '')
         : '';
-    final email = source.emails.isNotEmpty
-        ? source.emails.first.address
-        : '';
+    final email = source.emails.isNotEmpty ? source.emails.first.address : '';
     final address = source.addresses.isNotEmpty
         ? source.addresses.first.address
         : '';
@@ -413,7 +446,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
     if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(AppStrings.of(context).customersReadyForBilling(savedClient.name))),
+      SnackBar(
+        content: Text(
+          AppStrings.of(context).customersReadyForBilling(savedClient.name),
+        ),
+      ),
     );
   }
 
@@ -507,6 +544,50 @@ class _CustomersScreenState extends State<CustomersScreen> {
     }
   }
 
+  Widget _buildCustomersCollection() {
+    final size = windowSizeOf(context);
+    if (size == WindowSize.compact) {
+      return Column(
+        children: _clients.map((client) {
+          return _CustomerCard(
+            client: client,
+            isSelected: client.id == widget.preselectedClientId,
+            selectionMode: widget.selectionMode,
+            onTap: () => _handleClientTap(client),
+            onLongPress: widget.selectionMode
+                ? null
+                : () => _showCustomerActions(client),
+          );
+        }).toList(),
+      );
+    }
+
+    final crossAxisCount = size == WindowSize.expanded ? 2 : 1;
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _clients.length,
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 10,
+        mainAxisExtent: 92,
+      ),
+      itemBuilder: (context, index) {
+        final client = _clients[index];
+        return _CustomerCard(
+          client: client,
+          isSelected: client.id == widget.preselectedClientId,
+          selectionMode: widget.selectionMode,
+          onTap: () => _handleClientTap(client),
+          onLongPress: widget.selectionMode
+              ? null
+              : () => _showCustomerActions(client),
+        );
+      },
+    );
+  }
+
   Future<void> _showCustomerActions(Client client) async {
     final action = await showModalBottomSheet<_CustomerAction>(
       context: context,
@@ -522,7 +603,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
                 ListTile(
                   leading: const Icon(Icons.folder_open_rounded),
                   title: Text(
-                    client.groupId.isEmpty ? s.customersMoveToGroup : s.customersChangeGroup,
+                    client.groupId.isEmpty
+                        ? s.customersMoveToGroup
+                        : s.customersChangeGroup,
                   ),
                   subtitle: Text(
                     client.groupName.trim().isEmpty
@@ -598,21 +681,37 @@ class _CustomersScreenState extends State<CustomersScreen> {
       final s = AppStrings.of(context);
       final message = updatedClient.groupName.trim().isEmpty
           ? s.customersNowUngrouped(updatedClient.name)
-          : s.customersMovedToGroup(updatedClient.name, updatedClient.groupName);
+          : s.customersMovedToGroup(
+              updatedClient.name,
+              updatedClient.groupName,
+            );
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
     } catch (error) {
       if (!mounted) {
         return;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).customersFailedUpdateGroup(error.toString()))),
+        SnackBar(
+          content: Text(
+            AppStrings.of(context).customersFailedUpdateGroup(error.toString()),
+          ),
+        ),
       );
     }
   }
 
   Future<void> _confirmDeleteCustomer(Client client) async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canDeleteCustomer,
+      'delete customers',
+    )) {
+      return;
+    }
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -654,7 +753,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).customersDeletedCustomer(client.name))),
+        SnackBar(
+          content: Text(
+            AppStrings.of(context).customersDeletedCustomer(client.name),
+          ),
+        ),
       );
     } catch (error) {
       if (!mounted) {
@@ -662,7 +765,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).customersFailedDelete(error.toString()))),
+        SnackBar(
+          content: Text(
+            AppStrings.of(context).customersFailedDelete(error.toString()),
+          ),
+        ),
       );
     }
   }
@@ -680,28 +787,29 @@ class _CustomersIntroCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(expanded ? 22 : 18),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
-        borderRadius: BorderRadius.circular(18),
+        color: context.cs.surfaceContainerLowest,
+        borderRadius: BorderRadius.circular(expanded ? 22 : 18),
         boxShadow: const [kWhisperShadow],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(expanded ? 12 : 10),
             decoration: BoxDecoration(
-              color: kSurfaceContainerLow,
-              borderRadius: BorderRadius.circular(12),
+              color: context.cs.surfaceContainerLow,
+              borderRadius: BorderRadius.circular(expanded ? 14 : 12),
             ),
             child: const Icon(
               Icons.people_alt_rounded,
               color: kPrimary,
-              size: 22,
+              size: 24,
             ),
           ),
-          const SizedBox(width: 14),
+          SizedBox(width: expanded ? 16 : 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -710,9 +818,9 @@ class _CustomersIntroCard extends StatelessWidget {
                   selectionMode
                       ? s.customersSelectIntroTitle
                       : s.customersIntroTitle,
-                  style: const TextStyle(
-                    color: kOnSurface,
-                    fontSize: 14,
+                  style: TextStyle(
+                    color: context.cs.onSurface,
+                    fontSize: expanded ? 16 : 14,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -721,9 +829,9 @@ class _CustomersIntroCard extends StatelessWidget {
                   selectionMode
                       ? s.customersSelectIntroBody
                       : s.customersIntroBody,
-                  style: const TextStyle(
-                    color: kOnSurfaceVariant,
-                    fontSize: 12,
+                  style: TextStyle(
+                    color: context.cs.onSurfaceVariant,
+                    fontSize: expanded ? 13 : 12,
                     height: 1.4,
                   ),
                 ),
@@ -777,7 +885,8 @@ class _GroupFilterBar extends StatelessWidget {
   final String selectedGroupFilterId;
   final ValueChanged<String> onSelected;
 
-  Widget _chip({
+  Widget _chip(
+    BuildContext context, {
     required String label,
     required bool selected,
     required VoidCallback onTap,
@@ -788,13 +897,13 @@ class _GroupFilterBar extends StatelessWidget {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? kPrimary : kSurfaceContainerLow,
+          color: selected ? kPrimary : context.cs.surfaceContainerLow,
           borderRadius: BorderRadius.circular(999),
         ),
         child: Text(
           label,
           style: TextStyle(
-            color: selected ? Colors.white : kOnSurfaceVariant,
+            color: selected ? Colors.white : context.cs.onSurfaceVariant,
             fontSize: 13,
             fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
           ),
@@ -811,6 +920,7 @@ class _GroupFilterBar extends StatelessWidget {
       child: Row(
         children: [
           _chip(
+            context,
             label: s.customersAll,
             selected: selectedGroupFilterId.isEmpty,
             onTap: () => onSelected(''),
@@ -818,6 +928,7 @@ class _GroupFilterBar extends StatelessWidget {
           if (groups.isNotEmpty) ...[
             const SizedBox(width: 8),
             _chip(
+              context,
               label: s.customersUngrouped,
               selected: selectedGroupFilterId == '__ungrouped__',
               onTap: () => onSelected('__ungrouped__'),
@@ -827,6 +938,7 @@ class _GroupFilterBar extends StatelessWidget {
             return Padding(
               padding: const EdgeInsets.only(left: 8),
               child: _chip(
+                context,
                 label: group.name,
                 selected: selectedGroupFilterId == group.id,
                 onTap: () => onSelected(group.id),
@@ -864,7 +976,9 @@ class _CustomerCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
-        color: isSelected ? kPrimaryContainer : kSurfaceLowest,
+        color: isSelected
+            ? context.cs.primaryContainer
+            : context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [kSubtleShadow],
       ),
@@ -882,7 +996,7 @@ class _CustomerCard extends StatelessWidget {
                 // Avatar
                 CircleAvatar(
                   radius: 22,
-                  backgroundColor: kSurfaceContainerLow,
+                  backgroundColor: context.cs.surfaceContainerLow,
                   child: Text(
                     client.initials,
                     style: const TextStyle(
@@ -900,10 +1014,10 @@ class _CustomerCard extends StatelessWidget {
                     children: [
                       Text(
                         client.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       if (subtitle.isNotEmpty) ...[
@@ -912,9 +1026,9 @@ class _CustomerCard extends StatelessWidget {
                           subtitle,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                           ),
                         ),
                       ],
@@ -934,7 +1048,7 @@ class _CustomerCard extends StatelessWidget {
                       ),
                       constraints: const BoxConstraints(maxWidth: 100),
                       decoration: BoxDecoration(
-                        color: kPrimaryContainer,
+                        color: context.cs.primaryContainer,
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
@@ -956,7 +1070,7 @@ class _CustomerCard extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: kPrimaryContainer,
+                      color: context.cs.primaryContainer,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Text(
@@ -974,7 +1088,7 @@ class _CustomerCard extends StatelessWidget {
                         ? Icons.check_circle_outline_rounded
                         : Icons.chevron_right_rounded,
                     size: 20,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                   ),
               ],
             ),
@@ -1031,8 +1145,8 @@ class _EmptyCustomersState extends StatelessWidget {
               Container(
                 width: 72,
                 height: 72,
-                decoration: const BoxDecoration(
-                  color: kSurfaceContainerLow,
+                decoration: BoxDecoration(
+                  color: context.cs.surfaceContainerLow,
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -1046,7 +1160,7 @@ class _EmptyCustomersState extends StatelessWidget {
                 title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w700,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -1054,7 +1168,7 @@ class _EmptyCustomersState extends StatelessWidget {
               Text(
                 description,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -1062,7 +1176,7 @@ class _EmptyCustomersState extends StatelessWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 style: FilledButton.styleFrom(
-                  backgroundColor: kPrimary,
+                  backgroundColor: context.cs.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(
                     horizontal: 20,
@@ -1122,15 +1236,30 @@ class _AddOptionTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(color: kOnSurface, fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      color: context.cs.onSurface,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: const TextStyle(color: kOnSurfaceVariant, fontSize: 12)),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      color: context.cs.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: kTextTertiary, size: 20),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
+              size: 20,
+            ),
           ],
         ),
       ),

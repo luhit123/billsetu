@@ -5,13 +5,15 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/modals/line_item.dart';
 import 'package:billeasy/modals/member.dart';
-import 'package:billeasy/modals/subscription_plan.dart';
 import 'package:billeasy/screens/member_form_screen.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/membership_service.dart';
+import 'package:billeasy/services/payment_link_service.dart';
 import 'package:billeasy/services/profile_service.dart';
-import 'package:billeasy/utils/upi_utils.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:billeasy/utils/error_helpers.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -19,11 +21,11 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-BoxDecoration _cardDeco() => const BoxDecoration(
-      color: kSurfaceLowest,
-      borderRadius: BorderRadius.all(Radius.circular(20)),
-      boxShadow: [kWhisperShadow],
-    );
+BoxDecoration _cardDeco(BuildContext context) => BoxDecoration(
+  color: context.cs.surfaceContainerLowest,
+  borderRadius: const BorderRadius.all(Radius.circular(20)),
+  boxShadow: const [kWhisperShadow],
+);
 
 class MemberDetailScreen extends StatefulWidget {
   const MemberDetailScreen({super.key, required this.member});
@@ -60,19 +62,21 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
 
   void _subscribeAttendance() {
     _attendanceSub?.cancel();
-    _attendanceSub = _service.watchAttendance(_member.id).listen(
-      (logs) {
-        if (mounted) {
-          setState(() {
-            _attendanceLogs = logs;
-            _isLoadingAttendance = false;
-          });
-        }
-      },
-      onError: (_) {
-        if (mounted) setState(() => _isLoadingAttendance = false);
-      },
-    );
+    _attendanceSub = _service
+        .watchAttendance(_member.id)
+        .listen(
+          (logs) {
+            if (mounted) {
+              setState(() {
+                _attendanceLogs = logs;
+                _isLoadingAttendance = false;
+              });
+            }
+          },
+          onError: (_) {
+            if (mounted) setState(() => _isLoadingAttendance = false);
+          },
+        );
   }
 
   @override
@@ -84,15 +88,24 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   // ── Actions ──────────────────────────────────────────────────────────────
 
   Future<void> _handleCheckIn() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'mark attendance',
+    )) {
+      return;
+    }
     if (_checkingIn) return;
     setState(() => _checkingIn = true);
     try {
       await _service.markAttendance(_member.id, _member.name, 'manual');
       if (mounted) {
-        setState(() => _member = _member.copyWith(
-              attendanceCount: _member.attendanceCount + 1,
-              lastCheckIn: DateTime.now(),
-            ));
+        setState(
+          () => _member = _member.copyWith(
+            attendanceCount: _member.attendanceCount + 1,
+            lastCheckIn: DateTime.now(),
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Check-in recorded'),
@@ -117,19 +130,29 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   }
 
   Future<void> _handleFreeze() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'manage memberships',
+    )) {
+      return;
+    }
     if (_member.isFrozen) {
-      // Unfreeze — add remaining frozen days back to end date
-      final frozenDaysLeft =
-          _member.frozenUntil!.difference(DateTime.now()).inDays;
-      final newEnd =
-          _member.endDate.add(Duration(days: frozenDaysLeft.clamp(0, 9999)));
       try {
-        await _service.unfreezeMember(_member.id, newEnd);
+        final newEnd = await _service.unfreezeMember(
+          _member.id,
+          _member.endDate,
+        );
         if (mounted) {
-          setState(() => _member = _member.copyWith(
-                status: MemberStatus.active,
-                endDate: newEnd,
-              ));
+          setState(
+            () => _member = _member.copyWith(
+              status: newEnd.isBefore(DateTime.now())
+                  ? MemberStatus.expired
+                  : MemberStatus.active,
+              endDate: newEnd,
+              frozenUntil: null,
+            ),
+          );
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('Membership unfrozen'),
@@ -165,14 +188,16 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     try {
       await _service.freezeMember(_member.id, picked);
       if (mounted) {
-        setState(() => _member = _member.copyWith(
-              status: MemberStatus.frozen,
-              frozenUntil: picked,
-            ));
+        setState(
+          () => _member = _member.copyWith(
+            status: MemberStatus.frozen,
+            frozenUntil: picked,
+          ),
+        );
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Frozen until ${_dateFmt.format(picked)}'),
-            backgroundColor: kPrimary,
+            backgroundColor: context.cs.primary,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -190,13 +215,33 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     }
   }
 
-  void _handleRenew() {
-    final totalDays = _member.endDate.difference(_member.startDate).inDays;
-    final newEnd = _member.endDate.add(Duration(days: totalDays));
+  Future<void> _handleRenew() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'renew memberships',
+    )) {
+      return;
+    }
+
+    final livePlan = await _service.getPlanById(_member.planId);
+    if (!mounted) return;
+    final renewalDays = livePlan != null && !livePlan.isDeleted
+        ? livePlan.durationDays
+        : _member.planDurationDays;
+    final renewalAmount = livePlan != null && !livePlan.isDeleted
+        ? livePlan.effectivePrice
+        : (_member.planEffectivePrice > 0
+              ? _member.planEffectivePrice
+              : _member.amountPaid);
+    final renewalBase = _member.endDate.isAfter(DateTime.now())
+        ? _member.endDate
+        : DateTime.now();
+    final newEnd = renewalBase.add(Duration(days: renewalDays));
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: kSurfaceLowest,
+      backgroundColor: context.cs.surfaceContainerLowest,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -211,28 +256,28 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: kSurfaceContainerHigh,
+                  color: context.cs.surfaceContainerHigh,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'Renew Membership',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,
-                color: kOnSurface,
+                color: context.cs.onSurface,
               ),
             ),
             const SizedBox(height: 20),
             _renewRow('Plan', _member.planName),
             const SizedBox(height: 10),
-            _renewRow('Duration', '$totalDays days'),
+            _renewRow('Duration', '$renewalDays days'),
             const SizedBox(height: 10),
             _renewRow('New End Date', _dateFmt.format(newEnd)),
             const SizedBox(height: 10),
-            _renewRow('Amount', _currency.format(_member.amountPaid)),
+            _renewRow('Amount', _currency.format(renewalAmount)),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,
@@ -241,15 +286,25 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                 onPressed: () async {
                   Navigator.pop(ctx);
                   try {
-                    await _service.renewMember(
-                        _member.id, newEnd, _member.amountPaid);
+                    final result = await _service.renewMember(
+                      _member.id,
+                      newEnd,
+                      renewalAmount,
+                    );
                     if (mounted) {
-                      setState(() => _member = _member.copyWith(
-                            status: MemberStatus.active,
-                            endDate: newEnd,
-                          ));
+                      setState(
+                        () => _member = _member.copyWith(
+                          status: MemberStatus.active,
+                          endDate: result.newEndDate,
+                          frozenUntil: null,
+                          amountPaid: _member.amountPaid + result.renewalAmount,
+                        ),
+                      );
                       // Offer to send renewal receipt via WhatsApp.
-                      final phone = _member.phone.replaceAll(RegExp(r'[^0-9]'), '');
+                      final phone = _member.phone.replaceAll(
+                        RegExp(r'[^0-9]'),
+                        '',
+                      );
                       if (phone.isNotEmpty) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
@@ -259,7 +314,10 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                             action: SnackBarAction(
                               label: 'Share Receipt',
                               textColor: Colors.white,
-                              onPressed: () => _handleShareReceipt(isRenewal: true),
+                              onPressed: () => _handleShareReceipt(
+                                isRenewal: true,
+                                amountOverride: result.renewalAmount,
+                              ),
                             ),
                           ),
                         );
@@ -286,7 +344,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: kPrimary,
+                  backgroundColor: context.cs.primary,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -309,18 +367,26 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant)),
-        Text(value,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: kOnSurface)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: context.cs.onSurface,
+          ),
+        ),
       ],
     );
   }
 
-  Future<void> _handleShareReceipt({bool isRenewal = false}) async {
+  Future<void> _handleShareReceipt({
+    bool isRenewal = false,
+    double? amountOverride,
+  }) async {
     final phone = _member.phone.replaceAll(RegExp(r'[^0-9]'), '');
     if (phone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -335,18 +401,25 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       final plan = await _service.getPlanById(_member.planId);
       final profile = await ProfileService().getCurrentProfile();
 
-      final gstEnabled = plan?.gstEnabled ?? false;
-      final gstRate = plan?.gstRate ?? 18.0;
-      final gstType = plan?.gstType ?? 'cgst_sgst';
+      final gstEnabled = (plan != null && !plan.isDeleted)
+          ? plan.gstEnabled
+          : _member.planGstEnabled;
+      final gstRate = (plan != null && !plan.isDeleted)
+          ? plan.gstRate
+          : _member.planGstRate;
+      final gstType = (plan != null && !plan.isDeleted)
+          ? plan.gstType
+          : _member.planGstType;
+      final effectiveAmount = amountOverride ?? _member.amountPaid;
 
       // amountPaid is GST-inclusive; back-calculate the pre-GST base price
       // so that grandTotal = taxableAmount + tax = amountPaid exactly.
       final membershipBase = gstEnabled
-          ? _member.amountPaid / (1 + gstRate / 100)
-          : _member.amountPaid;
+          ? effectiveAmount / (1 + gstRate / 100)
+          : effectiveAmount;
 
-      final totalReceived = _member.amountPaid +
-          (!isRenewal ? _member.joiningFeePaid : 0);
+      final totalReceived =
+          effectiveAmount + (!isRenewal ? _member.joiningFeePaid : 0);
 
       final invoice = Invoice(
         id: 'MEM-${_member.id}',
@@ -387,23 +460,24 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
 
       // Build UPI payment link for renewal if merchant has UPI configured
       String payPart = '';
-      if (profile != null &&
-          profile.upiId.isNotEmpty &&
-          _member.amountPaid > 0) {
-        final payLink = buildUpiWebPaymentLink(
-          upiId: profile.upiId,
-          businessName: profile.storeName,
-          amount: _member.amountPaid,
-          invoiceNumber: 'Membership-${_member.name.replaceAll(' ', '')}',
-        );
-        payPart = '\n\nPay now: $payLink';
+      if (profile != null && profile.upiId.isNotEmpty && effectiveAmount > 0) {
+        final payLink = await PaymentLinkService.instance
+            .createUpiWebPaymentLink(
+              upiId: profile.upiId,
+              businessName: profile.storeName,
+              amount: effectiveAmount,
+              invoiceNumber: 'Membership-${_member.name.replaceAll(' ', '')}',
+            );
+        if (payLink != null && payLink.isNotEmpty) {
+          payPart = '\n\nPay now: $payLink';
+        }
       }
 
       final message =
           'Hi ${_member.name}! 🙏\n\n'
           'Here is your *${_member.planName}* membership receipt.\n'
           '📅 Valid: ${_dateFmt.format(_member.startDate)} → ${_dateFmt.format(_member.endDate)}\n'
-          '💰 Amount: ₹${_member.amountPaid.toStringAsFixed(0)}'
+          '💰 Amount: ₹${effectiveAmount.toStringAsFixed(0)}'
           '$payPart\n\n'
           'Thank you for being a valued member! ⭐\n'
           '_Powered by BillRaja_';
@@ -414,7 +488,9 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       if (!kIsWeb && Platform.isAndroid) {
         try {
           final dir = await getTemporaryDirectory();
-          final file = File('${dir.path}/Receipt_${_member.name.replaceAll(' ', '_')}.pdf');
+          final file = File(
+            '${dir.path}/Receipt_${_member.name.replaceAll(' ', '_')}.pdf',
+          );
           await file.writeAsBytes(pdfBytes);
           const channel = MethodChannel('com.luhit.billeasy/share');
           await channel.invokeMethod('whatsapp', {
@@ -436,9 +512,9 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not share receipt: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFriendlyError(e, fallback: 'Could not share receipt. Please try again.'))));
     } finally {
       if (mounted) setState(() => _isSharingReceipt = false);
     }
@@ -459,22 +535,30 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       final daysLeft = _member.endDate.difference(now).inDays;
       final dateFmt = DateFormat('dd MMM yyyy');
       final endStr = dateFmt.format(_member.endDate);
+      final livePlan = await _service.getPlanById(_member.planId);
+      final renewalAmount = livePlan != null && !livePlan.isDeleted
+          ? livePlan.effectivePrice
+          : (_member.planEffectivePrice > 0
+                ? _member.planEffectivePrice
+                : _member.amountPaid);
 
       // Build UPI payment link for renewal if available
       String payLink = '';
       try {
         final profile = await ProfileService().getCurrentProfile();
-        if (profile != null &&
-            profile.upiId.isNotEmpty &&
-            _member.amountPaid > 0) {
-          payLink = buildUpiWebPaymentLink(
-            upiId: profile.upiId,
-            businessName: profile.storeName,
-            amount: _member.amountPaid,
-            invoiceNumber: 'Renewal-${_member.name.replaceAll(' ', '')}',
-          );
+        if (profile != null && profile.upiId.isNotEmpty && renewalAmount > 0) {
+          payLink =
+              await PaymentLinkService.instance.createUpiWebPaymentLink(
+                upiId: profile.upiId,
+                businessName: profile.storeName,
+                amount: renewalAmount,
+                invoiceNumber: 'Renewal-${_member.name.replaceAll(' ', '')}',
+              ) ??
+              '';
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[MemberDetail] UPI link generation failed: $e');
+      }
 
       final payPart = payLink.isNotEmpty ? '\nPay now: $payLink\n' : '';
 
@@ -529,20 +613,25 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Could not send reminder: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(userFriendlyError(e, fallback: 'Could not send reminder. Please try again.'))));
     } finally {
       if (mounted) setState(() => _isSendingReminder = false);
     }
   }
 
   Future<void> _handleEdit() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'edit members',
+    )) {
+      return;
+    }
     final result = await Navigator.push<Member>(
       context,
-      MaterialPageRoute(
-        builder: (_) => MemberFormScreen(member: _member),
-      ),
+      MaterialPageRoute(builder: (_) => MemberFormScreen(member: _member)),
     );
     if (result != null && mounted) {
       setState(() => _member = result);
@@ -552,23 +641,37 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   }
 
   Future<void> _handleDelete() async {
+    if (!PermissionDenied.check(
+      context,
+      TeamService.instance.can.canManageSubscription,
+      'delete members',
+    )) {
+      return;
+    }
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: kSurfaceLowest,
+        backgroundColor: context.cs.surfaceContainerLowest,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Delete Member',
-            style: TextStyle(
-                fontWeight: FontWeight.w700, color: kOnSurface, fontSize: 17)),
+        title: Text(
+          'Delete Member',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            color: context.cs.onSurface,
+            fontSize: 17,
+          ),
+        ),
         content: Text(
           'Are you sure you want to delete ${_member.name}? This action cannot be undone.',
-          style: const TextStyle(color: kOnSurfaceVariant, fontSize: 14),
+          style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 14),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancel', style: TextStyle(color: kOnSurfaceVariant)),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: context.cs.onSurfaceVariant),
+            ),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -618,7 +721,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
       case MemberStatus.expired:
         return kOverdueBg;
       case MemberStatus.frozen:
-        return kPrimaryContainer;
+        return context.cs.primaryContainer;
       case MemberStatus.cancelled:
         return kPendingBg;
     }
@@ -638,10 +741,14 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   }
 
   double _planProgress() {
-    final totalDays =
-        _member.endDate.difference(_member.startDate).inDays.clamp(1, 99999);
-    final elapsed =
-        DateTime.now().difference(_member.startDate).inDays.clamp(0, totalDays);
+    final totalDays = _member.endDate
+        .difference(_member.startDate)
+        .inDays
+        .clamp(1, 99999);
+    final elapsed = DateTime.now()
+        .difference(_member.startDate)
+        .inDays
+        .clamp(0, totalDays);
     return elapsed / totalDays;
   }
 
@@ -661,7 +768,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: kBuildGradientAppBar(
         titleText: _member.name,
         actions: [
@@ -672,17 +779,20 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
           ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert_rounded, size: 22),
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            color: kSurfaceLowest,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+            color: context.cs.surfaceContainerLowest,
             onSelected: (v) {
               if (v == 'delete') _handleDelete();
             },
             itemBuilder: (_) => [
               const PopupMenuItem(
                 value: 'delete',
-                child: Text('Delete Member',
-                    style: TextStyle(color: kOverdue, fontSize: 14)),
+                child: Text(
+                  'Delete Member',
+                  style: TextStyle(color: kOverdue, fontSize: 14),
+                ),
               ),
             ],
           ),
@@ -719,12 +829,12 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         children: [
           CircleAvatar(
             radius: 36,
-            backgroundColor: kPrimaryContainer,
+            backgroundColor: context.cs.primaryContainer,
             child: Text(
               _member.initials,
               style: const TextStyle(
@@ -737,10 +847,10 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
           const SizedBox(height: 14),
           Text(
             _member.name,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 20,
               fontWeight: FontWeight.w700,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
             textAlign: TextAlign.center,
           ),
@@ -748,13 +858,19 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
           if (_member.phone.isNotEmpty)
             Text(
               _member.phone,
-              style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 14,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           if (_member.email.isNotEmpty) ...[
             const SizedBox(height: 2),
             Text(
               _member.email,
-              style: const TextStyle(fontSize: 13, color: kTextTertiary),
+              style: TextStyle(
+                fontSize: 13,
+                color: context.cs.onSurfaceVariant.withAlpha(153),
+              ),
             ),
           ],
           const SizedBox(height: 14),
@@ -762,8 +878,10 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: _statusBg(_member.status),
                   borderRadius: BorderRadius.circular(20),
@@ -785,7 +903,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                   fontWeight: FontWeight.w600,
                   color: _member.daysLeft <= 7 && _member.daysLeft > 0
                       ? kPending
-                      : kOnSurfaceVariant,
+                      : context.cs.onSurfaceVariant,
                 ),
               ),
             ],
@@ -796,13 +914,13 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
             child: LinearProgressIndicator(
               value: progress,
               minHeight: 5,
-              backgroundColor: kSurfaceContainerLow,
+              backgroundColor: context.cs.surfaceContainerLow,
               valueColor: AlwaysStoppedAnimation<Color>(
                 progress >= 0.9
                     ? kOverdue
                     : progress >= 0.7
-                        ? kPending
-                        : kPaid,
+                    ? kPending
+                    : kPaid,
               ),
             ),
           ),
@@ -812,11 +930,17 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
             children: [
               Text(
                 _dateFmt.format(_member.startDate),
-                style: const TextStyle(fontSize: 11, color: kTextTertiary),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.cs.onSurfaceVariant.withAlpha(153),
+                ),
               ),
               Text(
                 _dateFmt.format(_member.endDate),
-                style: const TextStyle(fontSize: 11, color: kTextTertiary),
+                style: TextStyle(
+                  fontSize: 11,
+                  color: context.cs.onSurfaceVariant.withAlpha(153),
+                ),
               ),
             ],
           ),
@@ -833,17 +957,17 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'PLAN DETAILS',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
-              color: kTextTertiary,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
             ),
           ),
           const SizedBox(height: 14),
@@ -858,15 +982,13 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
           _planRow('Amount Paid', _currency.format(_member.amountPaid)),
           if (_member.joiningFeePaid > 0) ...[
             const SizedBox(height: 10),
-            _planRow(
-                'Joining Fee', _currency.format(_member.joiningFeePaid)),
+            _planRow('Joining Fee', _currency.format(_member.joiningFeePaid)),
           ],
           const SizedBox(height: 10),
           _planRow('Auto-Renew', _member.autoRenew ? 'Yes' : 'No'),
           if (_member.isFrozen && _member.frozenUntil != null) ...[
             const SizedBox(height: 10),
-            _planRow(
-                'Frozen Until', _dateFmt.format(_member.frozenUntil!)),
+            _planRow('Frozen Until', _dateFmt.format(_member.frozenUntil!)),
           ],
         ],
       ),
@@ -877,13 +999,18 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: const TextStyle(fontSize: 14, color: kOnSurfaceVariant)),
-        Text(value,
-            style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: kOnSurface)),
+        Text(
+          label,
+          style: TextStyle(fontSize: 14, color: context.cs.onSurfaceVariant),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: context.cs.onSurface,
+          ),
+        ),
       ],
     );
   }
@@ -895,61 +1022,71 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
 
     return Column(
       children: [
-      Row(
-      children: [
-        Expanded(
-          child: _actionButton(
-            icon: Icons.login_rounded,
-            label: 'Check In',
-            color: kPaid,
-            bgColor: kPaidBg,
-            isLoading: _checkingIn,
-            onTap: _handleCheckIn,
-          ),
+        Row(
+          children: [
+            Expanded(
+              child: _actionButton(
+                icon: Icons.login_rounded,
+                label: 'Check In',
+                color: kPaid,
+                bgColor: kPaidBg,
+                isLoading: _checkingIn,
+                onTap: _handleCheckIn,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                icon: isFrozen
+                    ? Icons.play_arrow_rounded
+                    : Icons.ac_unit_rounded,
+                label: isFrozen ? 'Unfreeze' : 'Freeze',
+                color: kPrimary,
+                bgColor: context.cs.primaryContainer,
+                onTap: _handleFreeze,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                icon: Icons.autorenew_rounded,
+                label: 'Renew',
+                color: kPending,
+                bgColor: kPendingBg,
+                onTap: _handleRenew,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _actionButton(
+                iconWidget: const FaIcon(
+                  FontAwesomeIcons.whatsapp,
+                  color: Color(0xFF25D366),
+                  size: 24,
+                ),
+                label: 'Share Receipt',
+                color: const Color(0xFF25D366),
+                bgColor: const Color(0xFFDCF8C6),
+                isLoading: _isSharingReceipt,
+                onTap: _handleShareReceipt,
+              ),
+            ),
+          ],
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _actionButton(
-            icon: isFrozen ? Icons.play_arrow_rounded : Icons.ac_unit_rounded,
-            label: isFrozen ? 'Unfreeze' : 'Freeze',
-            color: kPrimary,
-            bgColor: kPrimaryContainer,
-            onTap: _handleFreeze,
+        const SizedBox(height: 10),
+        // Send Reminder — full width
+        _actionButton(
+          iconWidget: const FaIcon(
+            FontAwesomeIcons.whatsapp,
+            color: Color(0xFF128C7E),
+            size: 22,
           ),
+          label: 'Send Renewal Reminder',
+          color: const Color(0xFF128C7E),
+          bgColor: const Color(0xFFE2F5F1),
+          isLoading: _isSendingReminder,
+          onTap: _handleSendReminder,
         ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _actionButton(
-            icon: Icons.autorenew_rounded,
-            label: 'Renew',
-            color: kPending,
-            bgColor: kPendingBg,
-            onTap: _handleRenew,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _actionButton(
-            iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF25D366), size: 24),
-            label: 'Share Receipt',
-            color: const Color(0xFF25D366),
-            bgColor: const Color(0xFFDCF8C6),
-            isLoading: _isSharingReceipt,
-            onTap: _handleShareReceipt,
-          ),
-        ),
-      ],
-      ),
-      const SizedBox(height: 10),
-      // Send Reminder — full width
-      _actionButton(
-        iconWidget: const FaIcon(FontAwesomeIcons.whatsapp, color: Color(0xFF128C7E), size: 22),
-        label: 'Send Renewal Reminder',
-        color: const Color(0xFF128C7E),
-        bgColor: const Color(0xFFE2F5F1),
-        isLoading: _isSendingReminder,
-        onTap: _handleSendReminder,
-      ),
       ],
     );
   }
@@ -1006,27 +1143,26 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'RECENT ATTENDANCE',
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1,
-                  color: kTextTertiary,
+                  color: context.cs.onSurfaceVariant.withAlpha(153),
                 ),
               ),
               const SizedBox(width: 8),
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
@@ -1053,17 +1189,23 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
               ),
             )
           else if (_attendanceLogs.isEmpty)
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.symmetric(vertical: 24),
                 child: Column(
                   children: [
-                    Icon(Icons.event_busy_rounded,
-                        size: 36, color: kTextTertiary),
+                    Icon(
+                      Icons.event_busy_rounded,
+                      size: 36,
+                      color: context.cs.onSurfaceVariant.withAlpha(153),
+                    ),
                     SizedBox(height: 8),
                     Text(
                       'No check-ins yet',
-                      style: TextStyle(fontSize: 14, color: kTextTertiary),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: context.cs.onSurfaceVariant.withAlpha(153),
+                      ),
                     ),
                   ],
                 ),
@@ -1076,10 +1218,8 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
               itemCount: _attendanceLogs.length > 20
                   ? 20
                   : _attendanceLogs.length,
-              separatorBuilder: (_, __) => const Divider(
-                height: 1,
-                color: kSurfaceContainerLow,
-              ),
+              separatorBuilder: (_, __) =>
+                  Divider(height: 1, color: context.cs.surfaceContainerLow),
               itemBuilder: (_, i) {
                 final log = _attendanceLogs[i];
                 return Padding(
@@ -1090,13 +1230,13 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                         width: 36,
                         height: 36,
                         decoration: BoxDecoration(
-                          color: kSurfaceContainerLow,
+                          color: context.cs.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(
                           _methodIcon(log.method),
                           size: 18,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1106,34 +1246,40 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
                           children: [
                             Text(
                               _dateFmt.format(log.checkInTime),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w600,
-                                color: kOnSurface,
+                                color: context.cs.onSurface,
                               ),
                             ),
                             const SizedBox(height: 2),
                             Text(
                               _timeFmt.format(log.checkInTime),
-                              style: const TextStyle(
-                                  fontSize: 12, color: kTextTertiary),
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: context.cs.onSurfaceVariant.withAlpha(
+                                  153,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
                         decoration: BoxDecoration(
-                          color: kSurfaceContainerLow,
+                          color: context.cs.surfaceContainerLow,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           log.method.toUpperCase(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
-                            color: kOnSurfaceVariant,
+                            color: context.cs.onSurfaceVariant,
                             letterSpacing: 0.5,
                           ),
                         ),
@@ -1154,25 +1300,25 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
-      decoration: _cardDeco(),
+      decoration: _cardDeco(context),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'NOTES',
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
               letterSpacing: 1,
-              color: kTextTertiary,
+              color: context.cs.onSurfaceVariant.withAlpha(153),
             ),
           ),
           const SizedBox(height: 10),
           Text(
             _member.notes,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
               height: 1.5,
             ),
           ),

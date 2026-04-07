@@ -7,10 +7,13 @@ import 'package:intl/intl.dart';
 
 import '../modals/payment.dart';
 import '../services/plan_service.dart';
-import '../services/remote_config_service.dart';
 import '../services/payment_service.dart';
+import '../services/remote_config_service.dart';
+import '../services/team_service.dart';
 import '../services/usage_tracking_service.dart';
 import '../theme/app_colors.dart';
+import '../utils/responsive.dart';
+import '../widgets/aurora_app_backdrop.dart';
 import 'upgrade_screen.dart';
 
 class SubscriptionScreen extends StatefulWidget {
@@ -24,7 +27,6 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Map<String, int>? _usage;
   bool _isLoadingUsage = true;
   bool _isCancelling = false;
-  bool _isReactivating = false;
   bool _cancelAtPeriodEnd = false;
 
   StreamSubscription<AppPlan>? _planSub;
@@ -59,20 +61,25 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   }
 
   void _listenSubscriptionDoc() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+    String? uid;
+    try {
+      uid = TeamService.instance.getEffectiveOwnerId();
+    } catch (_) {
+      uid = FirebaseAuth.instance.currentUser?.uid;
+    }
     if (uid == null) return;
     _subDocSub = FirebaseFirestore.instance
         .collection('subscriptions')
         .doc(uid)
         .snapshots()
         .listen((doc) {
-      if (doc.exists && mounted) {
-        final data = doc.data()!;
-        setState(() {
-          _cancelAtPeriodEnd = data['cancelAtPeriodEnd'] as bool? ?? false;
+          if (doc.exists && mounted) {
+            final data = doc.data()!;
+            setState(() {
+              _cancelAtPeriodEnd = data['cancelAtPeriodEnd'] as bool? ?? false;
+            });
+          }
         });
-      }
-    });
   }
 
   Future<void> _loadUsage() async {
@@ -80,7 +87,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     try {
       final usage = await UsageTrackingService.instance.getUsageSummary();
       if (mounted) setState(() => _usage = usage);
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[Subscription] Failed to load usage: $e');
+    }
     if (mounted) setState(() => _isLoadingUsage = false);
   }
 
@@ -92,62 +101,158 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
     final billingCycle = PlanService.instance.billingCycle;
     final periodEnd = PlanService.instance.currentPeriodEnd;
     final isGrace = PlanService.instance.isInGracePeriod;
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Subscription'),
-        backgroundColor: kSurface,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
-        foregroundColor: kOnSurface,
+        foregroundColor: context.cs.onSurface,
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadUsage,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            // ── Grace-period warning ─────────────────────────
-            if (isGrace) _buildGraceWarning(),
+      body: _buildResponsiveBody(
+        plan: plan,
+        limits: limits,
+        status: status,
+        billingCycle: billingCycle,
+        periodEnd: periodEnd,
+        isGrace: isGrace,
+        expanded: expanded,
+      ),
+    );
+  }
 
-            // ── Plan header card ─────────────────────────────
-            _PlanHeaderCard(
-              plan: plan,
-              limits: limits,
-              status: status,
-              billingCycle: billingCycle,
-              periodEnd: periodEnd,
-              cancelAtPeriodEnd: _cancelAtPeriodEnd,
-              isGrace: isGrace,
+  Widget _buildResponsiveBody({
+    required AppPlan plan,
+    required PlanLimits limits,
+    required String? status,
+    required String? billingCycle,
+    required DateTime? periodEnd,
+    required bool isGrace,
+    required bool expanded,
+  }) {
+    return Stack(
+      children: [
+        const Positioned.fill(child: AuroraAppBackdrop()),
+        RefreshIndicator(
+          onRefresh: _loadUsage,
+          child: SafeArea(
+            top: false,
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1240),
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                  children: [
+                    if (isGrace) _buildGraceWarning(),
+                    if (expanded)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 7,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _PlanHeaderCard(
+                                  plan: plan,
+                                  limits: limits,
+                                  status: status,
+                                  billingCycle: billingCycle,
+                                  periodEnd: periodEnd,
+                                  cancelAtPeriodEnd: _cancelAtPeriodEnd,
+                                  isGrace: isGrace,
+                                ),
+                                const SizedBox(height: 20),
+                                _buildSectionHeader(
+                                  'Usage This Month',
+                                  'Track your current plan usage',
+                                ),
+                                const SizedBox(height: 12),
+                                _isLoadingUsage
+                                    ? const Center(
+                                        child: Padding(
+                                          padding: EdgeInsets.all(24),
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                      )
+                                    : _buildUsageGrid(limits),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            flex: 5,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionHeader(
+                                  'Manage Subscription',
+                                  'Upgrade, change, or cancel your plan',
+                                ),
+                                const SizedBox(height: 12),
+                                _buildActions(plan),
+                                const SizedBox(height: 20),
+                                _buildSectionHeader(
+                                  'Payment History',
+                                  'Your recent transactions',
+                                ),
+                                const SizedBox(height: 12),
+                                _buildPaymentHistory(),
+                              ],
+                            ),
+                          ),
+                        ],
+                      )
+                    else ...[
+                      _PlanHeaderCard(
+                        plan: plan,
+                        limits: limits,
+                        status: status,
+                        billingCycle: billingCycle,
+                        periodEnd: periodEnd,
+                        cancelAtPeriodEnd: _cancelAtPeriodEnd,
+                        isGrace: isGrace,
+                      ),
+                      const SizedBox(height: 20),
+                      _buildSectionHeader(
+                        'Usage This Month',
+                        'Track your current plan usage',
+                      ),
+                      const SizedBox(height: 12),
+                      _isLoadingUsage
+                          ? const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(24),
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          : _buildUsageGrid(limits),
+                      const SizedBox(height: 20),
+                      _buildSectionHeader(
+                        'Manage Subscription',
+                        'Upgrade, change, or cancel your plan',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildActions(plan),
+                      const SizedBox(height: 20),
+                      _buildSectionHeader(
+                        'Payment History',
+                        'Your recent transactions',
+                      ),
+                      const SizedBox(height: 12),
+                      _buildPaymentHistory(),
+                    ],
+                  ],
+                ),
+              ),
             ),
-            const SizedBox(height: 20),
-
-            // ── Usage dashboard ──────────────────────────────
-            _buildSectionHeader('Usage This Month', 'Track your current plan usage'),
-            const SizedBox(height: 12),
-            _isLoadingUsage
-                ? const Center(child: Padding(
-                    padding: EdgeInsets.all(24),
-                    child: CircularProgressIndicator(),
-                  ))
-                : _buildUsageGrid(limits),
-            const SizedBox(height: 20),
-
-            // ── Subscription actions ─────────────────────────
-            _buildSectionHeader('Manage Subscription', 'Upgrade, change, or cancel your plan'),
-            const SizedBox(height: 12),
-            _buildActions(plan),
-            const SizedBox(height: 20),
-
-            // ── Payment history ──────────────────────────────
-            _buildSectionHeader('Payment History', 'Your recent transactions'),
-            const SizedBox(height: 12),
-            _buildPaymentHistory(),
-            const SizedBox(height: 24),
-          ],
+          ),
         ),
-      ),
+      ],
     );
   }
 
@@ -169,7 +274,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         ),
         child: Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.amber.shade800, size: 28),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.amber.shade800,
+              size: 28,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -210,19 +319,19 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: kOnSurface,
+              color: context.cs.onSurface,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13.5,
               height: 1.45,
-              color: kOnSurfaceVariant,
+              color: context.cs.onSurfaceVariant,
             ),
           ),
         ],
@@ -234,13 +343,14 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
   Widget _buildUsageGrid(PlanLimits limits) {
     final usage = _usage ?? {};
+    final size = windowSizeOf(context);
     return GridView.count(
-      crossAxisCount: 2,
+      crossAxisCount: size == WindowSize.expanded ? 4 : 2,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       mainAxisSpacing: 12,
       crossAxisSpacing: 12,
-      childAspectRatio: 1.3,
+      childAspectRatio: size == WindowSize.expanded ? 1.15 : 1.3,
       children: [
         _UsageCard(
           label: 'Invoices',
@@ -279,7 +389,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   Widget _buildActions(AppPlan plan) {
     return Container(
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(26),
         boxShadow: const [kSubtleShadow],
       ),
@@ -290,31 +400,24 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             icon: Icons.rocket_launch_rounded,
             title: plan == AppPlan.expired ? 'Upgrade Plan' : 'Change Plan',
             subtitle: plan == AppPlan.expired
-                ? 'Unlock more features with Pro'
+                ? 'Unlock more features with Pro or Enterprise'
                 : 'Switch to a different plan',
             onTap: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const UpgradeScreen()),
-              );
+              Navigator.of(
+                context,
+              ).push(MaterialPageRoute(builder: (_) => const UpgradeScreen()));
             },
           ),
 
-          // Cancel / Reactivate (paid plans only)
+          // Cancel (paid plans only)
           if (plan != AppPlan.expired) ...[
             const Divider(height: 1, thickness: 1, indent: 18, endIndent: 18),
-            if (_cancelAtPeriodEnd)
-              _ActionTile(
-                icon: Icons.replay_rounded,
-                title: 'Reactivate Subscription',
-                subtitle: 'Resume your plan before it expires',
-                isLoading: _isReactivating,
-                onTap: _reactivate,
-              )
-            else
+            if (!_cancelAtPeriodEnd)
               _ActionTile(
                 icon: Icons.cancel_outlined,
                 title: 'Cancel Subscription',
-                subtitle: 'You will retain access until the billing period ends',
+                subtitle:
+                    'You will retain access until the billing period ends',
                 isLoading: _isCancelling,
                 titleColor: const Color(0xFFB3261E),
                 onTap: () => _showCancelDialog(),
@@ -322,17 +425,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ],
 
           // Cancellation notice
-          if (_cancelAtPeriodEnd && PlanService.instance.currentPeriodEnd != null) ...[
+          if (_cancelAtPeriodEnd &&
+              PlanService.instance.currentPeriodEnd != null) ...[
             const Divider(height: 1, thickness: 1, indent: 18, endIndent: 18),
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded, color: Colors.amber.shade700, size: 20),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.amber.shade700,
+                    size: 20,
+                  ),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Your plan will end on ${DateFormat('dd MMM yyyy').format(PlanService.instance.currentPeriodEnd!)}',
+                      'Your plan will end on ${DateFormat('dd MMM yyyy').format(PlanService.instance.currentPeriodEnd!)}. After that, you can purchase a new plan if you want to continue.',
                       style: TextStyle(
                         color: Colors.amber.shade800,
                         fontSize: 13,
@@ -356,7 +464,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
         title: const Text('Cancel Subscription?'),
         content: const Text(
-          'You will keep access to your current plan until the end of the billing period. After that, your account will revert to the Free plan.',
+          'You will keep access to your current plan until the end of the billing period. After that, your account will continue with the BillRaja Enterprise plan.',
         ),
         actions: [
           TextButton(
@@ -365,7 +473,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB3261E)),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFB3261E),
+            ),
             child: const Text('Cancel Plan'),
           ),
         ],
@@ -384,32 +494,16 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(success
-                ? 'Subscription cancelled. You will retain access until the end of this billing period.'
-                : 'Failed to cancel subscription. Please try again.'),
+            content: Text(
+              success
+                  ? 'Subscription cancelled. You will retain access until the end of this billing period.'
+                  : 'Failed to cancel subscription. Please try again.',
+            ),
           ),
         );
       }
     } finally {
       if (mounted) setState(() => _isCancelling = false);
-    }
-  }
-
-  Future<void> _reactivate() async {
-    setState(() => _isReactivating = true);
-    try {
-      final success = await PaymentService.instance.reactivateSubscription();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success
-                ? 'Subscription reactivated!'
-                : 'Failed to reactivate. Please try again.'),
-          ),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isReactivating = false);
     }
   }
 
@@ -433,18 +527,22 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           return Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: kSurfaceLowest,
+              color: context.cs.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(26),
               boxShadow: const [kSubtleShadow],
             ),
-            child: const Column(
+            child: Column(
               children: [
-                Icon(Icons.receipt_long_outlined, size: 40, color: kOnSurfaceVariant),
+                Icon(
+                  Icons.receipt_long_outlined,
+                  size: 40,
+                  color: context.cs.onSurfaceVariant,
+                ),
                 SizedBox(height: 12),
                 Text(
                   'No payments yet',
                   style: TextStyle(
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -455,7 +553,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
         return Container(
           decoration: BoxDecoration(
-            color: kSurfaceLowest,
+            color: context.cs.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(26),
             boxShadow: const [kSubtleShadow],
           ),
@@ -463,8 +561,11 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: payments.length,
-            separatorBuilder: (_, __) => const Divider(
-              height: 1, thickness: 1, indent: 18, endIndent: 18,
+            separatorBuilder: (context, index) => const Divider(
+              height: 1,
+              thickness: 1,
+              indent: 18,
+              endIndent: 18,
             ),
             itemBuilder: (context, index) {
               final payment = payments[index];
@@ -501,9 +602,10 @@ class _PlanHeaderCard extends StatelessWidget {
   final bool isGrace;
 
   IconData get _planIcon => switch (plan) {
-    AppPlan.expired => Icons.star_border_rounded,
-    AppPlan.trial => Icons.star_rounded,
+    AppPlan.expired => Icons.diamond_rounded,
+    AppPlan.trial => Icons.diamond_rounded,
     AppPlan.pro => Icons.workspace_premium_rounded,
+    AppPlan.enterprise => Icons.diamond_rounded,
   };
 
   String get _statusLabel {
@@ -523,7 +625,9 @@ class _PlanHeaderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cycleName = billingCycle == 'annual' ? 'Annual' : 'Monthly';
-    final price = billingCycle == 'annual' ? limits.priceAnnual : limits.priceMonthly;
+    final price = billingCycle == 'annual'
+        ? limits.priceAnnual
+        : limits.priceMonthly;
     final periodLabel = billingCycle == 'annual' ? '/year' : '/month';
 
     return Container(
@@ -567,7 +671,8 @@ class _PlanHeaderCard extends StatelessWidget {
                         if (plan == AppPlan.trial) ...[
                           const SizedBox(width: 8),
                           _StatusChip(
-                            label: '${PlanService.instance.trialDaysLeft}d trial left',
+                            label:
+                                '${PlanService.instance.trialDaysLeft}d trial left',
                             color: Colors.white.withValues(alpha: 0.25),
                             textColor: Colors.white,
                           ),
@@ -615,7 +720,10 @@ class _PlanHeaderCard extends StatelessWidget {
                     children: [
                       Text(
                         cancelAtPeriodEnd ? 'Ends on' : 'Next billing',
-                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Text(
@@ -633,7 +741,7 @@ class _PlanHeaderCard extends StatelessWidget {
           ] else ...[
             const SizedBox(height: 14),
             Text(
-              'Upgrade to unlock more invoices, customers, WhatsApp sharing, and more.',
+              'You have full access to all Enterprise features — invoicing, team, attendance, reports, and more.',
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.8),
                 fontSize: 14,
@@ -647,8 +755,12 @@ class _PlanHeaderCard extends StatelessWidget {
   }
 
   String _formatCurrency(double amount) {
-    if (amount == 0) return 'Free';
-    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '\u20B9', decimalDigits: 0);
+    if (amount == 0) return 'Free Forever';
+    final fmt = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '\u20B9',
+      decimalDigits: 0,
+    );
     return fmt.format(amount);
   }
 }
@@ -658,11 +770,7 @@ class _PlanHeaderCard extends StatelessWidget {
 // ═════════════════════════════════════════════════════════════════════════════
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({
-    required this.label,
-    required this.color,
-    this.textColor,
-  });
+  const _StatusChip({required this.label, required this.color, this.textColor});
 
   final String label;
   final Color color;
@@ -711,19 +819,21 @@ class _UsageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isUnlimited = max == -1;
     final isDisabled = max == 0;
-    final ratio = isUnlimited || isDisabled ? 0.0 : (max > 0 ? current / max : 0.0);
+    final ratio = isUnlimited || isDisabled
+        ? 0.0
+        : (max > 0 ? current / max : 0.0);
     final progressColor = isUnlimited
         ? kPrimary
         : ratio > 0.9
-            ? Colors.red
-            : ratio > 0.7
-                ? Colors.amber.shade700
-                : kPrimary;
+        ? Colors.red
+        : ratio > 0.7
+        ? Colors.amber.shade700
+        : kPrimary;
 
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(22),
         boxShadow: const [kSubtleShadow],
       ),
@@ -736,10 +846,10 @@ class _UsageCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
-                  color: kOnSurface,
+                  color: context.cs.onSurface,
                 ),
               ),
             ],
@@ -748,14 +858,18 @@ class _UsageCard extends StatelessWidget {
           if (isUnlimited) ...[
             Row(
               children: [
-                const Icon(Icons.check_circle_rounded, size: 18, color: kPrimary),
+                const Icon(
+                  Icons.check_circle_rounded,
+                  size: 18,
+                  color: kPrimary,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   '$current used',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
               ],
@@ -770,18 +884,21 @@ class _UsageCard extends StatelessWidget {
               ),
             ),
           ] else if (isDisabled) ...[
-            const Text(
+            Text(
               'Not available',
               style: TextStyle(
                 fontSize: 13,
-                color: kOnSurfaceVariant,
+                color: context.cs.onSurfaceVariant,
                 fontWeight: FontWeight.w600,
               ),
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Upgrade to unlock',
-              style: TextStyle(fontSize: 11, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 11,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ] else ...[
             Row(
@@ -799,7 +916,7 @@ class _UsageCard extends StatelessWidget {
                           child: CircularProgressIndicator(
                             value: ratio.clamp(0.0, 1.0),
                             strokeWidth: 4,
-                            backgroundColor: kSurfaceDim,
+                            backgroundColor: context.cs.surfaceContainerHighest,
                             valueColor: AlwaysStoppedAnimation(progressColor),
                           ),
                         ),
@@ -820,10 +937,10 @@ class _UsageCard extends StatelessWidget {
                   flex: 2,
                   child: Text(
                     '$current / $max',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
-                      color: kOnSurface,
+                      color: context.cs.onSurface,
                     ),
                   ),
                 ),
@@ -872,7 +989,7 @@ class _ActionTile extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: kPrimaryContainer,
+                  color: context.cs.primaryContainer,
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: isLoading
@@ -892,23 +1009,26 @@ class _ActionTile extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
-                        color: titleColor ?? kOnSurface,
+                        color: titleColor ?? context.cs.onSurface,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 13,
                         height: 1.45,
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(width: 10),
-              const Icon(Icons.chevron_right_rounded, color: kOnSurfaceVariant),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: context.cs.onSurfaceVariant,
+              ),
             ],
           ),
         ),
@@ -944,7 +1064,11 @@ class _PaymentTile extends StatelessWidget {
     final amountInRupees = payment.amount / 100;
     final baseInRupees = payment.baseAmount / 100;
     final gstInRupees = payment.gstAmount / 100;
-    final fmt = NumberFormat.currency(locale: 'en_IN', symbol: '\u20B9', decimalDigits: 0);
+    final fmt = NumberFormat.currency(
+      locale: 'en_IN',
+      symbol: '\u20B9',
+      decimalDigits: 0,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
@@ -972,18 +1096,18 @@ class _PaymentTile extends StatelessWidget {
               children: [
                 Text(
                   fmt.format(amountInRupees),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: kOnSurface,
+                    color: context.cs.onSurface,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   'Base ${fmt.format(baseInRupees)} + GST ${fmt.format(gstInRupees)}',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: kOnSurfaceVariant,
+                    color: context.cs.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -994,10 +1118,10 @@ class _PaymentTile extends StatelessWidget {
             children: [
               Text(
                 DateFormat('dd MMM yy').format(payment.createdAt),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
-                  color: kOnSurfaceVariant,
+                  color: context.cs.onSurfaceVariant,
                 ),
               ),
               const SizedBox(height: 4),
@@ -1007,16 +1131,19 @@ class _PaymentTile extends StatelessWidget {
                   if (payment.method != null) ...[
                     Text(
                       payment.method!.toUpperCase(),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: kTextTertiary,
+                        color: context.cs.onSurfaceVariant.withAlpha(153),
                       ),
                     ),
                     const SizedBox(width: 6),
                   ],
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
                     decoration: BoxDecoration(
                       color: _statusColor.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(999),

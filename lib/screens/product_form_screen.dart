@@ -1,11 +1,20 @@
 import 'package:billeasy/modals/product.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/services/product_service.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:billeasy/utils/error_helpers.dart';
 import 'package:flutter/material.dart';
 
 const _kUnits = [
-  'pcs', 'kg', 'g', 'ltr', 'ml',
-  'box', 'pack', 'dozen', 'meter',
+  'pcs',
+  'kg',
+  'g',
+  'ltr',
+  'ml',
+  'box',
+  'pack',
+  'dozen',
+  'meter',
 ];
 
 class ProductFormScreen extends StatefulWidget {
@@ -22,19 +31,18 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _svc = ProductService();
 
-  final _nameCtrl        = TextEditingController();
-  final _descCtrl        = TextEditingController();
-  final _priceCtrl       = TextEditingController();
-  final _categoryCtrl    = TextEditingController();
-  final _hsnCtrl         = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
+  final _priceCtrl = TextEditingController();
+  final _categoryCtrl = TextEditingController();
+  final _hsnCtrl = TextEditingController();
   final _currentStockCtrl = TextEditingController();
-  final _minStockCtrl     = TextEditingController();
+  final _minStockCtrl = TextEditingController();
 
   String _unit = 'pcs';
-  bool   _isSaving = false;
-  bool   _gstApplicable = false;
+  bool _isSaving = false;
+  bool _gstApplicable = false;
   double _gstRate = 18.0;
-  final bool _trackInventory = true;
 
   bool get _isEditing => widget.initialProduct != null;
 
@@ -43,16 +51,20 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.initState();
     final p = widget.initialProduct;
     if (p != null) {
-      _nameCtrl.text     = p.name;
-      _descCtrl.text     = p.description;
-      _priceCtrl.text    = p.unitPrice > 0 ? p.unitPrice.toString() : '';
+      _nameCtrl.text = p.name;
+      _descCtrl.text = p.description;
+      _priceCtrl.text = p.unitPrice > 0 ? p.unitPrice.toString() : '';
       _categoryCtrl.text = p.category;
-      _unit              = _kUnits.contains(p.unit) ? p.unit : 'pcs';
-      _hsnCtrl.text      = p.hsnCode;
-      _gstApplicable     = p.gstApplicable;
-      _gstRate           = p.gstRate;
-      _currentStockCtrl.text = p.currentStock > 0 ? p.currentStock.toString() : '';
-      _minStockCtrl.text     = p.minStockAlert > 0 ? p.minStockAlert.toString() : '';
+      _unit = _kUnits.contains(p.unit) ? p.unit : 'pcs';
+      _hsnCtrl.text = p.hsnCode;
+      _gstApplicable = p.gstApplicable;
+      _gstRate = p.gstRate;
+      _currentStockCtrl.text = p.currentStock > 0
+          ? p.currentStock.toString()
+          : '';
+      _minStockCtrl.text = p.minStockAlert > 0
+          ? p.minStockAlert.toString()
+          : '';
     }
   }
 
@@ -68,61 +80,65 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     super.dispose();
   }
 
-  InputDecoration _dec(String label, {String? hint, IconData? icon, String? helperText}) =>
-      InputDecoration(
-        labelText: label,
-        hintText: hint,
-        helperText: helperText,
-        labelStyle: const TextStyle(color: kOnSurfaceVariant, fontSize: 13),
-        hintStyle:  const TextStyle(color: kTextTertiary),
-        helperStyle: const TextStyle(color: kTextTertiary, fontSize: 11),
-        prefixIcon: icon != null
-            ? Icon(icon, color: kOnSurfaceVariant, size: 20)
-            : null,
-        filled: true,
-        fillColor: kSurfaceContainerLow,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: kPrimary, width: 1.5),
-        ),
-        errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: kOverdue),
-        ),
-        focusedErrorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide:
-              const BorderSide(color: kOverdue, width: 1.5),
-        ),
-      );
+  InputDecoration _dec(
+    String label, {
+    String? hint,
+    IconData? icon,
+    String? helperText,
+  }) => InputDecoration(
+    labelText: label,
+    hintText: hint,
+    helperText: helperText,
+    labelStyle: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 13),
+    hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153)),
+    helperStyle: TextStyle(
+      color: context.cs.onSurfaceVariant.withAlpha(153),
+      fontSize: 11,
+    ),
+    prefixIcon: icon != null
+        ? Icon(icon, color: context.cs.onSurfaceVariant, size: 20)
+        : null,
+    filled: true,
+    fillColor: context.cs.surfaceContainerLow,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide.none,
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide.none,
+    ),
+    focusedBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: kPrimary, width: 1.5),
+    ),
+    errorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: kOverdue),
+    ),
+    focusedErrorBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: const BorderSide(color: kOverdue, width: 1.5),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
-    final title =
-        _isEditing ? 'Edit Product' : 'Add Product';
+    final title = _isEditing ? 'Edit Product' : 'Add Product';
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: context.cs.surface,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
-          style: const TextStyle(
-            color: kOnSurface,
+          style: TextStyle(
+            color: context.cs.onSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
@@ -132,8 +148,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
         child: Form(
           key: _formKey,
           child: ListView(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
             children: [
               // -- Avatar preview --
               Center(
@@ -143,15 +158,15 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     final initials = _nameCtrl.text.trim().isEmpty
                         ? '?'
                         : _nameCtrl.text
-                            .trim()
-                            .split(' ')
-                            .where((w) => w.isNotEmpty)
-                            .take(2)
-                            .map((w) => w[0].toUpperCase())
-                            .join();
+                              .trim()
+                              .split(' ')
+                              .where((w) => w.isNotEmpty)
+                              .take(2)
+                              .map((w) => w[0].toUpperCase())
+                              .join();
                     return CircleAvatar(
                       radius: 34,
-                      backgroundColor: kPrimaryContainer,
+                      backgroundColor: context.cs.primaryContainer,
                       child: Text(
                         initials,
                         style: const TextStyle(
@@ -183,10 +198,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                         hint: 'e.g. Rice, Notebook, Service\u2026',
                         icon: Icons.inventory_2_outlined,
                       ),
-                      validator: (v) =>
-                          (v == null || v.trim().isEmpty)
-                              ? 'Product name is required'
-                              : null,
+                      validator: (v) => (v == null || v.trim().isEmpty)
+                          ? 'Product name is required'
+                          : null,
                     ),
                     const SizedBox(height: 14),
 
@@ -234,9 +248,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           flex: 3,
                           child: TextFormField(
                             controller: _priceCtrl,
-                            keyboardType:
-                                const TextInputType.numberWithOptions(
-                                    decimal: true),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             decoration: _dec(
                               'Unit Price (\u20b9)',
                               hint: '0',
@@ -244,7 +258,8 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             ),
                             validator: (v) {
                               final n = double.tryParse(
-                                  v?.trim().replaceAll(',', '') ?? '');
+                                v?.trim().replaceAll(',', '') ?? '',
+                              );
                               if (n == null || n < 0) {
                                 return 'Enter a valid price';
                               }
@@ -262,10 +277,12 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             isExpanded: true,
                             decoration: _dec('Unit'),
                             items: _kUnits
-                                .map((u) => DropdownMenuItem(
-                                      value: u,
-                                      child: Text(u),
-                                    ))
+                                .map(
+                                  (u) => DropdownMenuItem(
+                                    value: u,
+                                    child: Text(u),
+                                  ),
+                                )
                                 .toList(),
                             onChanged: (v) =>
                                 setState(() => _unit = v ?? 'pcs'),
@@ -287,11 +304,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 150),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 6),
+                              horizontal: 12,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: sel
-                                  ? kPrimaryContainer
-                                  : kSurfaceContainerLow,
+                                  ? context.cs.primaryContainer
+                                  : context.cs.surfaceContainerLow,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -301,7 +320,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 fontWeight: sel
                                     ? FontWeight.w700
                                     : FontWeight.w500,
-                                color: sel ? kPrimary : kOnSurfaceVariant,
+                                color: sel
+                                    ? kPrimary
+                                    : context.cs.onSurfaceVariant,
                               ),
                             ),
                           ),
@@ -337,15 +358,19 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     // GST Applicable toggle
                     Row(
                       children: [
-                        Icon(Icons.percent_rounded, color: kOnSurfaceVariant, size: 20),
+                        Icon(
+                          Icons.percent_rounded,
+                          color: context.cs.onSurfaceVariant,
+                          size: 20,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             'GST Applicable',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w600,
-                              color: kOnSurface,
+                              color: context.cs.onSurface,
                             ),
                           ),
                         ),
@@ -364,9 +389,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                       const SizedBox(height: 10),
                       Text(
                         'GST Rate',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
-                          color: kOnSurfaceVariant,
+                          color: context.cs.onSurfaceVariant,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -380,11 +405,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 150),
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 7),
+                                horizontal: 14,
+                                vertical: 7,
+                              ),
                               decoration: BoxDecoration(
                                 color: sel
                                     ? kPrimary
-                                    : kSurfaceContainerLow,
+                                    : context.cs.surfaceContainerLow,
                                 borderRadius: BorderRadius.circular(20),
                               ),
                               child: Text(
@@ -392,7 +419,9 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 style: TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
-                                  color: sel ? Colors.white : kOnSurfaceVariant,
+                                  color: sel
+                                      ? Colors.white
+                                      : context.cs.onSurfaceVariant,
                                 ),
                               ),
                             ),
@@ -416,10 +445,13 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     // Track Inventory toggle
                     Row(
                       children: [
-                        Icon(Icons.inventory_rounded,
-                            color: kPrimary, size: 20),
+                        Icon(
+                          Icons.inventory_rounded,
+                          color: kPrimary,
+                          size: 20,
+                        ),
                         const SizedBox(width: 10),
-                        const Expanded(
+                        Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -427,7 +459,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 'Inventory',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w600,
-                                  color: kOnSurface,
+                                  color: context.cs.onSurface,
                                   fontSize: 14,
                                 ),
                               ),
@@ -435,7 +467,7 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                                 'Stock levels & movement tracking',
                                 style: TextStyle(
                                   fontSize: 11,
-                                  color: kOnSurfaceVariant,
+                                  color: context.cs.onSurfaceVariant,
                                 ),
                               ),
                             ],
@@ -445,31 +477,31 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     ),
 
                     const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _currentStockCtrl,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(
-                                decimal: true),
-                        decoration: _dec(
-                          'Current Stock',
-                          hint: '0',
-                          icon: Icons.numbers_rounded,
-                        ),
+                    TextFormField(
+                      controller: _currentStockCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
                       ),
-                      const SizedBox(height: 14),
-                      TextFormField(
-                        controller: _minStockCtrl,
-                        keyboardType:
-                            const TextInputType.numberWithOptions(
-                                decimal: true),
-                        decoration: _dec(
-                          'Min Stock Alert',
-                          hint: '0',
-                          icon: Icons.warning_amber_rounded,
-                          helperText:
-                              'Get alerted when stock falls below this level',
-                        ),
+                      decoration: _dec(
+                        'Current Stock',
+                        hint: '0',
+                        icon: Icons.numbers_rounded,
                       ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _minStockCtrl,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: _dec(
+                        'Min Stock Alert',
+                        hint: '0',
+                        icon: Icons.warning_amber_rounded,
+                        helperText:
+                            'Get alerted when stock falls below this level',
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -494,18 +526,17 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
                     _isSaving
                         ? 'Saving\u2026'
                         : _isEditing
-                            ? 'Save Changes'
-                            : 'Add Product',
+                        ? 'Save Changes'
+                        : 'Add Product',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        kPrimary.withValues(alpha: 0.45),
+                    disabledBackgroundColor: kPrimary.withValues(alpha: 0.45),
                     disabledForegroundColor: Colors.white,
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -525,29 +556,47 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
   // -- Helpers --
 
   Widget _card({required Widget child}) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: kSurfaceLowest,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: const [kWhisperShadow],
-        ),
-        child: child,
-      );
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: context.cs.surfaceContainerLowest,
+      borderRadius: BorderRadius.circular(20),
+      boxShadow: const [kWhisperShadow],
+    ),
+    child: child,
+  );
 
   Widget _sectionLabel(String text) => Text(
-        text,
-        style: const TextStyle(
-          color: kOnSurface,
-          fontSize: 14,
-          fontWeight: FontWeight.w700,
-        ),
-      );
+    text,
+    style: TextStyle(
+      color: context.cs.onSurface,
+      fontSize: 14,
+      fontWeight: FontWeight.w700,
+    ),
+  );
 
   // -- Logic --
 
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
+
+    final isEditing = widget.initialProduct != null;
+    if (!(isEditing
+        ? TeamService.instance.can.canEditProduct
+        : TeamService.instance.can.canAddProduct)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEditing
+                ? 'You don\'t have permission to edit products.'
+                : 'You don\'t have permission to add products.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isSaving = true);
 
     try {
@@ -575,7 +624,14 @@ class _ProductFormScreenState extends State<ProductFormScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save product: $e')),
+        SnackBar(
+          content: Text(
+            userFriendlyError(
+              e,
+              fallback: 'Failed to save product. Please try again.',
+            ),
+          ),
+        ),
       );
     } finally {
       if (mounted) setState(() => _isSaving = false);

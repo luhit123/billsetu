@@ -30,7 +30,7 @@ class InvoiceCard extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
         boxShadow: const [kSubtleShadow],
         border: Border(
@@ -52,8 +52,8 @@ class InvoiceCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: kPrimaryContainer,
-                  foregroundColor: kPrimary,
+                  backgroundColor: context.cs.primaryContainer,
+                  foregroundColor: context.cs.primary,
                   child: Text(
                     _clientInitial(invoice.clientName, invoice.clientId),
                     style: const TextStyle(fontWeight: FontWeight.w700),
@@ -66,17 +66,17 @@ class InvoiceCard extends StatelessWidget {
                     children: [
                       Text(
                         invoice.invoiceNumber,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: kOnSurface,
+                          color: context.cs.onSurface,
                         ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         invoice.clientName,
-                        style: const TextStyle(
-                          color: kOnSurface,
+                        style: TextStyle(
+                          color: context.cs.onSurface,
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                         ),
@@ -86,8 +86,8 @@ class InvoiceCard extends StatelessWidget {
                       const SizedBox(height: 8),
                       Text(
                         '${_dateFormat.format(invoice.createdAt)} \u2022 ${_currencyFormat.format(invoice.grandTotal)}',
-                        style: const TextStyle(
-                          color: kOnSurfaceVariant,
+                        style: TextStyle(
+                          color: context.cs.onSurfaceVariant,
                           fontSize: 13,
                         ),
                         maxLines: 1,
@@ -127,10 +127,10 @@ class InvoiceCard extends StatelessWidget {
                       child: IconButton(
                         onPressed: () => _showActions(context),
                         icon: const Icon(Icons.more_horiz_rounded, size: 22),
-                        color: kOnSurfaceVariant,
+                        color: context.cs.onSurfaceVariant,
                         padding: EdgeInsets.zero,
                         style: IconButton.styleFrom(
-                          backgroundColor: kSurfaceContainerLow,
+                          backgroundColor: context.cs.surfaceContainerLow,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),

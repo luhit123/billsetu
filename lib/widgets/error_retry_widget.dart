@@ -24,7 +24,7 @@ class ErrorRetryWidget extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: kTextSecondary, fontSize: 15),
+              style: TextStyle(color: context.cs.onSurfaceVariant, fontSize: 15),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
@@ -32,7 +32,7 @@ class ErrorRetryWidget extends StatelessWidget {
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimary,
+                backgroundColor: context.cs.primary,
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),

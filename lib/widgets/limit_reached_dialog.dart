@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/services/team_service.dart';
 import '../screens/upgrade_screen.dart';
-import '../services/plan_service.dart';
 
 class LimitReachedDialog extends StatelessWidget {
   final String title;
@@ -72,7 +72,7 @@ class LimitReachedDialog extends StatelessWidget {
               child: LinearProgressIndicator(
                 value: usageFraction,
                 minHeight: 8,
-                backgroundColor: kSurfaceContainerHigh,
+                backgroundColor: context.cs.surfaceContainerHigh,
                 valueColor: AlwaysStoppedAnimation(
                   usageFraction >= 1.0 ? kOverdue : kPrimary,
                 ),
@@ -81,37 +81,51 @@ class LimitReachedDialog extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '${(usageFraction * 100).toStringAsFixed(0)}% used',
-              style: const TextStyle(fontSize: 12, color: kOnSurfaceVariant),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.cs.onSurfaceVariant,
+              ),
             ),
           ],
           const SizedBox(height: 12),
-          Text(
-            'Unlock with ${_unlockPlanLabel()} plan',
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: kPrimary,
+          if (TeamService.instance.isTeamMember)
+            Text(
+              'Contact your team owner to upgrade the plan.',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: context.cs.onSurfaceVariant,
+              ),
+            )
+          else
+            Text(
+              'Unlock with ${_unlockPlanLabel()} plan',
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: kPrimary,
+              ),
             ),
-          ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(TeamService.instance.isTeamMember ? 'OK' : 'Cancel'),
         ),
-        FilledButton(
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => UpgradeScreen(featureName: featureName),
-              ),
-            );
-          },
-          child: const Text('Upgrade'),
-        ),
+        if (!TeamService.instance.isTeamMember)
+          FilledButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => UpgradeScreen(featureName: featureName),
+                ),
+              );
+            },
+            child: const Text('Upgrade'),
+          ),
       ],
     );
   }

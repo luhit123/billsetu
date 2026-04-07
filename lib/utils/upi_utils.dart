@@ -46,24 +46,6 @@ String? validateUpiId(String? value) {
   return null;
 }
 
-/// Builds a clickable HTTPS payment link that redirects to UPI app.
-/// This URL is clickable in WhatsApp (unlike upi:// deep links).
-///
-/// The link points to the `pay` Cloud Function which serves a
-/// mobile-friendly "Pay Now" page that auto-opens the UPI app.
-String buildUpiWebPaymentLink({
-  required String upiId,
-  required String businessName,
-  required double amount,
-  required String invoiceNumber,
-}) {
-  return 'https://invoice.billraja.online/p'
-      '?pa=${Uri.encodeComponent(upiId)}'
-      '&pn=${Uri.encodeComponent(businessName)}'
-      '&am=${amount.toStringAsFixed(2)}'
-      '&tn=${Uri.encodeComponent(invoiceNumber)}';
-}
-
 /// Generates QR code image bytes (PNG) on-device for PDF embedding.
 /// Works offline — pure computation, no network required.
 Future<Uint8List> generateQrImageBytes(String data, {double size = 200}) async {

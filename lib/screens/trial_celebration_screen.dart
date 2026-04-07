@@ -1,13 +1,18 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
-import 'package:billeasy/theme/app_colors.dart';
-import 'package:billeasy/services/plan_service.dart';
-import 'package:billeasy/services/remote_config_service.dart';
 
-/// Full-screen celebration shown once after first login + onboarding.
+/// Full-screen celebration shown on every login.
+/// Showcases all Enterprise-level features included free with BillRaja.
+/// On first login, tapping "Start Billing" activates the plan (writes createdAt).
 class TrialCelebrationScreen extends StatefulWidget {
   final VoidCallback onContinue;
-  const TrialCelebrationScreen({super.key, required this.onContinue});
+  /// Whether this is the very first time (plan not yet activated).
+  final bool isFirstTime;
+  const TrialCelebrationScreen({
+    super.key,
+    required this.onContinue,
+    this.isFirstTime = false,
+  });
 
   @override
   State<TrialCelebrationScreen> createState() => _TrialCelebrationScreenState();
@@ -18,6 +23,7 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
   late final AnimationController _confettiController;
   late final AnimationController _contentController;
   late final AnimationController _pulseController;
+  late final AnimationController _featureController;
   late final Animation<double> _fadeIn;
   late final Animation<double> _slideUp;
   late final Animation<double> _scaleIn;
@@ -28,23 +34,25 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
   void initState() {
     super.initState();
 
-    // Confetti runs for 3 seconds
     _confettiController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 3000),
     );
 
-    // Content animates in
     _contentController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     );
 
-    // Pulsing glow on the badge
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
+
+    _featureController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+    );
 
     _fadeIn = CurvedAnimation(
       parent: _contentController,
@@ -69,14 +77,15 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Generate confetti particles
     final rng = Random();
     _particles = List.generate(80, (_) => _ConfettiParticle(rng));
 
-    // Start animations
     _confettiController.forward();
     Future.delayed(const Duration(milliseconds: 300), () {
       if (mounted) _contentController.forward();
+    });
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) _featureController.forward();
     });
   }
 
@@ -85,25 +94,51 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
     _confettiController.dispose();
     _contentController.dispose();
     _pulseController.dispose();
+    _featureController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final trialMonths = RemoteConfigService.instance.trialDurationMonths;
-    final daysLeft = PlanService.instance.trialDaysLeft;
-
     return Scaffold(
       body: Stack(
         fit: StackFit.expand,
         children: [
-          // Background gradient
+          // Background gradient — deep purple-blue enterprise feel
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Color(0xFF0A1628), Color(0xFF0D2137), Color(0xFF0A1628)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF0A0E27),
+                  Color(0xFF1A1040),
+                  Color(0xFF0D1B3E),
+                  Color(0xFF0A0E27),
+                ],
+                stops: [0.0, 0.3, 0.7, 1.0],
+              ),
+            ),
+          ),
+
+          // Subtle radial glow behind badge
+          Positioned(
+            top: MediaQuery.of(context).size.height * 0.15,
+            left: 0,
+            right: 0,
+            child: Center(
+              child: Container(
+                width: 300,
+                height: 300,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: RadialGradient(
+                    colors: [
+                      const Color(0xFFFFD700).withAlpha(25),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -131,118 +166,201 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
                   opacity: _fadeIn.value,
                   child: Transform.translate(
                     offset: Offset(0, _slideUp.value),
-                    child: Column(
-                      children: [
-                        const Spacer(flex: 2),
+                    child: SingleChildScrollView(
+                      physics: const BouncingScrollPhysics(),
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          minHeight: MediaQuery.of(context).size.height -
+                              MediaQuery.of(context).padding.top -
+                              MediaQuery.of(context).padding.bottom,
+                        ),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 40),
 
-                        // Pulsing crown/star badge
-                        ScaleTransition(
-                          scale: _pulse,
-                          child: ScaleTransition(
-                            scale: _scaleIn,
-                            child: Container(
-                              width: 120,
-                              height: 120,
+                            // Diamond badge with pulse
+                            ScaleTransition(
+                              scale: _pulse,
+                              child: ScaleTransition(
+                                scale: _scaleIn,
+                                child: Container(
+                                  width: 110,
+                                  height: 110,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color(0xFFFFD700),
+                                        Color(0xFFFFA500),
+                                        Color(0xFFFFD700),
+                                      ],
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(0xFFFFD700).withAlpha(60),
+                                        blurRadius: 50,
+                                        spreadRadius: 15,
+                                      ),
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.diamond_rounded,
+                                    size: 52,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 28),
+
+                            // Enterprise badge pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
-                                shape: BoxShape.circle,
                                 gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
                                   colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
                                 ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFFFD700).withAlpha(80),
-                                    blurRadius: 40,
-                                    spreadRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: const Icon(
-                                Icons.workspace_premium_rounded,
-                                size: 60,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 32),
-
-                        // Title
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
-                          ).createShader(bounds),
-                          child: const Text(
-                            'Welcome to Pro!',
-                            style: TextStyle(
-                              fontSize: 32,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: -0.5,
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 12),
-
-                        Text(
-                          'Your $trialMonths-month free trial is active',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w500,
-                            color: Colors.white.withAlpha(200),
-                          ),
-                        ),
-
-                        const SizedBox(height: 6),
-
-                        Text(
-                          '$daysLeft days of full access remaining',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withAlpha(140),
-                          ),
-                        ),
-
-                        const SizedBox(height: 40),
-
-                        // Feature highlights
-                        _buildFeatureChips(),
-
-                        const Spacer(flex: 3),
-
-                        // CTA button
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 40),
-                          child: SizedBox(
-                            width: double.infinity,
-                            height: 56,
-                            child: ElevatedButton(
-                              onPressed: widget.onContinue,
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: kPrimary,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                elevation: 0,
+                                borderRadius: BorderRadius.circular(20),
                               ),
                               child: const Text(
-                                'Start Billing',
+                                'ENTERPRISE',
                                 style: TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.3,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: Color(0xFF1A1040),
+                                  letterSpacing: 2.0,
                                 ),
                               ),
                             ),
-                          ),
-                        ),
 
-                        const SizedBox(height: 32),
-                      ],
+                            const SizedBox(height: 16),
+
+                            // Title
+                            ShaderMask(
+                              shaderCallback: (bounds) => const LinearGradient(
+                                colors: [Color(0xFFFFD700), Color(0xFFFFA500)],
+                              ).createShader(bounds),
+                              child: Text(
+                                widget.isFirstTime
+                                    ? 'Welcome to BillRaja'
+                                    : 'Welcome Back!',
+                                style: const TextStyle(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 10),
+
+                            Text(
+                              widget.isFirstTime
+                                  ? 'All premium features are yours — completely free'
+                                  : 'Your BillRaja Enterprise plan is active',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                                color: Colors.white.withAlpha(200),
+                              ),
+                            ),
+
+                            const SizedBox(height: 6),
+
+                            Text(
+                              widget.isFirstTime
+                                  ? 'Tap below to activate your free Enterprise plan'
+                                  : 'No limits. No credit card. Completely free.',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.white.withAlpha(140),
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+
+                            const SizedBox(height: 36),
+
+                            // Feature categories
+                            AnimatedBuilder(
+                              animation: _featureController,
+                              builder: (context, _) {
+                                return Opacity(
+                                  opacity: _featureController.value.clamp(0.0, 1.0),
+                                  child: _buildFeatureSections(),
+                                );
+                              },
+                            ),
+
+                            const SizedBox(height: 36),
+
+                            // CTA button
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 40),
+                              child: SizedBox(
+                                width: double.infinity,
+                                height: 56,
+                                child: ElevatedButton(
+                                  onPressed: widget.onContinue,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFFFD700),
+                                    foregroundColor: const Color(0xFF1A1040),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    elevation: 0,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        widget.isFirstTime
+                                            ? 'Activate & Start Billing'
+                                            : 'Continue to Dashboard',
+                                        style: const TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.3,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Icon(Icons.arrow_forward_rounded, size: 20),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                            const SizedBox(height: 16),
+
+                            // Trust line
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.verified_rounded,
+                                    size: 14, color: Colors.white.withAlpha(100)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Trusted by Indian businesses',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withAlpha(100),
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 32),
+                          ],
+                        ),
+                      ),
                     ),
                   ),
                 );
@@ -254,57 +372,138 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
     );
   }
 
-  Widget _buildFeatureChips() {
-    const features = [
-      ('receipt_long', 'Unlimited Invoices'),
-      ('people', 'Unlimited Customers'),
-      ('chat', 'WhatsApp Sharing'),
-      ('bar_chart', 'Reports & Analytics'),
-      ('picture_as_pdf', 'All PDF Templates'),
-      ('palette', 'Custom Branding'),
-    ];
-
-    const iconMap = <String, IconData>{
-      'receipt_long': Icons.receipt_long_rounded,
-      'people': Icons.people_rounded,
-      'chat': Icons.chat_rounded,
-      'bar_chart': Icons.bar_chart_rounded,
-      'picture_as_pdf': Icons.picture_as_pdf_rounded,
-      'palette': Icons.palette_rounded,
-    };
-
+  Widget _buildFeatureSections() {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        alignment: WrapAlignment.center,
-        children: features.map((f) {
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(18),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withAlpha(30)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(iconMap[f.$1] ?? Icons.check_circle_rounded,
-                    size: 16, color: const Color(0xFFFFD700)),
-                const SizedBox(width: 6),
-                Text(
-                  f.$2,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white.withAlpha(220),
-                  ),
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Column(
+        children: [
+          // ── Billing & Invoicing
+          _buildFeatureCategory(
+            'Billing & Invoicing',
+            Icons.receipt_long_rounded,
+            const Color(0xFF4FC3F7),
+            [
+              'Unlimited invoices & customers',
+              'All 20+ PDF templates',
+              'GST/non-GST invoicing',
+              'UPI payment links & QR codes',
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Business Tools
+          _buildFeatureCategory(
+            'Business Tools',
+            Icons.business_center_rounded,
+            const Color(0xFF81C784),
+            [
+              'Purchase orders & inventory',
+              'Reports, analytics & GSTR-3B',
+              'WhatsApp sharing & data export',
+              'Custom branding & logo',
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Team & Attendance
+          _buildFeatureCategory(
+            'Team & Attendance',
+            Icons.groups_rounded,
+            const Color(0xFFBA68C8),
+            [
+              'Unlimited team members',
+              'GPS attendance with geofencing',
+              'Team performance tracking',
+              'Role-based permissions',
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Platform
+          _buildFeatureCategory(
+            'Always Available',
+            Icons.cloud_done_rounded,
+            const Color(0xFFFFB74D),
+            [
+              'Works offline — sync when online',
+              'Multi-language support',
+              'Digital business card',
+              'Membership management',
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFeatureCategory(
+    String title,
+    IconData icon,
+    Color accentColor,
+    List<String> features,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white.withAlpha(10),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withAlpha(20)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: accentColor.withAlpha(30),
+                  borderRadius: BorderRadius.circular(8),
                 ),
-              ],
+                child: Icon(icon, size: 18, color: accentColor),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...features.map(
+            (f) => Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle_rounded,
+                    size: 15,
+                    color: Color(0xFFFFD700),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      f,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.white.withAlpha(200),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          );
-        }).toList(),
+          ),
+        ],
       ),
     );
   }

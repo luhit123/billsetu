@@ -2,6 +2,8 @@ import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/services/client_service.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:billeasy/utils/error_helpers.dart';
 import 'package:flutter/material.dart';
 
 class CustomerFormScreen extends StatefulWidget {
@@ -54,22 +56,22 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
     final subtitle = _isEditing ? s.customerFormSubtitleEdit : s.customerFormSubtitleAdd;
 
     return Scaffold(
-      backgroundColor: kSurface,
+      backgroundColor: context.cs.surface,
       appBar: AppBar(
-        backgroundColor: kSurface,
-        foregroundColor: kOnSurface,
+        backgroundColor: context.cs.surface,
+        foregroundColor: context.cs.onSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         title: Text(
           title,
-          style: const TextStyle(
-            color: kOnSurface,
+          style: TextStyle(
+            color: context.cs.onSurface,
             fontWeight: FontWeight.w700,
             fontSize: 18,
           ),
         ),
-        iconTheme: const IconThemeData(color: kOnSurface),
+        iconTheme: IconThemeData(color: context.cs.onSurface),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
@@ -86,7 +88,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                       width: 52,
                       height: 52,
                       decoration: BoxDecoration(
-                        color: kPrimaryContainer,
+                        color: context.cs.primaryContainer,
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: const Icon(
@@ -102,18 +104,18 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                         children: [
                           Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w700,
-                              color: kOnSurface,
+                              color: context.cs.onSurface,
                               letterSpacing: -0.3,
                             ),
                           ),
                           const SizedBox(height: 4),
                           Text(
                             subtitle,
-                            style: const TextStyle(
-                              color: kOnSurfaceVariant,
+                            style: TextStyle(
+                              color: context.cs.onSurfaceVariant,
                               fontSize: 13,
                               height: 1.45,
                             ),
@@ -215,7 +217,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimary,
+                    backgroundColor: context.cs.primary,
                     disabledBackgroundColor: kPrimary.withValues(alpha: 0.50),
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -236,7 +238,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: kSurfaceLowest,
+        color: context.cs.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(20),
         boxShadow: const [kWhisperShadow],
       ),
@@ -247,10 +249,10 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   Widget _sectionLabel(String text) {
     return Text(
       text,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 13,
         fontWeight: FontWeight.w600,
-        color: kOnSurfaceVariant,
+        color: context.cs.onSurfaceVariant,
         letterSpacing: 0.1,
       ),
     );
@@ -262,11 +264,11 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: const TextStyle(color: kTextTertiary, fontSize: 14),
+      hintStyle: TextStyle(color: context.cs.onSurfaceVariant.withAlpha(153), fontSize: 14),
       errorStyle: const TextStyle(color: Colors.redAccent, fontSize: 12),
-      prefixIcon: Icon(icon, color: kOnSurfaceVariant, size: 20),
+      prefixIcon: Icon(icon, color: context.cs.onSurfaceVariant, size: 20),
       filled: true,
-      fillColor: kSurfaceContainerLow,
+      fillColor: context.cs.surfaceContainerLow,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
@@ -293,6 +295,23 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
 
   Future<void> _saveCustomer() async {
     if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
+    final isEditing = widget.initialClient != null;
+    if (!(isEditing
+        ? TeamService.instance.can.canEditCustomer
+        : TeamService.instance.can.canAddCustomer)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            isEditing
+                ? 'You don\'t have permission to edit customers.'
+                : 'You don\'t have permission to add customers.',
+          ),
+        ),
+      );
       return;
     }
 
@@ -328,7 +347,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(AppStrings.of(context).customerFormFailedSave(error.toString()))),
+        SnackBar(content: Text(AppStrings.of(context).customerFormFailedSave(userFriendlyError(error, fallback: 'Unknown error')))),
       );
     } finally {
       if (mounted) {

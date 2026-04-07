@@ -1,16 +1,17 @@
 import 'package:billeasy/modals/client.dart';
 import 'package:billeasy/utils/firestore_helpers.dart';
+import 'package:billeasy/widgets/connectivity_banner.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:billeasy/services/firestore_page.dart';
+import 'package:billeasy/services/team_service.dart';
+import 'package:flutter/foundation.dart';
 
 class ClientService {
   ClientService({FirebaseFirestore? firestore, FirebaseAuth? firebaseAuth})
-    : _firestore = firestore ?? FirebaseFirestore.instance,
-      _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance;
+    : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
-  final FirebaseAuth _firebaseAuth;
 
   CollectionReference<Map<String, dynamic>> _clientsCollection(String ownerId) {
     return _firestore.collection('users').doc(ownerId).collection('clients');
@@ -128,7 +129,9 @@ class ClientService {
 
   Future<Client?> getClient(String clientId) async {
     final ownerId = _requireOwnerId();
-    final snapshot = await resilientGet(_clientsCollection(ownerId).doc(clientId));
+    final snapshot = await resilientGet(
+      _clientsCollection(ownerId).doc(clientId),
+    );
     final data = snapshot.data();
 
     if (!snapshot.exists || data == null) {
@@ -138,7 +141,20 @@ class ClientService {
     return Client.fromMap(data, docId: snapshot.id);
   }
 
+  /// Maximum allowed client name length.
+  static const _kMaxNameLength = 200;
+
   Future<Client> saveClient(Client client) async {
+    // Input validation
+    if (client.name.trim().isEmpty) {
+      throw ArgumentError('Client name must not be empty');
+    }
+    if (client.name.length > _kMaxNameLength) {
+      throw ArgumentError(
+        'Client name must not exceed $_kMaxNameLength characters',
+      );
+    }
+
     final ownerId = _requireOwnerId();
     final now = DateTime.now();
     final docRef = client.id.trim().isNotEmpty
@@ -150,7 +166,15 @@ class ClientService {
       updatedAt: now,
     );
 
-    await docRef.set(savedClient.toMap(), SetOptions(merge: true));
+    final write = docRef.set(savedClient.toMap(), SetOptions(merge: true));
+    if (ConnectivityService.instance.isOffline) {
+      write.catchError((Object e) {
+        debugPrint('[ClientService] Offline client save queue failed: $e');
+      });
+      return savedClient;
+    }
+
+    await write;
     return savedClient;
   }
 
@@ -167,13 +191,5 @@ class ClientService {
     await _clientsCollection(ownerId).doc(clientId).delete();
   }
 
-  String _requireOwnerId() {
-    final currentUser = _firebaseAuth.currentUser;
-
-    if (currentUser == null) {
-      throw StateError('Sign in is required to manage customers.');
-    }
-
-    return currentUser.uid;
-  }
+  String _requireOwnerId() => TeamService.instance.getEffectiveOwnerId();
 }

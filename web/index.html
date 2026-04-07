@@ -8,19 +8,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <!-- Primary SEO -->
-  <title>BillRaja — All-in-One Billing & Business Management for Growing Businesses</title>
-  <meta name="description" content="BillRaja is the all-in-one billing workspace for startups, small businesses, and growing enterprises. Create bills, manage inventory, track payments, handle GST — everything your business needs in one place.">
-  <meta name="keywords" content="billing app for small business, business management app India, startup billing software, invoice app for growing business, all in one billing solution, SME billing tool, free billing app, billing software for startups, small business management, inventory billing app, BillRaja">
+  <title>BillRaja — Billing, Attendance, Teamwork & GST for Small Businesses</title>
+  <meta name="description" content="BillRaja is the complete business app for small businesses in India. Billing & invoicing, employee attendance tracking, team management, GST compliance, inventory, purchase orders, reports — everything to run your business from one app.">
+  <meta name="keywords" content="small business app India, billing app, employee attendance app, team management app, GST billing software, invoice app India, staff attendance tracker, business management app, inventory management, purchase order app, BillRaja, free billing app, SME tool">
   <meta name="author" content="BillRaja">
   <meta name="theme-color" content="#0057FF">
-  <link rel="canonical" href="https://billeasy-3a6ad.web.app/">
+  <link rel="canonical" href="https://billraja.com/">
 
   <!-- Open Graph / Facebook -->
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://billeasy-3a6ad.web.app/">
-  <meta property="og:title" content="BillRaja — All-in-One Billing for Growing Businesses">
-  <meta property="og:description" content="From creating your first bill to filing GST — one app for everything. Built for startups, small shops, freelancers, and growing businesses across India.">
-  <meta property="og:image" content="https://billeasy-3a6ad.web.app/icons/Icon-512.png">
+  <meta property="og:url" content="https://billraja.com/">
+  <meta property="og:title" content="BillRaja — Billing, Attendance, Teamwork & GST for Small Businesses">
+  <meta property="og:description" content="Run your entire small business from one app — billing, invoicing, employee attendance, team management, GST, inventory, and reports. Built for Indian businesses.">
+  <meta property="og:image" content="https://billraja.com/icons/Icon-512.png">
   <meta property="og:image:width" content="512">
   <meta property="og:image:height" content="512">
   <meta property="og:site_name" content="BillRaja">
@@ -28,9 +28,9 @@
 
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary">
-  <meta name="twitter:title" content="BillRaja — All-in-One Billing for Growing Businesses">
-  <meta name="twitter:description" content="From creating your first bill to filing GST — one app for everything. Built for startups, shops, and growing businesses.">
-  <meta name="twitter:image" content="https://billeasy-3a6ad.web.app/icons/Icon-512.png">
+  <meta name="twitter:title" content="BillRaja — Billing, Attendance, Teamwork & GST for Small Businesses">
+  <meta name="twitter:description" content="Billing, invoicing, employee attendance, team management, GST, inventory — one app for your entire small business.">
+  <meta name="twitter:image" content="https://billraja.com/icons/Icon-512.png">
 
   <!-- Structured Data — SoftwareApplication -->
   <script type="application/ld+json">
@@ -38,8 +38,8 @@
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     "name": "BillRaja",
-    "description": "All-in-one billing and business management workspace for startups, small and medium businesses. Create bills, manage customers, track inventory, handle payments, and stay GST-compliant — all from one app.",
-    "url": "https://billeasy-3a6ad.web.app",
+    "description": "Complete business management app for Indian small businesses. Billing, invoicing, employee attendance tracking, team management, GST compliance, inventory, purchase orders, and business reports — all from one app.",
+    "url": "https://billraja.com",
     "applicationCategory": "BusinessApplication",
     "operatingSystem": "Android, iOS, Web",
     "offers": {
@@ -51,15 +51,17 @@
     "author": {
       "@type": "Organization",
       "name": "BillRaja",
-      "url": "https://billeasy-3a6ad.web.app"
+      "url": "https://billraja.com"
     },
     "featureList": [
-      "Professional bill and invoice creation",
+      "Professional billing and invoicing",
+      "Employee attendance tracking with QR and geo-check-in",
+      "Team management and role-based access",
+      "GST-compliant billing with CGST, SGST, IGST",
       "Customer and client management",
       "Product catalog with inventory tracking",
       "Payment tracking with UPI and QR code support",
       "Purchase order management",
-      "GST-compliant billing with CGST, SGST, IGST",
       "Business reports and analytics dashboard",
       "Share invoices via SMS, WhatsApp, and email",
       "20+ invoice templates",
@@ -67,7 +69,7 @@
       "Works offline — syncs when connected",
       "Available on Android, iOS, and Web"
     ],
-    "screenshot": "https://billeasy-3a6ad.web.app/icons/Icon-512.png",
+    "screenshot": "https://billraja.com/icons/Icon-512.png",
     "audience": {
       "@type": "BusinessAudience",
       "audienceType": "Small and Medium Businesses, Startups, Freelancers, Shopkeepers"
@@ -100,55 +102,148 @@
       height: 100%;
       margin: 0;
       padding: 0;
-      background-color: #F9FAFB;
+      background:
+        radial-gradient(circle at top left, rgba(0, 87, 255, 0.16), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(255, 197, 107, 0.18), transparent 30%),
+        linear-gradient(135deg, #f7faff 0%, #eef5ff 48%, #f9f3ff 100%);
       overflow: hidden;
     }
     .loading {
       display: flex;
-      flex-direction: column;
       justify-content: center;
       align-items: center;
       height: 100vh;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      position: relative;
+      padding: 24px;
+    }
+    .loading::before,
+    .loading::after {
+      content: '';
+      position: absolute;
+      border-radius: 999px;
+      filter: blur(12px);
+      pointer-events: none;
+    }
+    .loading::before {
+      width: 280px;
+      height: 280px;
+      top: -60px;
+      left: -60px;
+      background: radial-gradient(circle, rgba(0, 87, 255, 0.18), transparent 68%);
+    }
+    .loading::after {
+      width: 320px;
+      height: 320px;
+      right: -80px;
+      bottom: -90px;
+      background: radial-gradient(circle, rgba(255, 187, 92, 0.18), transparent 70%);
+    }
+    .loading-card {
+      width: min(100%, 560px);
+      padding: 28px;
+      border-radius: 32px;
+      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      box-shadow: 0 28px 70px rgba(13, 28, 60, 0.12);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+    }
+    .loading-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0, 87, 255, 0.08);
+      color: #0057FF;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+    .loading-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
     }
     .loading-logo {
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
+      width: 64px;
+      height: 64px;
+      border-radius: 20px;
       background: linear-gradient(135deg, #0057FF, #004CE1);
       display: flex;
       justify-content: center;
       align-items: center;
       color: #fff;
-      font-weight: 800;
-      font-size: 24px;
-      margin-bottom: 16px;
+      font-weight: 900;
+      font-size: 28px;
+      box-shadow: 0 20px 38px rgba(0, 87, 255, 0.24);
+      flex-shrink: 0;
+    }
+    .loading-copy {
+      min-width: 0;
+    }
+    .loading-title {
+      color: #16202B;
+      font-size: clamp(28px, 4vw, 42px);
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: -0.05em;
+      margin: 0 0 10px;
     }
     .loading-text {
-      color: #586064;
-      font-size: 14px;
+      color: #5A6875;
+      font-size: 15px;
       font-weight: 500;
+      line-height: 1.55;
+      margin: 0;
+    }
+    .loading-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+    .loading-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #22303A;
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(0, 87, 255, 0.12);
+    }
+    .loading-microcopy {
+      margin-top: 18px;
+      color: #6B7785;
+      font-size: 13px;
+      line-height: 1.5;
     }
     .loading-bar {
-      width: 120px;
+      width: 100%;
       height: 3px;
       background: #EAF0F6;
       border-radius: 3px;
-      margin-top: 12px;
+      margin-top: 20px;
       overflow: hidden;
     }
     .loading-bar::after {
       content: '';
       display: block;
-      width: 40px;
+      width: 120px;
       height: 100%;
       background: #0057FF;
       border-radius: 3px;
-      animation: slide 1.2s ease-in-out infinite;
+      animation: slide 1.4s ease-in-out infinite;
     }
     @keyframes slide {
-      0% { transform: translateX(-40px); }
-      100% { transform: translateX(120px); }
+      0% { transform: translateX(-120px); }
+      100% { transform: translateX(540px); }
     }
     /* Hide Firebase Auth reCAPTCHA badge — it overlaps buttons on mobile */
     .grecaptcha-badge {
@@ -167,46 +262,71 @@
       height: 1px;
       overflow: hidden;
     }
+    @media (max-width: 640px) {
+      .loading-card {
+        padding: 22px;
+        border-radius: 26px;
+      }
+      .loading-header {
+        align-items: flex-start;
+      }
+      .loading-logo {
+        width: 56px;
+        height: 56px;
+        border-radius: 18px;
+        font-size: 24px;
+      }
+    }
   </style>
 </head>
 <body>
   <!-- Crawlable content for search engines (Flutter canvas is invisible to bots) -->
   <div class="seo-content">
-    <h1>BillRaja — The All-in-One Billing App for Growing Businesses</h1>
-    <p>Whether you're a startup creating your first invoice, a small shop managing daily sales, or a growing business handling hundreds of clients — BillRaja is built for you. One app that takes you from creating your very first bill to handling full GST compliance as you scale.</p>
+    <h1>BillRaja — Billing, Employee Attendance, Team Management & GST App for Small Businesses in India</h1>
+    <p>BillRaja is the complete business management app built for Indian small businesses. From billing and invoicing to employee attendance tracking, team collaboration, membership management, and GST compliance — run your entire business from one app. Available on Android, iOS, and Web.</p>
 
-    <h2>Built for Every Stage of Your Business</h2>
-    <p>BillRaja grows with you. Start simple with quick bills and customer management. As your business expands, unlock inventory tracking, purchase orders, GST reports, and analytics — all without switching tools.</p>
+    <h2>Billing & Invoicing</h2>
+    <p>Create professional GST-compliant invoices in seconds. Choose from 20+ invoice templates. Share bills instantly via WhatsApp, SMS, email, or direct link. Collect payments faster with UPI QR codes embedded in every invoice. Track payment status — paid, pending, overdue — all at a glance.</p>
 
-    <h3>For Startups & Freelancers</h3>
-    <p>Create professional invoices in under 60 seconds. Share them instantly via WhatsApp or SMS. Get paid faster with UPI QR codes embedded in every bill. No accounting degree needed.</p>
+    <h2>Employee Attendance Tracking</h2>
+    <p>Track employee attendance with QR code check-in and geo-location verification. Monitor daily attendance, view attendance reports, and manage staff schedules. Perfect for shops, offices, warehouses, and field teams. No separate attendance app needed.</p>
 
-    <h3>For Small & Medium Businesses</h3>
-    <p>Manage your entire customer base, track who owes you money, send payment reminders, and keep your product catalog organized. Real-time dashboards show you exactly how your business is performing.</p>
+    <h2>Team Management & Collaboration</h2>
+    <p>Invite team members, assign roles, and control access with role-based permissions. Manage who can create invoices, view reports, or handle customers. Built for business owners who need their staff to collaborate without giving away full control.</p>
 
-    <h3>For Growing Enterprises</h3>
-    <p>Full GST compliance with CGST, SGST, and IGST calculations. Generate GSTR-1 and GSTR-3B reports. Manage purchase orders and supplier relationships. Track inventory with low-stock alerts.</p>
+    <h2>GST Compliance</h2>
+    <p>Automatic GST calculations with CGST, SGST, and IGST support. Generate GST reports for filing. HSN code support for all products. Stay compliant without hiring an accountant. Built specifically for Indian tax requirements.</p>
 
-    <h2>Everything You Need, Nothing You Don't</h2>
+    <h2>Customer & Client Management</h2>
+    <p>Maintain a complete customer database. Track purchase history, outstanding balances, and payment patterns for every client. Organize customers into groups. Send payment reminders and balance notifications.</p>
+
+    <h2>Inventory & Product Management</h2>
+    <p>Manage your product catalog with pricing, HSN codes, and real-time stock tracking. Get low-stock alerts. Track product movements and stock history. Create purchase orders for suppliers.</p>
+
+    <h2>Membership & Subscription Management</h2>
+    <p>Manage member subscriptions, recurring plans, and membership renewals. Perfect for gyms, clubs, coaching centres, co-working spaces, and any subscription-based business.</p>
+
+    <h2>Business Reports & Analytics</h2>
+    <p>Real-time dashboards showing revenue trends, outstanding amounts, top customers, and business performance. GST reports, sales reports, and payment analytics — make data-driven decisions.</p>
+
+    <h2>All Features</h2>
     <ul>
-      <li>Create professional bills and invoices in seconds</li>
-      <li>20+ beautiful invoice templates to match your brand</li>
-      <li>Customer management — track every client and their payment history</li>
-      <li>Product catalog with pricing, HSN codes, and stock tracking</li>
-      <li>Payment tracking — paid, partially paid, pending, overdue at a glance</li>
-      <li>UPI payments — collect money with QR codes on every invoice</li>
-      <li>Share bills via SMS, WhatsApp, email, or direct link</li>
-      <li>Purchase order management for supplier relationships</li>
-      <li>Inventory management with low-stock alerts</li>
-      <li>GST-compliant billing with automatic tax calculations</li>
-      <li>Business reports — revenue trends, outstanding amounts, client analytics</li>
-      <li>Works offline — create bills even without internet, syncs automatically</li>
+      <li>Professional billing and invoicing with 20+ templates</li>
+      <li>Employee attendance tracking — QR code and geo check-in</li>
+      <li>Team management with role-based access control</li>
+      <li>GST-compliant billing — CGST, SGST, IGST calculations</li>
+      <li>Customer and client management with payment history</li>
+      <li>Product catalog with inventory and stock tracking</li>
+      <li>UPI payment collection with QR codes on invoices</li>
+      <li>Purchase order management for suppliers</li>
+      <li>Membership and subscription plan management</li>
+      <li>Business reports and analytics dashboard</li>
+      <li>Share invoices via WhatsApp, SMS, email, or link</li>
+      <li>Payment reminders and balance notifications</li>
       <li>Multi-language — English, Hindi, Tamil, Gujarati, Assamese</li>
-      <li>Available on Android, iOS, and Web — use anywhere</li>
+      <li>Works offline — syncs automatically when connected</li>
+      <li>Available on Android, iOS, and Web</li>
     </ul>
-
-    <h2>Why Businesses Choose BillRaja</h2>
-    <p>Unlike bloated accounting software that takes weeks to learn, BillRaja is designed to be simple from day one. No training, no setup fees, no complexity. Just open the app and start billing. As your business grows, BillRaja grows with you — adding features exactly when you need them.</p>
 
     <h2>Who Uses BillRaja?</h2>
     <ul>
@@ -215,27 +335,47 @@
       <li>Startups and new businesses</li>
       <li>Small manufacturers and traders</li>
       <li>Service providers and agencies</li>
-      <li>Food and restaurant businesses</li>
+      <li>Restaurants and food businesses</li>
+      <li>Gyms, coaching centres, and clubs</li>
       <li>Wholesale distributors</li>
-      <li>Any business that creates bills</li>
+      <li>Any small business in India</li>
     </ul>
 
-    <h2>From First Bill to Full Business Management</h2>
-    <p>BillRaja isn't just a billing app — it's your complete business companion. Create your first bill today. Track your first payment. Add your first customer. And as you grow from 10 invoices a month to 10,000, BillRaja handles it all without breaking a sweat.</p>
+    <h2>Why Choose BillRaja Over Other Apps?</h2>
+    <p>Most billing apps only do billing. Most attendance apps only do attendance. BillRaja combines billing, attendance, team management, GST, inventory, and membership into one simple app. No need to pay for 5 different tools. Start free, upgrade to Pro when your business grows.</p>
 
-    <h2>Start Free, Grow Without Limits</h2>
-    <p>Begin with our free plan — unlimited invoices, unlimited customers. When you're ready for more power, upgrade to Pro for inventory management, purchase orders, priority support, and advanced analytics.</p>
+    <h2>Best Billing App for Small Business in India</h2>
+    <p>BillRaja is designed specifically for Indian small businesses. GST-ready from day one. UPI payment support. Multi-language interface. Works offline in areas with poor connectivity. Simple enough for anyone to use — no training needed.</p>
 
     <nav>
+      <a href="/pricing.html">Pricing</a>
+      <a href="/security.html">Security</a>
+      <a href="/support.html">Support</a>
       <a href="/privacy-policy.html">Privacy Policy</a>
-      <a href="/terms-conditions.html">Terms & Conditions</a>
+      <a href="/terms-conditions.html">Terms &amp; Conditions</a>
+      <a href="/account-deletion.html">Account Deletion</a>
     </nav>
   </div>
 
   <div class="loading" id="loading">
-    <div class="loading-logo">B</div>
-    <div class="loading-text">Loading BillRaja...</div>
-    <div class="loading-bar"></div>
+    <div class="loading-card">
+      <div class="loading-badge">Web Workspace</div>
+      <div class="loading-header">
+        <div class="loading-logo">B</div>
+        <div class="loading-copy">
+          <h1 class="loading-title">BillRaja</h1>
+          <p class="loading-text">Modern billing for invoices, teams, collections, and day-to-day business operations.</p>
+        </div>
+      </div>
+      <div class="loading-pills">
+        <div class="loading-pill">GST invoicing</div>
+        <div class="loading-pill">Team controls</div>
+        <div class="loading-pill">Attendance</div>
+        <div class="loading-pill">Membership ops</div>
+      </div>
+      <div class="loading-microcopy">Preparing your workspace for web. This keeps the experience fast, secure, and responsive across desktop, tablet, and mobile screens.</div>
+      <div class="loading-bar"></div>
+    </div>
   </div>
 
   <script src="flutter_bootstrap.js" async></script>

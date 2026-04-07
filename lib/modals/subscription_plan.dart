@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 enum PlanDuration { weekly, monthly, quarterly, halfYearly, yearly, custom }
+
 enum PlanType { recurring, package }
 
 class SubscriptionPlan {
@@ -18,11 +19,12 @@ class SubscriptionPlan {
   final PlanType planType; // recurring or package (one-time)
   final bool autoRenew;
   final bool isActive;
+  final bool isDeleted;
   final int memberCount;
   final String colorHex; // e.g. '#1E3A8A'
   final bool gstEnabled;
-  final double gstRate;   // 5, 12, 18, or 28
-  final String gstType;   // 'cgst_sgst' or 'igst'
+  final double gstRate; // 5, 12, 18, or 28
+  final String gstType; // 'cgst_sgst' or 'igst'
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -41,6 +43,7 @@ class SubscriptionPlan {
     this.planType = PlanType.recurring,
     this.autoRenew = true,
     this.isActive = true,
+    this.isDeleted = false,
     this.memberCount = 0,
     this.colorHex = '#1E3A8A',
     this.gstEnabled = false,
@@ -97,7 +100,8 @@ class SubscriptionPlan {
       ownerId: map['ownerId'] as String? ?? '',
       name: map['name'] as String? ?? '',
       description: map['description'] as String? ?? '',
-      benefits: (map['benefits'] as List<dynamic>?)
+      benefits:
+          (map['benefits'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -107,18 +111,19 @@ class SubscriptionPlan {
       joiningFee: (map['joiningFee'] as num?)?.toDouble() ?? 0,
       discountPercent: (map['discountPercent'] as num?)?.toDouble() ?? 0,
       gracePeriodDays: map['gracePeriodDays'] as int? ?? 3,
-      planType: (map['planType'] as String?) == 'package' ? PlanType.package : PlanType.recurring,
+      planType: (map['planType'] as String?) == 'package'
+          ? PlanType.package
+          : PlanType.recurring,
       autoRenew: map['autoRenew'] as bool? ?? true,
       isActive: map['isActive'] as bool? ?? true,
+      isDeleted: map['isDeleted'] as bool? ?? false,
       memberCount: map['memberCount'] as int? ?? 0,
       colorHex: map['colorHex'] as String? ?? '#1E3A8A',
       gstEnabled: map['gstEnabled'] as bool? ?? false,
       gstRate: (map['gstRate'] as num?)?.toDouble() ?? 18.0,
       gstType: map['gstType'] as String? ?? 'cgst_sgst',
-      createdAt:
-          (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      updatedAt:
-          (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      createdAt: (map['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      updatedAt: (map['updatedAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
     );
   }
 
@@ -138,6 +143,7 @@ class SubscriptionPlan {
       'planType': planType.name,
       'autoRenew': autoRenew,
       'isActive': isActive,
+      'isDeleted': isDeleted,
       'memberCount': memberCount,
       'colorHex': colorHex,
       'gstEnabled': gstEnabled,
@@ -163,6 +169,7 @@ class SubscriptionPlan {
     PlanType? planType,
     bool? autoRenew,
     bool? isActive,
+    bool? isDeleted,
     int? memberCount,
     String? colorHex,
     bool? gstEnabled,
@@ -186,6 +193,7 @@ class SubscriptionPlan {
       planType: planType ?? this.planType,
       autoRenew: autoRenew ?? this.autoRenew,
       isActive: isActive ?? this.isActive,
+      isDeleted: isDeleted ?? this.isDeleted,
       memberCount: memberCount ?? this.memberCount,
       colorHex: colorHex ?? this.colorHex,
       gstEnabled: gstEnabled ?? this.gstEnabled,

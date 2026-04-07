@@ -74,5 +74,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>BillRaja needs your location to verify attendance check-in at your office.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>BillRaja needs your location to verify attendance check-in at your office.</string>
 </dict>
 </plist>
