@@ -26,7 +26,7 @@ const kDefaultGstRate = 18.0;
 const kMaxInvoiceLineItems = 200;
 
 /// Maximum allowed search prefixes per invoice (must match firestore.rules).
-const kMaxSearchPrefixes = 60;
+const kMaxSearchPrefixes = 30;
 
 // ── Pagination ──────────────────────────────────────────────────────────────
 const kDefaultPageSize = 25;

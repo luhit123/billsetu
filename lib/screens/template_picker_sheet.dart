@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/plan_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
@@ -70,11 +72,21 @@ class TemplatePicker extends StatefulWidget {
 
 class _TemplatePickerState extends State<TemplatePicker> {
   late InvoiceTemplate _selected;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
     super.initState();
     _selected = widget.current;
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
   }
 
   @override

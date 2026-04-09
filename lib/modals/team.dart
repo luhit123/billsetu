@@ -20,6 +20,7 @@ class Team {
     this.officeLongitude,
     this.officeRadius = 200,
     this.officeAddress = '',
+    this.requireGeofenceOnCheckout = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -38,6 +39,9 @@ class Team {
   final double? officeLongitude;
   final double officeRadius; // meters
   final String officeAddress;
+
+  /// If true, geo check-out also validates the geofence (default: false).
+  final bool requireGeofenceOnCheckout;
 
   /// Whether office location is configured for geofence attendance.
   bool get hasOfficeLocation => officeLatitude != null && officeLongitude != null;
@@ -78,6 +82,7 @@ class Team {
       officeLongitude: (map['officeLongitude'] as num?)?.toDouble(),
       officeRadius: (map['officeRadius'] as num?)?.toDouble() ?? 200,
       officeAddress: map['officeAddress'] as String? ?? '',
+      requireGeofenceOnCheckout: map['requireGeofenceOnCheckout'] as bool? ?? false,
       rolePermissions: rolePerms,
       createdAt: (map['createdAt'] as Timestamp?)?.toDate(),
       updatedAt: (map['updatedAt'] as Timestamp?)?.toDate(),
@@ -98,6 +103,7 @@ class Team {
       if (officeLongitude != null) 'officeLongitude': officeLongitude,
       'officeRadius': officeRadius,
       'officeAddress': officeAddress,
+      'requireGeofenceOnCheckout': requireGeofenceOnCheckout,
       'rolePermissions': rolePermissions,
       'createdAt': createdAt != null ? Timestamp.fromDate(createdAt!) : FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
@@ -117,6 +123,7 @@ class Team {
     double? officeLongitude,
     double? officeRadius,
     String? officeAddress,
+    bool? requireGeofenceOnCheckout,
     Map<String, Map<String, bool>>? rolePermissions,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -134,6 +141,7 @@ class Team {
       officeLongitude: officeLongitude ?? this.officeLongitude,
       officeRadius: officeRadius ?? this.officeRadius,
       officeAddress: officeAddress ?? this.officeAddress,
+      requireGeofenceOnCheckout: requireGeofenceOnCheckout ?? this.requireGeofenceOnCheckout,
       rolePermissions: rolePermissions ?? this.rolePermissions,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,

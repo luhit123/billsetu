@@ -431,7 +431,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: _planType == PlanType.recurring
-                                      ? context.cs.onPrimary.withOpacity(0.7)
+                                      ? context.cs.onPrimary.withValues(alpha: 0.7)
                                       : context.cs.onSurfaceVariant.withAlpha(
                                           153,
                                         ),
@@ -485,7 +485,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: _planType == PlanType.package
-                                      ? context.cs.onPrimary.withOpacity(0.7)
+                                      ? context.cs.onPrimary.withValues(alpha: 0.7)
                                       : context.cs.onSurfaceVariant.withAlpha(
                                           153,
                                         ),
@@ -615,7 +615,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     vertical: 12,
                   ),
                   decoration: BoxDecoration(
-                    color: context.cs.primaryContainer.withOpacity(0.35),
+                    color: context.cs.primaryContainer.withValues(alpha: 0.35),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -708,7 +708,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       ),
                       Switch.adaptive(
                         value: _autoRenew,
-                        activeColor: kPrimary,
+                        activeTrackColor: kPrimary,
                         onChanged: (v) => setState(() => _autoRenew = v),
                       ),
                     ],
@@ -750,7 +750,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                     ),
                     Switch.adaptive(
                       value: _gstEnabled,
-                      activeColor: kPrimary,
+                      activeTrackColor: kPrimary,
                       onChanged: (v) => setState(() => _gstEnabled = v),
                     ),
                   ],
@@ -839,7 +839,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: _gstType == 'cgst_sgst'
-                                        ? context.cs.onPrimary.withOpacity(0.7)
+                                        ? context.cs.onPrimary.withValues(alpha: 0.7)
                                         : context.cs.onSurfaceVariant.withAlpha(
                                             153,
                                           ),
@@ -880,7 +880,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: _gstType == 'igst'
-                                        ? context.cs.onPrimary.withOpacity(0.7)
+                                        ? context.cs.onPrimary.withValues(alpha: 0.7)
                                         : context.cs.onSurfaceVariant.withAlpha(
                                             153,
                                           ),
@@ -900,7 +900,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: context.cs.primaryContainer.withOpacity(0.3),
+                      color: context.cs.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -931,7 +931,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       vertical: 8,
                     ),
                     decoration: BoxDecoration(
-                      color: context.cs.primaryContainer.withOpacity(0.3),
+                      color: context.cs.primaryContainer.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Row(
@@ -1059,7 +1059,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                       end: Alignment.bottomRight,
                       colors: [
                         _parseColor(_colorHex),
-                        _parseColor(_colorHex).withOpacity(0.7),
+                        _parseColor(_colorHex).withValues(alpha: 0.7),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(16),
@@ -1087,7 +1087,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                               vertical: 3,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.2),
+                              color: Colors.white.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
@@ -1095,7 +1095,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                                   ? 'Package'
                                   : 'Recurring',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.9),
+                                color: Colors.white.withValues(alpha: 0.9),
                                 fontSize: 10,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -1110,7 +1110,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                             : _duration.name[0].toUpperCase() +
                                   _duration.name.substring(1),
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1158,7 +1158,7 @@ class _PlanBuilderScreenState extends State<PlanBuilderScreen> {
                           boxShadow: selected
                               ? [
                                   BoxShadow(
-                                    color: pc.color.withOpacity(0.4),
+                                    color: pc.color.withValues(alpha: 0.4),
                                     blurRadius: 8,
                                     offset: const Offset(0, 2),
                                   ),

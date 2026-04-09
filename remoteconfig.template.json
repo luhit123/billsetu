@@ -107,7 +107,7 @@
     },
     "pro_price_monthly": {
       "defaultValue": {
-        "value": "59"
+        "value": "99"
       },
       "description": "Pro monthly price INR (incl GST).",
       "valueType": "NUMBER"
@@ -177,7 +177,7 @@
     },
     "pro_price_annual": {
       "defaultValue": {
-        "value": "499"
+        "value": "999"
       },
       "description": "Pro annual price INR (incl GST).",
       "valueType": "NUMBER"
@@ -338,14 +338,14 @@
     },
     "enterprise_price_monthly": {
       "defaultValue": {
-        "value": "99"
+        "value": "199"
       },
       "description": "Enterprise monthly price INR (incl GST).",
       "valueType": "NUMBER"
     },
     "enterprise_price_annual": {
       "defaultValue": {
-        "value": "999"
+        "value": "1999"
       },
       "description": "Enterprise annual price INR (incl GST).",
       "valueType": "NUMBER"
@@ -380,14 +380,14 @@
     },
     "expired_max_invoices": {
       "defaultValue": {
-        "value": "5"
+        "value": "10"
       },
       "description": "Free plan: max invoices/month.",
       "valueType": "NUMBER"
     },
     "trial_duration_months": {
       "defaultValue": {
-        "value": "6"
+        "value": "3"
       },
       "description": "How many months the free trial lasts for new users.",
       "valueType": "NUMBER"
@@ -482,6 +482,20 @@
       },
       "description": "Pro plan: Attendance system access.",
       "valueType": "BOOLEAN"
+    },
+    "pro_max_membership_members": {
+      "defaultValue": {
+        "value": "50"
+      },
+      "description": "Pro plan: max membership members per business (50). SEC-009 server-side enforcement.",
+      "valueType": "NUMBER"
+    },
+    "enterprise_max_membership_members": {
+      "defaultValue": {
+        "value": "-1"
+      },
+      "description": "Enterprise plan: max membership members (-1=unlimited). SEC-009 server-side enforcement.",
+      "valueType": "NUMBER"
     },
     "google_maps_api_key": {
       "defaultValue": {

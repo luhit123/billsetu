@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import '../services/plan_service.dart';
@@ -5,6 +7,7 @@ import '../services/payment_service.dart';
 import '../services/remote_config_service.dart';
 import '../theme/app_colors.dart';
 import '../utils/error_helpers.dart';
+import '../utils/formatters.dart';
 import '../utils/responsive.dart';
 import '../widgets/aurora_app_backdrop.dart';
 
@@ -18,6 +21,21 @@ class UpgradeScreen extends StatefulWidget {
 
 class _UpgradeScreenState extends State<UpgradeScreen> {
   bool _isAnnual = true;
+  StreamSubscription<AppPlan>? _planSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
+  }
 
   PlanLimits get _proLimits => PlanService.limits[AppPlan.pro]!;
   PlanLimits get _enterpriseLimits => PlanService.limits[AppPlan.enterprise]!;
@@ -302,80 +320,58 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
     );
   }
 
-  void _showSuccessDialog(String planId) {
+  Future<void> _showSuccessDialog(String planId) async {
     final displayName = planId == 'enterprise' ? 'Enterprise' : 'Pro';
-    showDialog(
+
+    // Wait for PlanService to confirm the upgrade (Firestore snapshot may lag
+    // behind Razorpay webhook). Time out after 8 s so the dialog is never stuck.
+    final targetPlan = planId == 'enterprise' ? AppPlan.enterprise : AppPlan.pro;
+    if (PlanService.instance.currentPlan != targetPlan) {
+      await PlanService.instance.planStream
+          .firstWhere((p) => p == targetPlan)
+          .timeout(const Duration(seconds: 8), onTimeout: () => targetPlan);
+    }
+
+    if (!mounted) return;
+    final isEnterprise = planId == 'enterprise';
+    final gradient = isEnterprise
+        ? const LinearGradient(colors: [Color(0xFF7B2FF7), Color(0xFFC471F5)])
+        : kSignatureGradient;
+    final billingLabel = _isAnnual ? 'Annual' : 'Monthly';
+    final renewalDate = PlanService.instance.currentPeriodEnd;
+    final renewalStr = renewalDate != null
+        ? kDateFormat.format(renewalDate)
+        : null;
+
+    showGeneralDialog(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        content: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: planId == 'enterprise'
-                      ? const LinearGradient(
-                          colors: [Color(0xFF7B2FF7), Color(0xFFC471F5)],
-                        )
-                      : kSignatureGradient,
-                ),
-                child: const Icon(
-                  Icons.check_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-              const SizedBox(height: 20),
-              Text(
-                'Welcome to $displayName!',
-                style: TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: context.cs.onSurface,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Your $displayName plan is now active. Enjoy all features!',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 14,
-                  color: context.cs.onSurfaceVariant,
-                  height: 1.4,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: context.cs.primary,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pop();
-                  },
-                  child: const Text(
-                    'Start Using',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+      barrierLabel: 'Success',
+      barrierColor: Colors.black54,
+      transitionDuration: const Duration(milliseconds: 400),
+      transitionBuilder: (ctx, anim, _, child) {
+        final curve = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+        return ScaleTransition(
+          scale: Tween<double>(begin: 0.7, end: 1.0).animate(curve),
+          child: FadeTransition(opacity: anim, child: child),
+        );
+      },
+      pageBuilder: (ctx, _, _) => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 380),
+          child: Material(
+            color: Colors.transparent,
+            child: _SuccessDialogContent(
+              displayName: displayName,
+              subtitle: '$billingLabel plan activated. All features are unlocked.',
+              renewalDate: renewalStr,
+              gradient: gradient,
+              isEnterprise: isEnterprise,
+              onStart: () {
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
+              },
+            ),
           ),
         ),
       ),
@@ -630,7 +626,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   // Pro Plan Card
                   _buildPlanCard(
                     planName: 'Pro',
-                    tagline: 'For growing businesses',
+                    tagline: 'Unlimited billing, reports, and WhatsApp shares',
                     price: _proPrice(),
                     monthlyEquiv: _isAnnual ? _proMonthlyEquiv() : null,
                     period: _period(),
@@ -648,7 +644,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   // Enterprise Plan Card
                   _buildPlanCard(
                     planName: 'Enterprise',
-                    tagline: 'For teams that need everything',
+                    tagline: 'Teams, GPS attendance, geofencing, and full control',
                     price: _enterprisePrice(),
                     monthlyEquiv: _isAnnual ? _enterpriseMonthlyEquiv() : null,
                     period: _period(),
@@ -767,7 +763,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                           Expanded(
                             child: _buildPlanCard(
                               planName: 'Pro',
-                              tagline: 'For growing businesses',
+                              tagline: 'Unlimited billing, reports, and WhatsApp shares',
                               price: _proPrice(),
                               monthlyEquiv: _isAnnual
                                   ? _proMonthlyEquiv()
@@ -786,7 +782,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                           Expanded(
                             child: _buildPlanCard(
                               planName: 'Enterprise',
-                              tagline: 'For teams that need everything',
+                              tagline: 'Teams, GPS attendance, geofencing, and full control',
                               price: _enterprisePrice(),
                               monthlyEquiv: _isAnnual
                                   ? _enterpriseMonthlyEquiv()
@@ -912,7 +908,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'A cleaner pricing experience for web, with faster comparison and a clearer buying decision.',
+                  'Get ${RemoteConfigService.instance.trialDurationMonths} months free. Every feature, zero payment.',
                   style: TextStyle(
                     fontSize: 31,
                     fontWeight: FontWeight.w800,
@@ -923,7 +919,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  'Compare limits, team access, billing options, and premium tools without digging through stacked mobile cards.',
+                  'Start billing, manage teams, track attendance — all unlocked from day one.',
                   style: TextStyle(
                     fontSize: 14,
                     height: 1.5,
@@ -1062,7 +1058,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '$trialDays days left in your trial. You still have full premium access.',
+                              '$trialDays days free remaining — all features unlocked, no payment needed.',
                               style: TextStyle(
                                 fontSize: 12.5,
                                 height: 1.4,
@@ -1195,7 +1191,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
               enterpriseValue: _comparisonValueForPlan(
                 feature['label']?.toString() ?? '',
                 AppPlan.enterprise,
-                feature['pro'],
+                feature['enterprise'] ?? feature['pro'],
                 limits: _enterpriseLimits,
               ),
             ),
@@ -1557,48 +1553,59 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     // Price
-                    Text(
-                      '\u20B9',
-                      style: TextStyle(
-                        color: Colors.white.withAlpha(200),
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        height: 1,
-                      ),
-                    ),
-                    Text(
-                      price.toStringAsFixed(0),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 40,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -1.5,
-                        height: 1,
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Text(
-                        period,
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(160),
-                          fontSize: 15,
-                          fontWeight: FontWeight.w500,
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '\u20B9',
+                              style: TextStyle(
+                                color: Colors.white.withAlpha(200),
+                                fontSize: 22,
+                                fontWeight: FontWeight.w600,
+                                height: 1,
+                              ),
+                            ),
+                            Text(
+                              price.toStringAsFixed(0),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 40,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: -1.5,
+                                height: 1,
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4),
+                              child: Text(
+                                period,
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha(160),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                            if (monthlyEquiv != null) ...[
+                              const SizedBox(width: 8),
+                              Text(
+                                '(\u20B9${monthlyEquiv.toStringAsFixed(0)}/mo)',
+                                style: TextStyle(
+                                  color: Colors.white.withAlpha(180),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ),
-                    if (monthlyEquiv != null) ...[
-                      const SizedBox(width: 8),
-                      Text(
-                        '(\u20B9${monthlyEquiv.toStringAsFixed(0)}/mo)',
-                        style: TextStyle(
-                          color: Colors.white.withAlpha(180),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
+                    const SizedBox(width: 8),
                     // CTA button in header
                     if (isCurrentPlan)
                       Container(
@@ -1636,6 +1643,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
                         child: InkWell(
+                          mouseCursor: SystemMouseCursors.click,
                           onTap: onUpgrade,
                           borderRadius: BorderRadius.circular(12),
                           child: Padding(
@@ -1880,24 +1888,27 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
       child: Row(
         children: [
           Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isAnnual = false),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: !_isAnnual ? kPrimary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Text(
-                    'Monthly',
-                    style: TextStyle(
-                      color: !_isAnnual
-                          ? Colors.white
-                          : context.cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => setState(() => _isAnnual = false),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: !_isAnnual ? kPrimary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      'Monthly',
+                      style: TextStyle(
+                        color: !_isAnnual
+                            ? Colors.white
+                            : context.cs.onSurfaceVariant,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -1905,51 +1916,54 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
             ),
           ),
           Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _isAnnual = true),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                decoration: BoxDecoration(
-                  color: _isAnnual ? kPrimary : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Annual',
-                        style: TextStyle(
-                          color: _isAnnual
-                              ? Colors.white
-                              : context.cs.onSurfaceVariant,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: () => setState(() => _isAnnual = true),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  decoration: BoxDecoration(
+                    color: _isAnnual ? kPrimary : Colors.transparent,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Annual',
+                          style: TextStyle(
+                            color: _isAnnual
+                                ? Colors.white
+                                : context.cs.onSurfaceVariant,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
-                      ),
-                      if (_isAnnual && savings > 0) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.greenAccent.shade400,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'SAVE $savings%',
-                            style: const TextStyle(
-                              color: Color(0xFF1B5E20),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                        if (_isAnnual && savings > 0) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.shade400,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'SAVE $savings%',
+                              style: const TextStyle(
+                                color: Color(0xFF1B5E20),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -2022,7 +2036,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$trialDays days left in your free trial',
+                  '$trialDays days free remaining',
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: context.isDark
@@ -2033,7 +2047,7 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'You have full Pro access during your trial',
+                  'All Enterprise features are free — no payment needed yet',
                   style: TextStyle(
                     color: context.isDark
                         ? Colors.amber.shade400
@@ -2118,48 +2132,45 @@ class _UpgradeScreenState extends State<UpgradeScreen> {
   List<_PlanFeature> _buildEnterpriseFeatures() {
     final l = _enterpriseLimits;
     return [
+      // Lead with Enterprise differentiators
+      if (l.hasAttendance)
+        const _PlanFeature(
+          Icons.location_on_rounded,
+          'GPS attendance with geofencing',
+        ),
+      _PlanFeature(
+        Icons.groups_rounded,
+        _formatLimit(l.maxTeamMembers, 'team member'),
+      ),
+      const _PlanFeature(
+        Icons.admin_panel_settings_rounded,
+        'Role-based permissions & controls',
+      ),
       _PlanFeature(
         Icons.receipt_long_rounded,
         l.maxInvoicesPerMonth == -1
-            ? 'Unlimited invoices'
+            ? 'Unlimited invoices & customers'
             : '${l.maxInvoicesPerMonth} invoices/month',
-      ),
-      _PlanFeature(
-        Icons.people_rounded,
-        _formatLimit(l.maxCustomers, 'customer'),
-      ),
-      _PlanFeature(
-        Icons.inventory_2_rounded,
-        _formatLimit(l.maxProducts, 'product'),
       ),
       _PlanFeature(
         Icons.palette_rounded,
         _formatLimit(l.maxPdfTemplates, 'PDF template'),
       ),
-      _PlanFeature(
-        Icons.groups_rounded,
-        _formatLimit(l.maxTeamMembers, 'team member'),
-      ),
+      if (l.hasReports)
+        const _PlanFeature(
+          Icons.bar_chart_rounded,
+          'Reports, analytics & GSTR-3B',
+        ),
+      if (l.hasPurchaseOrders)
+        const _PlanFeature(Icons.shopping_cart_rounded, 'Purchase orders & inventory'),
+      if (l.hasDataExport)
+        const _PlanFeature(Icons.download_rounded, 'Data export (CSV/Excel)'),
       if (l.maxWhatsAppSharesPerMonth != 0)
         _PlanFeature(
           Icons.share_rounded,
           l.maxWhatsAppSharesPerMonth == -1
               ? 'Unlimited WhatsApp shares'
               : '${l.maxWhatsAppSharesPerMonth} WhatsApp shares/mo',
-        ),
-      if (l.hasReports)
-        const _PlanFeature(
-          Icons.bar_chart_rounded,
-          'Advanced reports & analytics',
-        ),
-      if (l.hasPurchaseOrders)
-        const _PlanFeature(Icons.shopping_cart_rounded, 'Purchase orders'),
-      if (l.hasDataExport)
-        const _PlanFeature(Icons.download_rounded, 'Data export (CSV/Excel)'),
-      if (l.hasAttendance)
-        const _PlanFeature(
-          Icons.fingerprint_rounded,
-          'Team attendance tracking',
         ),
       const _PlanFeature(Icons.support_agent_rounded, 'Priority support'),
     ];
@@ -2253,3 +2264,294 @@ class _WebMetricTile extends StatelessWidget {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// ─── Animated Success Dialog ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+
+class _SuccessDialogContent extends StatefulWidget {
+  final String displayName;
+  final String subtitle;
+  final String? renewalDate;
+  final Gradient gradient;
+  final bool isEnterprise;
+  final VoidCallback onStart;
+
+  const _SuccessDialogContent({
+    required this.displayName,
+    required this.subtitle,
+    this.renewalDate,
+    required this.gradient,
+    required this.isEnterprise,
+    required this.onStart,
+  });
+
+  @override
+  State<_SuccessDialogContent> createState() => _SuccessDialogContentState();
+}
+
+class _SuccessDialogContentState extends State<_SuccessDialogContent>
+    with TickerProviderStateMixin {
+  late final AnimationController _checkCtrl;
+  late final AnimationController _contentCtrl;
+  late final Animation<double> _checkScale;
+  late final Animation<double> _contentSlide;
+  late final Animation<double> _contentFade;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+    _contentCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 500),
+    );
+    _checkScale = CurvedAnimation(parent: _checkCtrl, curve: Curves.elasticOut);
+    _contentSlide = Tween<double>(begin: 20, end: 0).animate(
+      CurvedAnimation(parent: _contentCtrl, curve: Curves.easeOut),
+    );
+    _contentFade = CurvedAnimation(parent: _contentCtrl, curve: Curves.easeIn);
+
+    _checkCtrl.forward();
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _contentCtrl.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _checkCtrl.dispose();
+    _contentCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final accentColor =
+        widget.isEnterprise ? const Color(0xFF7B2FF7) : kPrimary;
+
+    return Container(
+      margin: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: cs.surface,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withAlpha(40),
+            blurRadius: 60,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Gradient header with animated check
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(24, 36, 24, 28),
+            decoration: BoxDecoration(
+              gradient: widget.gradient,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(32),
+              ),
+            ),
+            child: Column(
+              children: [
+                ScaleTransition(
+                  scale: _checkScale,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withAlpha(25),
+                      border: Border.all(
+                        color: Colors.white.withAlpha(40),
+                        width: 2,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                      size: 44,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'You\'re on ${widget.displayName}!',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Content
+          AnimatedBuilder(
+            animation: _contentCtrl,
+            builder: (_, _) => Transform.translate(
+              offset: Offset(0, _contentSlide.value),
+              child: Opacity(
+                opacity: _contentFade.value,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+                  child: Column(
+                    children: [
+                      Text(
+                        widget.subtitle,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          height: 1.5,
+                          fontWeight: FontWeight.w500,
+                          color: cs.onSurfaceVariant,
+                        ),
+                      ),
+                      if (widget.renewalDate != null) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accentColor.withAlpha(12),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: accentColor.withAlpha(25)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.event_rounded,
+                                  size: 14, color: accentColor),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Renews on ${widget.renewalDate}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: accentColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                      // Feature highlights
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _SuccessFeatureChip(
+                            icon: Icons.receipt_long_rounded,
+                            label: 'Invoices',
+                            color: accentColor,
+                          ),
+                          const SizedBox(width: 8),
+                          _SuccessFeatureChip(
+                            icon: Icons.groups_rounded,
+                            label: 'Teams',
+                            color: accentColor,
+                          ),
+                          const SizedBox(width: 8),
+                          _SuccessFeatureChip(
+                            icon: Icons.bar_chart_rounded,
+                            label: 'Reports',
+                            color: accentColor,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 24),
+                      SizedBox(
+                        width: double.infinity,
+                        child: FilledButton(
+                          onPressed: widget.onStart,
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accentColor,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Let\'s Go',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              SizedBox(width: 6),
+                              Icon(
+                                Icons.arrow_forward_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SuccessFeatureChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color color;
+
+  const _SuccessFeatureChip({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: color.withAlpha(15),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withAlpha(30)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -330,7 +330,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           notes: widget.initialClient?.notes ?? '',
           groupId: widget.initialClient?.groupId ?? '',
           groupName: widget.initialClient?.groupName ?? '',
-          gstin: _gstinController.text.trim(),
+          gstin: _gstinController.text.trim().toUpperCase(),
           createdAt: widget.initialClient?.createdAt,
           updatedAt: widget.initialClient?.updatedAt,
         ),

@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/foundation.dart';
 
@@ -11,9 +9,15 @@ import 'package:flutter/foundation.dart';
 ///
 /// Raw exception details are never exposed to users — they are logged via
 /// [debugPrint] for developer debugging only.
-String userFriendlyError(Object error, {String? fallback}) {
-  // Always log the raw error for debugging
+String userFriendlyError(Object error, {String? fallback, StackTrace? stackTrace}) {
+  // Always log the raw error for debugging.
   debugPrint('[Error] $error');
+  // If a stack trace is available, log it in debug builds to pinpoint
+  // the exact source (especially for "Null check operator used on a null value").
+  final st = stackTrace ?? (error is Error ? error.stackTrace : null);
+  if (st != null) {
+    debugPrint('$st');
+  }
 
   // Network / connectivity errors
   if (_isNetworkError(error)) {
@@ -45,7 +49,6 @@ String userFriendlyError(Object error, {String? fallback}) {
 
 bool _isNetworkError(Object error) {
   final msg = error.toString().toLowerCase();
-  if (error is SocketException) return true;
   if (msg.contains('socketexception')) return true;
   if (msg.contains('host unreachable')) return true;
   if (msg.contains('network is unreachable')) return true;

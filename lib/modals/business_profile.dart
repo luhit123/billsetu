@@ -21,6 +21,8 @@ class BusinessProfile {
     this.defaultGstRate = '',
     this.invoicePrefix = 'INV-',
     this.showTaxOnPdf = true,
+    this.signatoryName = '',
+    this.acceptTeamInvites = true,
   });
 
   final String ownerId;
@@ -57,6 +59,12 @@ class BusinessProfile {
   final String invoicePrefix;
   final bool showTaxOnPdf;
 
+  // Signatory display name (shown on invoices instead of signature image)
+  final String signatoryName;
+
+  // Whether this user accepts team invitations from others
+  final bool acceptTeamInvites;
+
   factory BusinessProfile.fromMap(Map<String, dynamic> map, {String? ownerId}) {
     return BusinessProfile(
       ownerId: ownerId ?? (map['ownerId'] as String? ?? ''),
@@ -80,6 +88,8 @@ class BusinessProfile {
       defaultGstRate: map['defaultGstRate'] as String? ?? '',
       invoicePrefix: map['invoicePrefix'] as String? ?? 'INV-',
       showTaxOnPdf: map['showTaxOnPdf'] as bool? ?? true,
+      signatoryName: map['signatoryName'] as String? ?? '',
+      acceptTeamInvites: map['acceptTeamInvites'] as bool? ?? true,
     );
   }
 
@@ -106,6 +116,8 @@ class BusinessProfile {
       'defaultGstRate': defaultGstRate,
       'invoicePrefix': invoicePrefix,
       'showTaxOnPdf': showTaxOnPdf,
+      'signatoryName': signatoryName,
+      'acceptTeamInvites': acceptTeamInvites,
     };
   }
 
@@ -131,6 +143,8 @@ class BusinessProfile {
     String? defaultGstRate,
     String? invoicePrefix,
     bool? showTaxOnPdf,
+    String? signatoryName,
+    bool? acceptTeamInvites,
   }) {
     return BusinessProfile(
       ownerId: ownerId ?? this.ownerId,
@@ -154,6 +168,8 @@ class BusinessProfile {
       defaultGstRate: defaultGstRate ?? this.defaultGstRate,
       invoicePrefix: invoicePrefix ?? this.invoicePrefix,
       showTaxOnPdf: showTaxOnPdf ?? this.showTaxOnPdf,
+      signatoryName: signatoryName ?? this.signatoryName,
+      acceptTeamInvites: acceptTeamInvites ?? this.acceptTeamInvites,
     );
   }
 }

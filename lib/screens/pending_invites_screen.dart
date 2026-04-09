@@ -21,6 +21,7 @@ class _PendingInvitesScreenState extends State<PendingInvitesScreen> {
   List<TeamInvite>? _invites;
   bool _loading = true;
   String? _processingId;
+  String? _loadError;
 
   @override
   void initState() {
@@ -31,9 +32,24 @@ class _PendingInvitesScreenState extends State<PendingInvitesScreen> {
   Future<void> _loadInvites() async {
     try {
       final invites = await TeamService.instance.getPendingInvites();
-      if (mounted) setState(() { _invites = invites; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _invites = invites;
+          _loading = false;
+          _loadError = null;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _invites = []; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _invites = [];
+          _loading = false;
+          _loadError = userFriendlyError(
+            e,
+            fallback: 'Could not load team invites. Please try again.',
+          );
+        });
+      }
     }
   }
 
@@ -64,12 +80,29 @@ class _PendingInvitesScreenState extends State<PendingInvitesScreen> {
         children: [
           Icon(Icons.mail_outline_rounded, size: 48, color: kTextTertiary),
           const SizedBox(height: 12),
-          Text('No pending invites', style: TextStyle(color: kTextSecondary)),
-          const SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: widget.onDone,
-            child: const Text('Continue'),
+          Text(
+            _loadError ?? 'No pending invites',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: kTextSecondary),
           ),
+          const SizedBox(height: 16),
+          if (_loadError != null)
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _loading = true;
+                  _loadError = null;
+                });
+                _loadInvites();
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+            )
+          else
+            ElevatedButton(
+              onPressed: widget.onDone,
+              child: const Text('Continue'),
+            ),
         ],
       ),
     );
@@ -92,7 +125,7 @@ class _PendingInvitesScreenState extends State<PendingInvitesScreen> {
                 Row(
                   children: [
                     CircleAvatar(
-                      backgroundColor: kPrimary.withOpacity(0.12),
+                      backgroundColor: kPrimary.withValues(alpha: 0.12),
                       child: Icon(Icons.groups_rounded, color: kPrimary),
                     ),
                     const SizedBox(width: 12),

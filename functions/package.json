@@ -9,11 +9,13 @@
     "lint": "node --check index.js",
     "test": "node --test test/**/*.test.js",
     "serve": "firebase emulators:start --only functions",
+    "predeploy:secrets": "node -e \"const s=process.env.RAZORPAY_WEBHOOK_SECRET||'';if(!s){console.error('ERROR: RAZORPAY_WEBHOOK_SECRET is not set. Run: firebase functions:secrets:set RAZORPAY_WEBHOOK_SECRET');process.exit(1)}else{console.log('Webhook secret verified.')}\"",
     "deploy": "firebase deploy --only functions"
   },
   "dependencies": {
     "firebase-admin": "^13.0.2",
     "firebase-functions": "^6.4.0",
+    "nodemailer": "^8.0.5",
     "razorpay": "^2.9.6"
   }
 }

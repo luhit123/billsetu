@@ -38,18 +38,16 @@ class _TeamInviteScreenState extends State<TeamInviteScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Let the Scaffold handle keyboard insets natively — this ensures
+      // the focused TextField scrolls into view on mobile web instead of
+      // disappearing behind the soft keyboard.
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(title: const Text('Invite Member')),
       body: SafeArea(
-        child: AnimatedPadding(
-          duration: const Duration(milliseconds: 180),
-          curve: Curves.easeOut,
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            children: [
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          children: [
               TextField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -83,20 +81,26 @@ class _TeamInviteScreenState extends State<TeamInviteScreen> {
               const SizedBox(height: 20),
               Text('Role', style: Theme.of(context).textTheme.titleSmall),
               const SizedBox(height: 8),
-              ..._availableRoles.map(
-                (role) => RadioListTile<TeamRole>(
-                  value: role,
-                  groupValue: _selectedRole,
-                  onChanged: (v) => setState(() => _selectedRole = v!),
-                  title: Text(role.displayName),
-                  subtitle: Text(
-                    role.description,
-                    style: const TextStyle(fontSize: 12),
-                  ),
-                  dense: true,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+              RadioGroup<TeamRole>(
+                groupValue: _selectedRole,
+                onChanged: (v) => setState(() {
+                  if (v != null) _selectedRole = v;
+                }),
+                child: Column(
+                  children: _availableRoles.map(
+                    (role) => RadioListTile<TeamRole>(
+                      value: role,
+                      title: Text(role.displayName),
+                      subtitle: Text(
+                        role.description,
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      dense: true,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ).toList(),
                 ),
               ),
               const SizedBox(height: 20),
@@ -120,8 +124,7 @@ class _TeamInviteScreenState extends State<TeamInviteScreen> {
             ],
           ),
         ),
-      ),
-    );
+      );
   }
 
   Future<void> _sendInvite() async {

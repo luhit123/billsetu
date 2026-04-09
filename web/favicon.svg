@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="80" fill="#F0EDE8"/>
+  
+  <!-- Shield body -->
+  <path d="M136 100 L376 100 L376 340 Q376 420 256 460 Q136 420 136 340 Z" fill="#2D6B4D"/>
+  
+  <!-- Crown -->
+  <g transform="translate(256, 72)">
+    <!-- Crown base -->
+    <path d="M-60 20 L-50 -15 L-25 10 L0 -30 L25 10 L50 -15 L60 20 Z" fill="#D4A034"/>
+    <!-- Crown band -->
+    <rect x="-60" y="20" width="120" height="12" rx="2" fill="#C89530"/>
+    <!-- Crown jewels -->
+    <circle cx="-25" cy="-2" r="4" fill="#CC3333"/>
+    <circle cx="0" cy="-16" r="5" fill="#2D6B4D"/>
+    <circle cx="25" cy="-2" r="4" fill="#CC3333"/>
+  </g>
+  
+  <!-- Bill/receipt lines at top of shield -->
+  <line x1="190" y1="160" x2="322" y2="160" stroke="#8FAF9C" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+  <line x1="200" y1="178" x2="312" y2="178" stroke="#8FAF9C" stroke-width="3.5" stroke-linecap="round" opacity="0.5"/>
+  <line x1="210" y1="195" x2="302" y2="195" stroke="#8FAF9C" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+  
+  <!-- Rupee symbol ₹ -->
+  <g transform="translate(256, 290)" fill="#D4A034">
+    <path d="M-35 -55 L35 -55 L35 -45 L-5 -45 Q15 -45 25 -35 Q30 -28 30 -20 L35 -20 L35 -10 L28 -10 Q22 5 0 5 L35 5 L-5 55 L-20 55 L20 10 L-10 10 Q15 10 22 -10 L-35 -10 L-35 -20 L28 -20 Q28 -28 22 -35 Q15 -42 -5 -42 L-35 -42 Z"/>
+  </g>
+  
+  <!-- Arc at bottom -->
+  <path d="M195 370 Q256 340 317 370" fill="none" stroke="#8B9B3D" stroke-width="4" stroke-linecap="round" opacity="0.7"/>
+</svg>

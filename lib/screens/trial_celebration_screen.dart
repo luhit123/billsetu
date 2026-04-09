@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
+import '../services/remote_config_service.dart';
 
 /// Full-screen celebration shown on every login.
 /// Showcases all Enterprise-level features included free with BillRaja.
@@ -248,11 +249,11 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
                               ).createShader(bounds),
                               child: Text(
                                 widget.isFirstTime
-                                    ? 'Welcome to BillRaja'
+                                    ? '${RemoteConfigService.instance.trialDurationMonths} Months Free'
                                     : 'Welcome Back!',
                                 style: const TextStyle(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w800,
+                                  fontSize: 34,
+                                  fontWeight: FontWeight.w900,
                                   color: Colors.white,
                                   letterSpacing: -0.5,
                                 ),
@@ -263,26 +264,13 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
 
                             Text(
                               widget.isFirstTime
-                                  ? 'All premium features are yours — completely free'
-                                  : 'Your BillRaja Enterprise plan is active',
+                                  ? 'Every feature. Zero payment. No credit card.'
+                                  : 'Your Enterprise plan is active.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w500,
-                                color: Colors.white.withAlpha(200),
-                              ),
-                            ),
-
-                            const SizedBox(height: 6),
-
-                            Text(
-                              widget.isFirstTime
-                                  ? 'Tap below to activate your free Enterprise plan'
-                                  : 'No limits. No credit card. Completely free.',
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Colors.white.withAlpha(140),
-                                fontWeight: FontWeight.w400,
+                                color: Colors.white.withAlpha(210),
                               ),
                             ),
 
@@ -322,8 +310,8 @@ class _TrialCelebrationScreenState extends State<TrialCelebrationScreen>
                                     children: [
                                       Text(
                                         widget.isFirstTime
-                                            ? 'Activate & Start Billing'
-                                            : 'Continue to Dashboard',
+                                            ? 'Start Free'
+                                            : 'Continue',
                                         style: const TextStyle(
                                           fontSize: 17,
                                           fontWeight: FontWeight.w800,

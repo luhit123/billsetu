@@ -18,14 +18,20 @@ class UsageTrackingService {
 
   String get _currentPeriodKey => DateFormat('yyyy-MM').format(DateTime.now());
 
-  // ── In-memory cache (5-minute TTL) ────────────────────────────────────
+  // ── In-memory cache ─────────────────────────────────────────────────────
+  // SEC-012: Reduced from 5 min to 30 sec for write-path checks to shrink
+  // the window where stale counts allow limit bypass.
   Map<String, int>? _cachedSummary;
   DateTime? _cacheTime;
-  static const _cacheTtl = Duration(minutes: 5);
+  static const _cacheTtl = Duration(seconds: 30);
   bool get _isCacheValid =>
       _cachedSummary != null &&
       _cacheTime != null &&
       DateTime.now().difference(_cacheTime!) < _cacheTtl;
+
+  // SEC-013: Track in-flight (offline) creation deltas so that error/offline
+  // paths return last-known + delta instead of 0.
+  int _offlineInvoiceDelta = 0;
 
   /// Invalidate cache after writes (invoice created, customer added, etc.)
   void invalidateCache() {
@@ -50,11 +56,16 @@ class UsageTrackingService {
     if (ref == null) return 0;
     try {
       final doc = await resilientGet(ref);
-      if (!doc.exists) return 0;
-      return doc.data()?['invoicesCreated'] as int? ?? 0;
+      if (!doc.exists) return 0 + _offlineInvoiceDelta;
+      final serverCount = doc.data()?['invoicesCreated'] as int? ?? 0;
+      // SEC-013: Reset offline delta once we get a fresh server value.
+      _offlineInvoiceDelta = 0;
+      return serverCount;
     } catch (_) {
-      // If both server and cache fail, allow invoice creation
-      return 0;
+      // SEC-013: Return last-known count + offline delta instead of 0
+      // to prevent unlimited creation during network errors.
+      final lastKnown = _cachedSummary?['invoices'] ?? 0;
+      return lastKnown + _offlineInvoiceDelta;
     }
   }
 
@@ -122,22 +133,34 @@ class UsageTrackingService {
 
   Future<void> incrementInvoiceCount() async {
     invalidateCache();
+    // SEC-012: Optimistic local increment so subsequent checks within the
+    // cache TTL see the updated value even before Firestore confirms.
+    _offlineInvoiceDelta++;
     final ref = _usageRef;
     if (ref == null) return;
-    await ref.set({
-      'invoicesCreated': FieldValue.increment(1),
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    try {
+      await ref.set({
+        'invoicesCreated': FieldValue.increment(1),
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
+      // Server confirmed — delta will be reset on next getInvoiceCount read.
+    } catch (_) {
+      // Offline write queued; delta stays incremented as a backstop.
+    }
   }
 
   Future<void> incrementWhatsAppShareCount() async {
     invalidateCache();
     final ref = _usageRef;
     if (ref == null) return;
-    await ref.set({
-      'whatsappShares': FieldValue.increment(1),
-      'updatedAt': Timestamp.now(),
-    }, SetOptions(merge: true));
+    try {
+      await ref.set({
+        'whatsappShares': FieldValue.increment(1),
+        'updatedAt': Timestamp.now(),
+      }, SetOptions(merge: true));
+    } catch (_) {
+      // Offline write queued; delta stays incremented.
+    }
   }
 
   // ── Real-time stream ──────────────────────────────────────────────────

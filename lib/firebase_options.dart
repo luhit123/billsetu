@@ -54,7 +54,7 @@ class DefaultFirebaseOptions {
     appId: '1:742769968562:web:2b432531b9004cc327d0ab',
     messagingSenderId: '742769968562',
     projectId: 'billeasy-3a6ad',
-    authDomain: 'billeasy-3a6ad.firebaseapp.com',
+    authDomain: 'auth.billraja.com',
     storageBucket: 'billeasy-3a6ad.firebasestorage.app',
     measurementId: 'G-YHK3H5LNRW',
   );

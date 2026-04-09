@@ -769,6 +769,8 @@ class AppStrings {
   String get gstReportNetItcCredit => _t('gstReportNetItcCredit');
   String get gstReportNetTaxPayable => _t('gstReportNetTaxPayable');
   String get gstReportOverview => _t('gstReportOverview');
+  String get gstReportTeamSummaryNote => _t('gstReportTeamSummaryNote');
+  String get gstReportDriftWarning => _t('gstReportDriftWarning');
   String get gstReportOutputGstSales => _t('gstReportOutputGstSales');
   String get gstReportInputGstPurchases => _t('gstReportInputGstPurchases');
   String get gstReportOutputSales => _t('gstReportOutputSales');

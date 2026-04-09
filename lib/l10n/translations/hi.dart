@@ -421,6 +421,8 @@ const Map<String, String> hiTranslations = {
   'gstReportNetItcCredit': 'नेट ITC क्रेडिट',
   'gstReportNetTaxPayable': 'नेट कर देय',
   'gstReportOverview': 'GST अवलोकन',
+  'gstReportTeamSummaryNote': 'सारांश में सभी टीम इनवॉइस शामिल हैं। नीचे की सूची केवल आपके इनवॉइस दिखाती है।',
+  'gstReportDriftWarning': 'सारांश कुल सिंक से बाहर हो सकता है। रिफ्रेश करने के लिए नीचे खींचें या इस रिपोर्ट को फिर से खोलें।',
   'gstReportOutputGstSales': 'आउटपुट GST (बिक्री)',
   'gstReportInputGstPurchases': 'इनपुट GST (खरीद)',
   'gstReportOutputSales': 'आउटपुट (बिक्री)',

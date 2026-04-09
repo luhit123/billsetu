@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -9,11 +10,16 @@ import 'package:billeasy/services/analytics_service.dart';
 import 'package:billeasy/screens/upgrade_screen.dart';
 import 'package:billeasy/services/firebase_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/services/purchase_order_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/utils/responsive.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 // ─── Status colours (kept as semantic) ──────────────────────────────────────
@@ -78,13 +84,17 @@ class _GstReportScreenState extends State<GstReportScreen> {
   bool _isSharingReport = false;
   int _loadGeneration = 0;
 
-  // Input (Purchases) state
+  // Input (Purchases) state — paginated like invoices
   final List<PurchaseOrder> _purchaseOrders = [];
+  QueryDocumentSnapshot<Map<String, dynamic>>? _poCursor;
+  bool _hasMorePOs = true;
   bool _isLoadingPurchaseOrders = false;
+  bool _isLoadingMorePOs = false;
   Object? _poLoadError;
 
   // Tab state
   _GstTab _activeTab = _GstTab.output;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
@@ -92,6 +102,15 @@ class _GstReportScreenState extends State<GstReportScreen> {
     _refreshSummaryStream();
     _loadInvoices(reset: true);
     _loadPurchaseOrders();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
   }
 
   // ─── Date range helpers ──────────────────────────────────────────────────────
@@ -196,10 +215,13 @@ class _GstReportScreenState extends State<GstReportScreen> {
     }
 
     try {
+      final onlyMine = TeamService.instance.isTeamMember &&
+          !TeamService.instance.can.canViewOthersInvoices;
       final page = await _firebaseService.getInvoicesPage(
         startDate: _startDate,
         endDateExclusive: _endDate,
         gstEnabled: true,
+        createdByUid: onlyMine ? TeamService.instance.getActualUserId() : null,
         limit: _pageSize,
         startAfterDocument: reset ? null : _invoiceCursor,
       );
@@ -225,10 +247,11 @@ class _GstReportScreenState extends State<GstReportScreen> {
         _isLoadingInvoices = false;
         _isLoadingMoreInvoices = false;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted || generation != _loadGeneration) {
         return;
       }
+      debugPrint('[GstReport] Invoice load error: $error\n$stackTrace');
 
       setState(() {
         _invoiceLoadError = error;
@@ -243,33 +266,59 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
   // ─── Load purchase orders (Input GST) ─────────────────────────────────────
 
-  Future<void> _loadPurchaseOrders() async {
-    setState(() {
-      _isLoadingPurchaseOrders = true;
-      _poLoadError = null;
-      _purchaseOrders.clear();
-    });
+  Future<void> _loadPurchaseOrders({bool reset = true}) async {
+    if (_isLoadingMorePOs) return;
+    if (!reset && !_hasMorePOs) return;
+
+    if (reset) {
+      setState(() {
+        _isLoadingPurchaseOrders = true;
+        _isLoadingMorePOs = false;
+        _poLoadError = null;
+        _hasMorePOs = true;
+        _poCursor = null;
+      });
+    } else {
+      setState(() => _isLoadingMorePOs = true);
+    }
 
     try {
-      final orders = await _purchaseOrderService.getPurchaseOrders(
+      // Respect team permissions: restricted members only see their own POs.
+      final onlyMinePo = TeamService.instance.isTeamMember &&
+          !TeamService.instance.can.canViewOthersInvoices;
+      final page = await _purchaseOrderService.getPurchaseOrdersPage(
         startDate: _startDate,
         endDateExclusive: _endDate,
         status: PurchaseOrderStatus.received,
         gstEnabledOnly: true,
-        pageSize: 250,
-        maxResults: 5000,
+        createdByUid: onlyMinePo ? TeamService.instance.getActualUserId() : null,
+        limit: _pageSize,
+        startAfterDocument: reset ? null : _poCursor,
       );
       if (!mounted) return;
 
       setState(() {
-        _purchaseOrders.addAll(orders);
+        if (reset) {
+          _purchaseOrders
+            ..clear()
+            ..addAll(page.items);
+        } else {
+          _purchaseOrders.addAll(page.items);
+        }
+        _poCursor = page.cursor;
+        _hasMorePOs = page.hasMore;
+        _poLoadError = null;
         _isLoadingPurchaseOrders = false;
+        _isLoadingMorePOs = false;
       });
-    } catch (error) {
+    } catch (error, stackTrace) {
       if (!mounted) return;
+      debugPrint('[GstReport] PO load error: $error\n$stackTrace');
       setState(() {
         _poLoadError = error;
         _isLoadingPurchaseOrders = false;
+        _isLoadingMorePOs = false;
+        if (reset) _purchaseOrders.clear();
       });
     }
   }
@@ -290,8 +339,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
   // ─── Share/export ────────────────────────────────────────────────────────────
 
   /// PDF Summary — comprehensive totals, no individual invoices
-  void _sharePdfSummary(List<Invoice> invoices) {
-    final s = AppStrings.of(context);
+  Future<void> _sharePdfSummary(List<Invoice> invoices) async {
     double totalTaxable = 0,
         totalCgst = 0,
         totalSgst = 0,
@@ -321,40 +369,168 @@ class _GstReportScreenState extends State<GstReportScreen> {
     }
     final netPayable = totalTax - inputTax;
 
-    final buf = StringBuffer();
-    buf.writeln('GST REPORT — $_periodLabel');
-    buf.writeln('${'=' * 44}');
-    buf.writeln();
-    buf.writeln(s.gstReportOutputGst);
-    buf.writeln('  Total Invoices   : ${invoices.length}');
-    buf.writeln('  Taxable Amount   : ${_currencyFormat.format(totalTaxable)}');
-    buf.writeln('  CGST             : ${_currencyFormat.format(totalCgst)}');
-    buf.writeln('  SGST             : ${_currencyFormat.format(totalSgst)}');
-    buf.writeln('  IGST             : ${_currencyFormat.format(totalIgst)}');
-    buf.writeln('  Total Tax        : ${_currencyFormat.format(totalTax)}');
-    buf.writeln('  Grand Total      : ${_currencyFormat.format(totalGrand)}');
-    buf.writeln();
-    buf.writeln(s.gstReportInputGst);
-    buf.writeln('  Total POs        : ${_purchaseOrders.length}');
-    buf.writeln('  Taxable Amount   : ${_currencyFormat.format(inputTaxable)}');
-    buf.writeln('  CGST             : ${_currencyFormat.format(inputCgst)}');
-    buf.writeln('  SGST             : ${_currencyFormat.format(inputSgst)}');
-    buf.writeln('  IGST             : ${_currencyFormat.format(inputIgst)}');
-    buf.writeln('  Total Tax        : ${_currencyFormat.format(inputTax)}');
-    buf.writeln();
-    buf.writeln(s.gstReportNetGstLiability);
-    buf.writeln(
-      netPayable >= 0
-          ? '  ${s.gstReportNetPayable}      : ${_currencyFormat.format(netPayable)}'
-          : '  ${s.gstReportItcCredit}       : ${_currencyFormat.format(netPayable.abs())}',
-    );
-    buf.writeln();
-    buf.writeln(s.gstReportGeneratedBy);
+    final pdf = pw.Document();
+    final headerStyle = pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold);
+    final cellStyle = const pw.TextStyle(fontSize: 9);
+    final fmt = _currencyFormat;
 
-    SharePlus.instance.share(
-      ShareParams(
-        text: buf.toString(),
-        subject: 'GST Report Summary — $_periodLabel',
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        header: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text('GST Report', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 4),
+            pw.Text(_periodLabel, style: const pw.TextStyle(fontSize: 12, color: PdfColors.grey700)),
+            pw.SizedBox(height: 12),
+            pw.Divider(),
+            pw.SizedBox(height: 8),
+          ],
+        ),
+        footer: (ctx) => pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Text('Generated by BillRaja', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+            pw.Text('Page ${ctx.pageNumber} of ${ctx.pagesCount}', style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
+          ],
+        ),
+        build: (ctx) => [
+          // ── Summary cards ──
+          pw.Row(
+            children: [
+              _pdfSummaryBox('Output GST (Sales)', fmt.format(totalTax), '${invoices.length} Invoices'),
+              pw.SizedBox(width: 16),
+              _pdfSummaryBox('Input GST (Purchases)', fmt.format(inputTax), '${_purchaseOrders.length} POs'),
+              pw.SizedBox(width: 16),
+              _pdfSummaryBox(
+                netPayable >= 0 ? 'Net GST Payable' : 'ITC Credit Available',
+                fmt.format(netPayable.abs()),
+                netPayable >= 0 ? 'Output - Input' : 'Carry forward',
+              ),
+            ],
+          ),
+          pw.SizedBox(height: 20),
+
+          // ── Output GST table ──
+          pw.Text('Output GST — Invoice Breakdown', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.TableHelper.fromTextArray(
+            headerStyle: headerStyle,
+            cellStyle: cellStyle,
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            headers: ['Invoice #', 'Client', 'Date', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total Tax', 'Grand Total'],
+            data: [
+              ...invoices.map((inv) => [
+                inv.invoiceNumber,
+                inv.clientName,
+                _dateFormat.format(inv.createdAt),
+                fmt.format(inv.taxableAmount),
+                inv.gstType == 'igst' ? '-' : fmt.format(inv.cgstAmount),
+                inv.gstType == 'igst' ? '-' : fmt.format(inv.sgstAmount),
+                inv.gstType == 'igst' ? fmt.format(inv.igstAmount) : '-',
+                fmt.format(inv.totalTax),
+                fmt.format(inv.grandTotal),
+              ]),
+              // Total row
+              ['TOTAL', '', '${invoices.length} inv', fmt.format(totalTaxable), fmt.format(totalCgst), fmt.format(totalSgst), fmt.format(totalIgst), fmt.format(totalTax), fmt.format(totalGrand)],
+            ],
+          ),
+
+          if (_purchaseOrders.isNotEmpty) ...[
+            pw.SizedBox(height: 20),
+            pw.Text('Input GST — Purchase Order Breakdown', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            pw.TableHelper.fromTextArray(
+              headerStyle: headerStyle,
+              cellStyle: cellStyle,
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+              cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              headers: ['PO #', 'Supplier', 'Date', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total Tax', 'Grand Total'],
+              data: [
+                ..._purchaseOrders.map((po) => [
+                  po.orderNumber,
+                  po.supplierName,
+                  _dateFormat.format(po.receivedAt ?? po.createdAt),
+                  fmt.format(po.taxableAmount),
+                  po.gstType == 'igst' ? '-' : fmt.format(po.cgstAmount),
+                  po.gstType == 'igst' ? '-' : fmt.format(po.sgstAmount),
+                  po.gstType == 'igst' ? fmt.format(po.igstAmount) : '-',
+                  fmt.format(po.totalTax),
+                  fmt.format(po.grandTotal),
+                ]),
+                ['TOTAL', '', '${_purchaseOrders.length} POs', fmt.format(inputTaxable), fmt.format(inputCgst), fmt.format(inputSgst), fmt.format(inputIgst), fmt.format(inputTax), ''],
+              ],
+            ),
+          ],
+
+          pw.SizedBox(height: 20),
+
+          // ── Net liability summary ──
+          pw.Text('Net GST Liability', style: pw.TextStyle(fontSize: 13, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.TableHelper.fromTextArray(
+            headerStyle: headerStyle,
+            cellStyle: cellStyle,
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            headers: ['Component', 'Output (Sales)', 'Input (Purchases)', 'Net'],
+            data: [
+              ['Taxable Amount', fmt.format(totalTaxable), fmt.format(inputTaxable), fmt.format(totalTaxable - inputTaxable)],
+              ['CGST', fmt.format(totalCgst), fmt.format(inputCgst), fmt.format(totalCgst - inputCgst)],
+              ['SGST', fmt.format(totalSgst), fmt.format(inputSgst), fmt.format(totalSgst - inputSgst)],
+              ['IGST', fmt.format(totalIgst), fmt.format(inputIgst), fmt.format(totalIgst - inputIgst)],
+              ['Total Tax', fmt.format(totalTax), fmt.format(inputTax), fmt.format(netPayable)],
+            ],
+          ),
+        ],
+      ),
+    );
+
+    final bytes = await pdf.save();
+
+    if (kIsWeb) {
+      // On web: use printing package to show print/save dialog
+      await Printing.sharePdf(bytes: bytes, filename: 'GST_Report_${_periodLabel.replaceAll(' ', '_')}.pdf');
+    } else {
+      final dir = await Directory.systemTemp.createTemp('gst_pdf');
+      final file = File('${dir.path}/GST_Report_${_periodLabel.replaceAll(' ', '_')}.pdf');
+      await file.writeAsBytes(bytes);
+      try {
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [XFile(file.path)],
+            subject: 'GST Report — $_periodLabel',
+          ),
+        );
+      } finally {
+        try {
+          if (await dir.exists()) await dir.delete(recursive: true);
+        } catch (_) {}
+      }
+    }
+  }
+
+  pw.Expanded _pdfSummaryBox(String title, String value, String subtitle) {
+    return pw.Expanded(
+      child: pw.Container(
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          border: pw.Border.all(color: PdfColors.grey300),
+          borderRadius: pw.BorderRadius.circular(8),
+        ),
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(title, style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
+            pw.SizedBox(height: 4),
+            pw.Text(value, style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 2),
+            pw.Text(subtitle, style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey500)),
+          ],
+        ),
       ),
     );
   }
@@ -450,12 +626,19 @@ class _GstReportScreenState extends State<GstReportScreen> {
     );
     await file.writeAsString(buf.toString());
 
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [XFile(file.path)],
-        subject: 'GST Report — $_periodLabel',
-      ),
-    );
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          subject: 'GST Report — $_periodLabel',
+        ),
+      );
+    } finally {
+      // Clean up temp file after sharing
+      try {
+        if (await dir.exists()) await dir.delete(recursive: true);
+      } catch (_) {}
+    }
   }
 
   Future<void> _shareFullReport(AppStrings s) async {
@@ -543,10 +726,13 @@ class _GstReportScreenState extends State<GstReportScreen> {
     setState(() => _isSharingReport = true);
 
     try {
+      final onlyMineExport = TeamService.instance.isTeamMember &&
+          !TeamService.instance.can.canViewOthersInvoices;
       final invoices = await _firebaseService.getAllInvoices(
         startDate: _startDate,
         endDateExclusive: _endDate,
         gstEnabled: true,
+        createdByUid: onlyMineExport ? TeamService.instance.getActualUserId() : null,
       );
 
       if (!mounted) return;
@@ -1001,6 +1187,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
   }
 
   Widget _tabBar(AppStrings s) {
+    final tabs = [
+      _tabItem(s.gstTabOutput, _GstTab.output),
+      _tabItem(s.gstTabInput, _GstTab.input),
+      _tabItem(s.gstTabNet, _GstTab.net),
+      _tabItem('HSN', _GstTab.hsn),
+      _tabItem('GSTR-3B', _GstTab.gstr3b),
+      _tabItem(s.gstTabTaxRate, _GstTab.taxRate),
+    ];
+    final expanded = windowSizeOf(context) != WindowSize.compact;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
       padding: const EdgeInsets.all(4),
@@ -1008,19 +1204,12 @@ class _GstReportScreenState extends State<GstReportScreen> {
         color: context.cs.surfaceContainerLow,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            _tabItem(s.gstTabOutput, _GstTab.output),
-            _tabItem(s.gstTabInput, _GstTab.input),
-            _tabItem(s.gstTabNet, _GstTab.net),
-            _tabItem('HSN', _GstTab.hsn),
-            _tabItem('GSTR-3B', _GstTab.gstr3b),
-            _tabItem(s.gstTabTaxRate, _GstTab.taxRate),
-          ],
-        ),
-      ),
+      child: expanded
+          ? Wrap(spacing: 4, runSpacing: 4, children: tabs)
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(children: tabs),
+            ),
     );
   }
 
@@ -1502,6 +1691,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
     required double inputTax,
   }) {
     final netPayable = outputTax - inputTax;
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
 
     final s = AppStrings.of(context);
     return Padding(
@@ -1510,6 +1700,38 @@ class _GstReportScreenState extends State<GstReportScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 8),
+
+          // ── Desktop: single DataTable ────────────────────────────
+          if (expanded) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: DataTable(
+                  headingRowColor: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                  columnSpacing: 24,
+                  horizontalMargin: 16,
+                  columns: [
+                    DataColumn(label: Text('Component', style: _dtHeader)),
+                    DataColumn(label: Text('Output (Sales)', style: _dtHeader), numeric: true),
+                    DataColumn(label: Text('Input (Purchases)', style: _dtHeader), numeric: true),
+                    DataColumn(label: Text('Net', style: _dtHeader), numeric: true),
+                  ],
+                  rows: [
+                    _netDataRow(s.gstLabelTaxableAmount, outputTaxable, inputTaxable),
+                    _netDataRow('CGST', outputCgst, inputCgst),
+                    _netDataRow('SGST', outputSgst, inputSgst),
+                    _netDataRow('IGST', outputIgst, inputIgst),
+                    _netDataRow(s.gstLabelTotalTax, outputTax, inputTax, bold: true),
+                  ],
+                ),
+              ),
+            ),
+          ] else ...[
           _comparisonTable(
             title: s.gstLabelTaxableAmount,
             outputValue: outputTaxable,
@@ -1540,6 +1762,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             inputValue: inputTax,
             highlight: true,
           ),
+          ],
           const SizedBox(height: 16),
           // Net payable row
           Container(
@@ -1809,8 +2032,42 @@ class _GstReportScreenState extends State<GstReportScreen> {
         final inputTax = summary?.inputTotalTax ?? _fallbackInputTax;
         final poCount = summary?.inputPoCount ?? purchaseOrders.length;
 
+        // GSTR-3B intra/inter breakdown (prefer summary, fallback to local)
+        double fallbackIntraTaxable = 0,
+            fallbackInterTaxable = 0;
+        double fallbackIntraCgst = 0,
+            fallbackIntraSgst = 0,
+            fallbackInterIgst = 0;
+        for (final inv in _invoices) {
+          if (inv.gstType == 'igst') {
+            fallbackInterIgst += inv.igstAmount;
+            fallbackInterTaxable += inv.taxableAmount;
+          } else {
+            fallbackIntraCgst += inv.cgstAmount;
+            fallbackIntraSgst += inv.sgstAmount;
+            fallbackIntraTaxable += inv.taxableAmount;
+          }
+        }
+        final gstr3bIntraTaxable =
+            summary?.intraTaxableAmount ?? fallbackIntraTaxable;
+        final gstr3bInterTaxable =
+            summary?.interTaxableAmount ?? fallbackInterTaxable;
+        final gstr3bIntraCgst = summary?.intraCgst ?? fallbackIntraCgst;
+        final gstr3bIntraSgst = summary?.intraSgst ?? fallbackIntraSgst;
+        final gstr3bInterIgst = summary?.interIgst ?? fallbackInterIgst;
+
         // Net
         final netPayable = totalTax - inputTax;
+
+        // Drift detection: compare summary count vs loaded invoice count
+        // Only meaningful for owners (non-restricted users) who see all data
+        final isOwnerView = !TeamService.instance.isTeamMember ||
+            TeamService.instance.can.canViewOthersInvoices;
+        final hasDrift = isOwnerView &&
+            summary != null &&
+            !_hasMoreInvoices &&
+            !_isLoadingInvoices &&
+            (summary.invoiceCount - invoices.length).abs() > 0;
 
         return Scaffold(
           backgroundColor: context.cs.surface,
@@ -1831,7 +2088,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
             centerTitle: false,
             iconTheme: IconThemeData(color: context.cs.onSurface),
           ),
-          body: Column(
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: kWebContentMaxWidth),
+              child: Column(
             children: [
               Expanded(
                 child: CustomScrollView(
@@ -1851,7 +2111,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
                           child: Padding(
                             padding: const EdgeInsets.all(24),
                             child: Text(
-                              '${s.gstReportLoadError}: $_invoiceLoadError',
+                              s.gstReportLoadError,
                               textAlign: TextAlign.center,
                               style: const TextStyle(color: _kOverdue),
                             ),
@@ -1876,13 +2136,17 @@ class _GstReportScreenState extends State<GstReportScreen> {
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
                               ),
-                              child: GridView.count(
-                                crossAxisCount: 2,
+                              child: LayoutBuilder(builder: (context, constraints) {
+                                final size = windowSizeOf(context);
+                                final cols = size == WindowSize.expanded ? 4 : size == WindowSize.medium ? 3 : 2;
+                                final ratio = size == WindowSize.expanded ? 2.0 : size == WindowSize.medium ? 1.8 : 1.55;
+                                return GridView.count(
+                                crossAxisCount: cols,
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 mainAxisSpacing: 10,
                                 crossAxisSpacing: 10,
-                                childAspectRatio: 1.55,
+                                childAspectRatio: ratio,
                                 children: [
                                   _summaryCard(
                                     label: s.gstReportOutputGstSales,
@@ -1915,8 +2179,78 @@ class _GstReportScreenState extends State<GstReportScreen> {
                                     icon: Icons.description_outlined,
                                   ),
                                 ],
-                              ),
+                              );
+                              }),
                             ),
+                            // Team-member note: summary includes all team data
+                            if (TeamService.instance.isTeamMember &&
+                                !TeamService.instance.can.canViewOthersInvoices)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.amber.withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline_rounded,
+                                        size: 15,
+                                        color: Colors.amber.shade800,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          s.gstReportTeamSummaryNote,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: Colors.amber.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            // Drift warning
+                            if (hasDrift)
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                                child: Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withValues(alpha: 0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: Colors.orange.withValues(alpha: 0.25),
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.sync_problem_rounded,
+                                        size: 15,
+                                        color: Colors.orange.shade800,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          s.gstReportDriftWarning,
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: Colors.orange.shade900,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             // Tab bar
                             _tabBar(s),
                             const SizedBox(height: 8),
@@ -1941,6 +2275,11 @@ class _GstReportScreenState extends State<GstReportScreen> {
                                 inputTax: inputTax,
                                 invoiceCount: invoiceCount,
                                 poCount: poCount,
+                                intraTaxable: gstr3bIntraTaxable,
+                                interTaxable: gstr3bInterTaxable,
+                                intraCgst: gstr3bIntraCgst,
+                                intraSgst: gstr3bIntraSgst,
+                                interIgst: gstr3bInterIgst,
                               )
                             else if (_activeTab == _GstTab.taxRate)
                               _buildTaxRateTab(invoices)
@@ -1964,6 +2303,8 @@ class _GstReportScreenState extends State<GstReportScreen> {
                 ),
               ),
             ],
+          ),
+            ),
           ),
           bottomNavigationBar: SafeArea(
             child: Padding(
@@ -2032,6 +2373,10 @@ class _GstReportScreenState extends State<GstReportScreen> {
     // Aggregate line items by HSN code
     final hsnMap = <String, _HsnAggregate>{};
     for (final inv in invoices) {
+      // Discount ratio: proportion of subtotal that is taxable (post-discount).
+      // GST law requires tax on post-discount amount, not on item.total directly.
+      final discountRatio =
+          inv.subtotal > 0 ? inv.taxableAmount / inv.subtotal : 1.0;
       for (final item in inv.items) {
         final code = item.hsnCode.trim().isEmpty
             ? AppStrings.of(context).gstNoHsn
@@ -2040,11 +2385,13 @@ class _GstReportScreenState extends State<GstReportScreen> {
         agg.description = item.description;
         agg.totalQuantity += item.quantity;
         agg.unit = item.unit.isNotEmpty ? item.unit : agg.unit;
-        agg.taxableAmount += item.total;
+        // Use post-discount taxable amount per item
+        final itemTaxable = item.total * discountRatio;
+        agg.taxableAmount += itemTaxable;
         final itemGstRate = item.gstRate > 0 ? item.gstRate : inv.gstRate;
         agg.gstRate = itemGstRate;
         final isIgst = inv.gstType == 'igst';
-        final tax = item.total * itemGstRate / 100;
+        final tax = itemTaxable * itemGstRate / 100;
         if (isIgst) {
           agg.igstAmount += tax;
         } else {
@@ -2064,6 +2411,8 @@ class _GstReportScreenState extends State<GstReportScreen> {
 
     final totalTaxable = hsnList.fold<double>(0, (s, h) => s + h.taxableAmount);
     final totalTax = hsnList.fold<double>(0, (s, h) => s + h.totalTax);
+
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -2102,6 +2451,72 @@ class _GstReportScreenState extends State<GstReportScreen> {
           ),
           const SizedBox(height: 14),
 
+          // ── Desktop: DataTable ───────────────────────────────────
+          if (expanded) ...[
+            Container(
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                    columnSpacing: 20,
+                    horizontalMargin: 16,
+                    columns: [
+                      DataColumn(label: Text('HSN Code', style: _dtHeader)),
+                      DataColumn(label: Text('Description', style: _dtHeader)),
+                      DataColumn(label: Text('Qty', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('UOM', style: _dtHeader)),
+                      DataColumn(label: Text('Rate', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Taxable', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('CGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('SGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('IGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Total Tax', style: _dtHeader), numeric: true),
+                    ],
+                    rows: [
+                      ...hsnList.map((h) => DataRow(cells: [
+                        DataCell(Text(h.hsnCode, style: _dtBold)),
+                        DataCell(ConstrainedBox(constraints: const BoxConstraints(maxWidth: 180), child: Text(h.description, style: _dtCell, overflow: TextOverflow.ellipsis))),
+                        DataCell(Text(h.totalQuantity.toStringAsFixed(h.totalQuantity.truncateToDouble() == h.totalQuantity ? 0 : 2), style: _dtCell)),
+                        DataCell(Text(h.unit.isNotEmpty ? h.unit : '-', style: _dtCell)),
+                        DataCell(Text('${h.gstRate.toStringAsFixed(h.gstRate.truncateToDouble() == h.gstRate ? 0 : 1)}%', style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(h.taxableAmount), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(h.cgstAmount), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(h.sgstAmount), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(h.igstAmount), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(h.totalTax), style: _dtBold)),
+                      ])),
+                      // Total row
+                      DataRow(
+                        color: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                        cells: [
+                          DataCell(Text('TOTAL', style: _dtBold)),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          DataCell(Text(_currencyFormat.format(totalTaxable), style: _dtBold)),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          const DataCell(Text('')),
+                          DataCell(Text(_currencyFormat.format(totalTax), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: kPrimary))),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 90),
+          ] else ...[
+
+          // ── Mobile: custom row layout ────────────────────────────
           // Header row
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2239,6 +2654,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
           _sectionLabel(AppStrings.of(context).gstDetailedBreakdown),
           ...hsnList.map((h) => _hsnDetailCard(h)),
           const SizedBox(height: 90),
+          ],
         ],
       ),
     );
@@ -2422,25 +2838,16 @@ class _GstReportScreenState extends State<GstReportScreen> {
     required double inputTax,
     required int invoiceCount,
     required int poCount,
+    required double intraTaxable,
+    required double interTaxable,
+    required double intraCgst,
+    required double intraSgst,
+    required double interIgst,
   }) {
     final netPayable = outputTax - inputTax;
     final isCredit = netPayable < 0;
 
-    // Separate intrastate vs interstate from invoices
-    double intraCgst = 0, intraSgst = 0, interIgst = 0;
-    double intraTaxable = 0, interTaxable = 0;
-    for (final inv in _invoices) {
-      if (inv.gstType == 'igst') {
-        interIgst += inv.igstAmount;
-        interTaxable += inv.taxableAmount;
-      } else {
-        intraCgst += inv.cgstAmount;
-        intraSgst += inv.sgstAmount;
-        intraTaxable += inv.taxableAmount;
-      }
-    }
-
-    // Input ITC breakdown
+    // Input ITC breakdown (POs don't have server-aggregated intra/inter yet)
     double inputIntraCgst = 0, inputIntraSgst = 0, inputInterIgst = 0;
     for (final po in _purchaseOrders) {
       if (po.gstType == 'igst') {
@@ -2914,6 +3321,8 @@ class _GstReportScreenState extends State<GstReportScreen> {
       28: Color(0xFFEF4444),
     };
 
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Column(
@@ -2953,6 +3362,91 @@ class _GstReportScreenState extends State<GstReportScreen> {
           ),
           const SizedBox(height: 16),
 
+          // ── Desktop: donut + DataTable side-by-side ──────────────
+          if (expanded) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (rates.length > 1) ...[
+                  SizedBox(
+                    width: 140,
+                    height: 140,
+                    child: CustomPaint(
+                      painter: _DonutChartPainter(
+                        segments: rates.map((r) {
+                          final fraction = totalTaxable > 0 ? r.taxableAmount / totalTaxable : 0.0;
+                          return _DonutSegment(fraction, rateColors[r.rate] ?? kPrimary);
+                        }).toList(),
+                      ),
+                      child: Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${rates.length}', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: context.cs.onSurface)),
+                            Text(AppStrings.of(context).gstRates, style: TextStyle(fontSize: 10, color: context.cs.onSurfaceVariant)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 24),
+                ],
+                Expanded(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: context.cs.surfaceContainerLowest,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: const [kSubtleShadow],
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                        columnSpacing: 20,
+                        horizontalMargin: 16,
+                        columns: [
+                          DataColumn(label: Text('GST Rate', style: _dtHeader)),
+                          DataColumn(label: Text('Items', style: _dtHeader), numeric: true),
+                          DataColumn(label: Text('Taxable', style: _dtHeader), numeric: true),
+                          DataColumn(label: Text('Tax', style: _dtHeader), numeric: true),
+                          DataColumn(label: Text('Total', style: _dtHeader), numeric: true),
+                        ],
+                        rows: [
+                          ...rates.map((r) {
+                            final color = rateColors[r.rate] ?? kPrimary;
+                            return DataRow(cells: [
+                              DataCell(Row(mainAxisSize: MainAxisSize.min, children: [
+                                Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                                const SizedBox(width: 8),
+                                Text('${r.rate.toStringAsFixed(r.rate.truncateToDouble() == r.rate ? 0 : 1)}%', style: _dtBold),
+                              ])),
+                              DataCell(Text('${r.invoiceCount}', style: _dtCell)),
+                              DataCell(Text(_currencyFormat.format(r.taxableAmount), style: _dtCell)),
+                              DataCell(Text(_currencyFormat.format(r.taxAmount), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color))),
+                              DataCell(Text(_currencyFormat.format(r.totalAmount), style: _dtCell)),
+                            ]);
+                          }),
+                          DataRow(
+                            color: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                            cells: [
+                              DataCell(Text('TOTAL', style: _dtBold)),
+                              const DataCell(Text('')),
+                              DataCell(Text(_currencyFormat.format(totalTaxable), style: _dtBold)),
+                              DataCell(Text(_currencyFormat.format(totalTax), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: kPrimary))),
+                              const DataCell(Text('')),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 90),
+          ] else ...[
+
+          // ── Mobile: original layout ─────────────────────────────
           // Visual donut chart
           if (rates.length > 1) ...[
             Center(
@@ -3190,6 +3684,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
             ),
           ),
           const SizedBox(height: 90),
+          ],
         ],
       ),
     );
@@ -3202,29 +3697,124 @@ class _GstReportScreenState extends State<GstReportScreen> {
       return _emptyState(s);
     }
 
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
+
+    final loadMoreBtn = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
+          onPressed: _hasMoreInvoices && !_isLoadingMoreInvoices
+              ? () => _loadInvoices(reset: false)
+              : null,
+          child: _isLoadingMoreInvoices
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(_hasMoreInvoices ? s.gstLoadMore : s.gstNoMore),
+        ),
+      ),
+    );
+
+    if (expanded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionLabel(s.gstReportInvoiceBreakdown),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                    dataRowMinHeight: 48,
+                    dataRowMaxHeight: 56,
+                    columnSpacing: 20,
+                    horizontalMargin: 16,
+                    columns: [
+                      DataColumn(label: Text('Invoice #', style: _dtHeader)),
+                      DataColumn(label: Text('Client', style: _dtHeader)),
+                      DataColumn(label: Text('Date', style: _dtHeader)),
+                      DataColumn(label: Text('Taxable', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('CGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('SGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('IGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Total Tax', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Grand Total', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Status', style: _dtHeader)),
+                    ],
+                    rows: invoices.map((inv) {
+                      final isIgst = inv.gstType == 'igst';
+                      return DataRow(cells: [
+                        DataCell(Text(inv.invoiceNumber, style: _dtBold)),
+                        DataCell(Text(inv.clientName, style: _dtCell)),
+                        DataCell(Text(_dateFormat.format(inv.createdAt), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(inv.taxableAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? '-' : _currencyFormat.format(inv.cgstAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? '-' : _currencyFormat.format(inv.sgstAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? _currencyFormat.format(inv.igstAmount) : '-', style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(inv.totalTax), style: _dtBold)),
+                        DataCell(Text(_currencyFormat.format(inv.grandTotal), style: _dtBold)),
+                        DataCell(_statusBadge(inv.status)),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          loadMoreBtn,
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionLabel(s.gstReportInvoiceBreakdown),
         ...invoices.map((inv) => _invoiceCard(inv)),
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-          child: SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _hasMoreInvoices && !_isLoadingMoreInvoices
-                  ? () => _loadInvoices(reset: false)
-                  : null,
-              child: _isLoadingMoreInvoices
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(_hasMoreInvoices ? s.gstLoadMore : s.gstNoMore),
-            ),
-          ),
-        ),
+        loadMoreBtn,
+      ],
+    );
+  }
+
+  // ─── DataTable text styles ─────────────────────────────────────────────────
+  TextStyle get _dtHeader => TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w700,
+        color: context.cs.onSurfaceVariant,
+      );
+  TextStyle get _dtCell => TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w500,
+        color: context.cs.onSurface,
+      );
+  TextStyle get _dtBold => TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w700,
+        color: context.cs.onSurface,
+      );
+
+  DataRow _netDataRow(String label, double output, double input, {bool bold = false}) {
+    final net = output - input;
+    final isCredit = net < 0;
+    return DataRow(
+      color: bold ? WidgetStateProperty.all(context.cs.surfaceContainerLow) : null,
+      cells: [
+        DataCell(Text(label, style: bold ? _dtBold : _dtHeader)),
+        DataCell(Text(_currencyFormat.format(output), style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: kPrimary))),
+        DataCell(Text(_currencyFormat.format(input), style: TextStyle(fontSize: 13, fontWeight: bold ? FontWeight.w800 : FontWeight.w600, color: const Color(0xFF16A34A)))),
+        DataCell(Text('${isCredit ? '-' : ''}${_currencyFormat.format(net.abs())}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: isCredit ? const Color(0xFF16A34A) : kPrimary))),
       ],
     );
   }
@@ -3248,7 +3838,7 @@ class _GstReportScreenState extends State<GstReportScreen> {
         padding: const EdgeInsets.all(24),
         child: Center(
           child: Text(
-            '${AppStrings.of(context).gstReportPoLoadError}: $_poLoadError',
+            AppStrings.of(context).gstReportPoLoadError,
             textAlign: TextAlign.center,
             style: const TextStyle(color: _kOverdue),
           ),
@@ -3260,12 +3850,99 @@ class _GstReportScreenState extends State<GstReportScreen> {
       return _poEmptyState();
     }
 
+    final s = AppStrings.of(context);
+    final expanded = windowSizeOf(context) == WindowSize.expanded;
+
+    final loadMoreBtn = Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+      child: SizedBox(
+        width: double.infinity,
+        child: OutlinedButton(
+          onPressed: _hasMorePOs && !_isLoadingMorePOs
+              ? () => _loadPurchaseOrders(reset: false)
+              : null,
+          child: _isLoadingMorePOs
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : Text(_hasMorePOs ? s.gstLoadMore : s.gstNoMore),
+        ),
+      ),
+    );
+
+    if (expanded) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _sectionLabel(s.gstPurchaseOrderBreakdown),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Container(
+              decoration: BoxDecoration(
+                color: context.cs.surfaceContainerLowest,
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: const [kSubtleShadow],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(14),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(context.cs.surfaceContainerLow),
+                    dataRowMinHeight: 48,
+                    dataRowMaxHeight: 56,
+                    columnSpacing: 20,
+                    horizontalMargin: 16,
+                    columns: [
+                      DataColumn(label: Text('PO #', style: _dtHeader)),
+                      DataColumn(label: Text('Supplier', style: _dtHeader)),
+                      DataColumn(label: Text('Date', style: _dtHeader)),
+                      DataColumn(label: Text('Taxable', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('CGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('SGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('IGST', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Total Tax', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Grand Total', style: _dtHeader), numeric: true),
+                      DataColumn(label: Text('Status', style: _dtHeader)),
+                    ],
+                    rows: _purchaseOrders.map((po) {
+                      final isIgst = po.gstType == 'igst';
+                      final receivedDate = po.receivedAt ?? po.createdAt;
+                      return DataRow(cells: [
+                        DataCell(Text(po.orderNumber, style: _dtBold)),
+                        DataCell(Text(po.supplierName, style: _dtCell)),
+                        DataCell(Text(_dateFormat.format(receivedDate), style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(po.taxableAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? '-' : _currencyFormat.format(po.cgstAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? '-' : _currencyFormat.format(po.sgstAmount), style: _dtCell)),
+                        DataCell(Text(isIgst ? _currencyFormat.format(po.igstAmount) : '-', style: _dtCell)),
+                        DataCell(Text(_currencyFormat.format(po.totalTax), style: _dtBold)),
+                        DataCell(Text(_currencyFormat.format(po.grandTotal), style: _dtBold)),
+                        DataCell(Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(color: _kPaidBg, borderRadius: BorderRadius.circular(20)),
+                          child: Text(s.gstStatusReceived, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: _kPaid)),
+                        )),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          loadMoreBtn,
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionLabel(AppStrings.of(context).gstPurchaseOrderBreakdown),
+        _sectionLabel(s.gstPurchaseOrderBreakdown),
         ..._purchaseOrders.map((po) => _purchaseOrderCard(po)),
-        const SizedBox(height: 90),
+        loadMoreBtn,
       ],
     );
   }

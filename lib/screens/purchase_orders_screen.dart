@@ -53,6 +53,7 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
   bool _isLoading = true;
   Object? _loadError;
   StreamSubscription<List<PurchaseOrder>>? _orderSub;
+  StreamSubscription<AppPlan>? _planSub;
 
   List<PurchaseOrder> get _filtered {
     var list = _allOrders;
@@ -82,10 +83,14 @@ class _PurchaseOrdersScreenState extends State<PurchaseOrdersScreen> {
   void initState() {
     super.initState();
     _subscribe();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _orderSub?.cancel();

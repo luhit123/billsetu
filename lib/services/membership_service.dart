@@ -76,7 +76,7 @@ class MembershipService {
   }
 
   Future<SubscriptionPlan> savePlan(SubscriptionPlan plan) async {
-    final result = await _functions.httpsCallable('saveMembershipPlan').call({
+    final result = await _functions.httpsCallable('saveMembershipPlan', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'planId': plan.id,
       'plan': {
         'name': plan.name,
@@ -107,13 +107,13 @@ class MembershipService {
   }
 
   Future<void> deletePlan(String planId) async {
-    await _functions.httpsCallable('deleteMembershipPlan').call({
+    await _functions.httpsCallable('deleteMembershipPlan', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'planId': planId,
     });
   }
 
   Future<void> togglePlanActive(String planId, bool isActive) async {
-    await _functions.httpsCallable('setMembershipPlanActive').call({
+    await _functions.httpsCallable('setMembershipPlanActive', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'planId': planId,
       'isActive': isActive,
     });
@@ -121,9 +121,15 @@ class MembershipService {
 
   // ── Members CRUD ────────────────────────────────────────────────────────────
 
-  Stream<List<Member>> watchMembers() {
+  // SEC-015: Paginated member loading to prevent OOM and excessive Firestore
+  // reads for businesses with large member bases. Default limit covers the
+  // vast majority of small/medium gyms while preventing unbounded reads.
+  static const int _defaultMemberLimit = 200;
+
+  Stream<List<Member>> watchMembers({int limit = _defaultMemberLimit}) {
     return _membersCol()
         .orderBy('createdAt', descending: true)
+        .limit(limit)
         .snapshots()
         .map(
           (snap) => snap.docs
@@ -147,7 +153,7 @@ class MembershipService {
   }
 
   Future<Member> saveMember(Member member) async {
-    final result = await _functions.httpsCallable('saveMembershipMember').call({
+    final result = await _functions.httpsCallable('saveMembershipMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberId': member.id,
       'member': {
         'name': member.name,
@@ -172,13 +178,13 @@ class MembershipService {
   }
 
   Future<void> deleteMember(String memberId, String planId) async {
-    await _functions.httpsCallable('deleteMembershipMember').call({
+    await _functions.httpsCallable('deleteMembershipMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberId': memberId,
     });
   }
 
   Future<void> freezeMember(String memberId, DateTime freezeUntil) async {
-    await _functions.httpsCallable('freezeMembershipMember').call({
+    await _functions.httpsCallable('freezeMembershipMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberId': memberId,
       'freezeUntilMs': freezeUntil.millisecondsSinceEpoch,
     });
@@ -189,7 +195,7 @@ class MembershipService {
     DateTime? legacyNewEndDate,
   ]) async {
     final result = await _functions
-        .httpsCallable('unfreezeMembershipMember')
+        .httpsCallable('unfreezeMembershipMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15)))
         .call({'memberId': memberId});
     final newEndMs = result.data['newEndDate'] as int?;
     if (newEndMs == null) {
@@ -203,7 +209,7 @@ class MembershipService {
     DateTime? legacyNewEnd,
     double? legacyAmount,
   ]) async {
-    final result = await _functions.httpsCallable('renewMembershipMember').call(
+    final result = await _functions.httpsCallable('renewMembershipMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call(
       {'memberId': memberId},
     );
     final newEndMs = result.data['newEndDate'] as int?;
@@ -223,7 +229,7 @@ class MembershipService {
     String memberName,
     String method,
   ) async {
-    await _functions.httpsCallable('markMembershipAttendance').call({
+    await _functions.httpsCallable('markMembershipAttendance', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberId': memberId,
       'method': method,
     });
@@ -263,6 +269,7 @@ class MembershipService {
         )
         .where('checkInTime', isLessThan: Timestamp.fromDate(endOfDay))
         .orderBy('checkInTime', descending: true)
+        .limit(500) // P-2: Safety cap to bound read costs at scale.
         .get();
 
     return snap.docs
@@ -309,6 +316,10 @@ class MembershipService {
   }
 
   /// Geo check-in: records attendance with GPS coordinates.
+  ///
+  /// NOTE: GPS coordinates are provided by the client and can be spoofed.
+  /// For higher-security attendance, prefer QR code or manual code methods.
+  /// Geo check-in is suitable for convenience-oriented small business use.
   Future<String> geoCheckIn({
     required String memberId,
     required String memberName,
@@ -320,7 +331,7 @@ class MembershipService {
       throw StateError('You can only check in for yourself.');
     }
 
-    final result = await _functions.httpsCallable('teamGeoCheckIn').call({
+    final result = await _functions.httpsCallable('teamGeoCheckIn', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'latitude': latitude,
       'longitude': longitude,
     });
@@ -340,7 +351,7 @@ class MembershipService {
       throw StateError('You can only check out for yourself.');
     }
 
-    await _functions.httpsCallable('teamGeoCheckOut').call({'logId': logId});
+    await _functions.httpsCallable('teamGeoCheckOut', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({'logId': logId});
   }
 
   /// Gets today's active check-in for a member (if any, no checkout yet).
@@ -415,24 +426,70 @@ class MembershipService {
 
   // ── Dashboard Stats ─────────────────────────────────────────────────────────
 
-  // Loads all members for field-level aggregation (revenue, expiry dates).
-  // For very large gyms (>10K members), consider denormalizing stats into
-  // a summary document updated by a Cloud Function trigger.
+  // SEC-015: Use Firestore aggregation counts where possible instead of loading
+  // all documents into memory. Falls back to a capped fetch (500 docs) for
+  // revenue and expiry calculations that need field-level access.
   Future<Map<String, dynamic>> getDashboardStats() async {
-    final snap = await _membersCol().get();
+    // ── P-1: Try the denormalized stats doc first (single read, O(1)). ──
+    try {
+      final uid = _requireOwnerId();
+      final statsSnap = await _firestore
+          .collection('users')
+          .doc(uid)
+          .collection('membershipStats')
+          .doc('current')
+          .get();
+      if (statsSnap.exists) {
+        final d = statsSnap.data()!;
+        return {
+          'totalMembers': d['totalMembers'] as int? ?? 0,
+          'active': d['active'] as int? ?? 0,
+          'expired': d['expired'] as int? ?? 0,
+          'frozen': d['frozen'] as int? ?? 0,
+          'cancelled': d['cancelled'] as int? ?? 0,
+          'expiringThisWeek': d['expiringThisWeek'] as int? ?? 0,
+          'totalRevenue': (d['totalRevenue'] as num?)?.toDouble() ?? 0,
+        };
+      }
+    } catch (_) {
+      // Stats doc not yet created — fall through to query-based approach.
+    }
+
+    // ── Fallback: query-based stats (original logic). ──
+    final col = _membersCol();
+
+    // Use server-side count() for total and frozen — O(1) reads.
+    final totalCountFuture = col.where('isDeleted', isEqualTo: false).count().get();
+    final frozenCountFuture = col
+        .where('isDeleted', isEqualTo: false)
+        .where('status', isEqualTo: 'frozen')
+        .count()
+        .get();
+
+    // For revenue and expiry breakdown we still need field access, but cap it.
+    final docsFuture = col
+        .where('isDeleted', isEqualTo: false)
+        .orderBy('createdAt', descending: true)
+        .limit(500)
+        .get();
+
+    final results = await Future.wait([totalCountFuture, frozenCountFuture, docsFuture]);
+    final totalMembers = (results[0] as AggregateQuerySnapshot).count ?? 0;
+    final frozen = (results[1] as AggregateQuerySnapshot).count ?? 0;
+    final snap = results[2] as QuerySnapshot<Map<String, dynamic>>;
+
     final members = snap.docs
         .map((d) => Member.fromMap(d.data(), docId: d.id))
-        .where((member) => !member.isDeleted)
         .toList();
 
     final now = DateTime.now();
-    int active = 0, expired = 0, frozen = 0, expiringThisWeek = 0;
+    int active = 0, expired = 0, expiringThisWeek = 0;
     double totalRevenue = 0;
 
     for (final m in members) {
       totalRevenue += m.amountPaid + m.joiningFeePaid;
       if (m.status == MemberStatus.frozen) {
-        frozen++;
+        // Already counted above
       } else if (m.endDate.isBefore(now)) {
         expired++;
       } else {
@@ -444,13 +501,23 @@ class MembershipService {
     }
 
     return {
-      'totalMembers': members.length,
+      'totalMembers': totalMembers,
       'active': active,
       'expired': expired,
       'frozen': frozen,
       'expiringThisWeek': expiringThisWeek,
       'totalRevenue': totalRevenue,
     };
+  }
+
+  /// SM-1: Cancel a membership member via Cloud Function.
+  /// Sets the member status to 'cancelled' and clears any freeze state.
+  Future<void> cancelMember(String memberId) async {
+    await _functions
+        .httpsCallable('cancelMembershipMember',
+            options: HttpsCallableOptions(
+                timeout: const Duration(seconds: 15)))
+        .call({'memberId': memberId});
   }
 }
 

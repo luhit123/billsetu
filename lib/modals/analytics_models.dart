@@ -76,6 +76,11 @@ class GstPeriodSummary {
     this.inputIgstAmount = 0,
     this.inputTotalTax = 0,
     this.inputGrandTotal = 0,
+    this.intraTaxableAmount = 0,
+    this.interTaxableAmount = 0,
+    this.intraCgst = 0,
+    this.intraSgst = 0,
+    this.interIgst = 0,
     this.updatedAt,
   });
 
@@ -97,6 +102,12 @@ class GstPeriodSummary {
   final double inputIgstAmount;
   final double inputTotalTax;
   final double inputGrandTotal;
+  // GSTR-3B intra/inter breakdown (server-aggregated)
+  final double intraTaxableAmount;
+  final double interTaxableAmount;
+  final double intraCgst;
+  final double intraSgst;
+  final double interIgst;
   final DateTime? updatedAt;
 
   double get outputTax => totalTax;
@@ -122,6 +133,11 @@ class GstPeriodSummary {
       inputIgstAmount: _doubleFromMapValue(map['inputIgstAmount']),
       inputTotalTax: _doubleFromMapValue(map['inputTotalTax']),
       inputGrandTotal: _doubleFromMapValue(map['inputGrandTotal']),
+      intraTaxableAmount: _doubleFromMapValue(map['intraTaxableAmount']),
+      interTaxableAmount: _doubleFromMapValue(map['interTaxableAmount']),
+      intraCgst: _doubleFromMapValue(map['intraCgst']),
+      intraSgst: _doubleFromMapValue(map['intraSgst']),
+      interIgst: _doubleFromMapValue(map['interIgst']),
       updatedAt: _dateTimeFromMapValue(map['updatedAt']),
     );
   }

@@ -8,6 +8,38 @@ enum InvoiceStatus { paid, pending, overdue, partiallyPaid }
 
 enum InvoiceDiscountType { percentage, overall }
 
+/// Immutable snapshot of all computed financial values for an invoice.
+///
+/// **This is the single source of truth for GST/discount/total math.**
+/// Both [Invoice.toMap] (persistence) and the create-invoice screen (live
+/// preview) MUST use [Invoice.computeFinancials] to obtain this record,
+/// guaranteeing identical results everywhere.
+class FinancialSummary {
+  const FinancialSummary({
+    required this.subtotal,
+    required this.discountAmount,
+    required this.taxableAmount,
+    required this.cgstAmount,
+    required this.sgstAmount,
+    required this.igstAmount,
+    required this.totalTax,
+    required this.grandTotal,
+    required this.hasGst,
+    required this.balanceDue,
+  });
+
+  final double subtotal;
+  final double discountAmount;
+  final double taxableAmount;
+  final double cgstAmount;
+  final double sgstAmount;
+  final double igstAmount;
+  final double totalTax;
+  final double grandTotal;
+  final bool hasGst;
+  final double balanceDue;
+}
+
 class Invoice {
   const Invoice({
     required this.id,
@@ -202,21 +234,94 @@ class Invoice {
     return storedGrandTotal ?? _roundCurrency(taxableAmount + totalTax);
   }
 
+  // ── Unified financial computation (FIX G-1) ──────────────────────────────
+
+  /// **Single source of truth** for all GST / discount / total math.
+  ///
+  /// Both [toMap] (Firestore persistence) and the create-invoice screen's live
+  /// preview MUST call this method so the numbers are always identical.
+  ///
+  /// The method accepts raw inputs rather than reading from `this` so that the
+  /// create-screen can pass uncommitted form values without constructing a
+  /// throw-away Invoice.
+  static FinancialSummary computeFinancials({
+    required List<LineItem> items,
+    required InvoiceDiscountType? discountType,
+    required double discountValue,
+    required bool gstEnabled,
+    required String gstType,
+    required double amountReceived,
+  }) {
+    final sub = _roundCurrency(
+      items.fold(0.0, (acc, item) => acc + item.total),
+    );
+    final disc = _computeDiscountStatic(sub, discountType, discountValue);
+    // Do NOT round — Firestore rules check: taxableAmount == subtotal - discountAmount
+    final taxable = sub - disc;
+    final discRatio = sub > 0 ? taxable / sub : 0.0;
+
+    double cgst = 0, sgst = 0, igst = 0;
+    if (gstEnabled) {
+      for (final item in items) {
+        final itemTaxable = item.total * discRatio;
+        if (gstType == 'cgst_sgst') {
+          cgst += itemTaxable * item.gstRate / 200;
+        } else {
+          igst += itemTaxable * item.gstRate / 100;
+        }
+      }
+      cgst = _roundCurrency(cgst);
+      sgst = cgst; // SGST always equals CGST for intra-state
+      igst = _roundCurrency(igst);
+    }
+
+    // Derive totalTax and grandTotal as EXACT sums of already-rounded parts.
+    // Do NOT re-round — Firestore rules check exact equality.
+    final tax = cgst + sgst + igst;
+    final grand = taxable + tax;
+
+    return FinancialSummary(
+      subtotal: sub,
+      discountAmount: disc,
+      taxableAmount: taxable,
+      cgstAmount: cgst,
+      sgstAmount: sgst,
+      igstAmount: igst,
+      totalTax: tax,
+      grandTotal: grand,
+      hasGst: gstEnabled && tax > 0,
+      balanceDue: _roundCurrency(grand - amountReceived),
+    );
+  }
+
+  /// Convenience wrapper that reads inputs from `this` invoice instance.
+  FinancialSummary get financials => computeFinancials(
+        items: items,
+        discountType: discountType,
+        discountValue: discountValue,
+        gstEnabled: gstEnabled,
+        gstType: gstType,
+        amountReceived: amountReceived,
+      );
+
   factory Invoice.fromMap(Map<String, dynamic> map, {String? docId}) {
     final rawItems = map['items'] as List<dynamic>? ?? const [];
     final orderGstRate = _doubleFromMapValue(map['gstRate']) > 0
         ? _doubleFromMapValue(map['gstRate'])
         : 18.0;
     final orderGstEnabled = map['gstEnabled'] as bool? ?? false;
+    final schemaVersion = map['schemaVersion'] as int? ?? 1;
     var parsedItems = rawItems
         .map(
           (item) => LineItem.fromMap(Map<String, dynamic>.from(item as Map)),
         )
         .toList();
 
-    // Backward compat: if GST enabled but all items have gstRate 0
-    // (saved before per-item GST), backfill with order-level rate.
-    if (orderGstEnabled &&
+    // FIX G-3: Only backfill items with order-level GST rate for schema v1
+    // (before per-item rates existed). Schema v2+ may legitimately have
+    // items at 0% (exempt goods), so backfilling would be incorrect.
+    if (schemaVersion < 2 &&
+        orderGstEnabled &&
         orderGstRate > 0 &&
         parsedItems.isNotEmpty &&
         parsedItems.every((i) => i.gstRate == 0)) {
@@ -270,41 +375,9 @@ class Invoice {
   }
 
   Map<String, dynamic> toMap() {
-    // Compute all financials from a single chain to guarantee Firestore rule
-    // invariants hold exactly (no floating-point rounding drift between
-    // independently rounded getters).
-    final mapSubtotal = _roundCurrency(
-      items.fold(0.0, (acc, item) => acc + item.total),
-    );
-    final mapDiscountAmount = _computeDiscount(mapSubtotal);
-    // Do NOT round — Firestore rule checks: taxableAmount == subtotal - discountAmount
-    final mapTaxableAmount = mapSubtotal - mapDiscountAmount;
-    final discRatio = mapSubtotal > 0 ? mapTaxableAmount / mapSubtotal : 0.0;
-
-    double mapCgst = 0, mapSgst = 0, mapIgst = 0;
-    if (gstEnabled) {
-      for (final item in items) {
-        final itemTaxable = item.total * discRatio;
-        if (gstType == 'cgst_sgst') {
-          mapCgst += itemTaxable * item.gstRate / 200;
-        } else {
-          mapIgst += itemTaxable * item.gstRate / 100;
-        }
-      }
-      mapCgst = _roundCurrency(mapCgst);
-      mapSgst = mapCgst; // SGST always equals CGST for intra-state
-      mapIgst = _roundCurrency(mapIgst);
-    }
-
-    // Derive totalTax and grandTotal as EXACT sums of already-rounded parts.
-    // Do NOT re-round — Firestore rules check exact equality:
-    //   totalTax == cgstAmount + sgstAmount + igstAmount
-    //   grandTotal == taxableAmount + totalTax
-    // Re-rounding can shift by 0.01 and fail the rule.
-    final mapTotalTax = mapCgst + mapSgst + mapIgst;
-    final mapGrandTotal = mapTaxableAmount + mapTotalTax;
-    final mapHasGst = gstEnabled && mapTotalTax > 0;
-    final mapBalanceDue = _roundCurrency(mapGrandTotal - amountReceived);
+    // FIX G-1: Use the single computeFinancials() path so the numbers saved
+    // to Firestore are byte-for-byte identical to what the create-screen shows.
+    final f = financials;
 
     return {
       'id': id,
@@ -328,24 +401,26 @@ class Invoice {
       'gstType': gstType,
       'placeOfSupply': placeOfSupply,
       'customerGstin': customerGstin,
-      'subtotal': mapSubtotal,
-      'discountAmount': mapDiscountAmount,
-      'taxableAmount': mapTaxableAmount,
-      'cgstAmount': mapCgst,
-      'sgstAmount': mapSgst,
-      'igstAmount': mapIgst,
-      'totalTax': mapTotalTax,
-      'grandTotal': mapGrandTotal,
-      'hasGst': mapHasGst,
+      'subtotal': f.subtotal,
+      'discountAmount': f.discountAmount,
+      'taxableAmount': f.taxableAmount,
+      'cgstAmount': f.cgstAmount,
+      'sgstAmount': f.sgstAmount,
+      'igstAmount': f.igstAmount,
+      'totalTax': f.totalTax,
+      'grandTotal': f.grandTotal,
+      'hasGst': f.hasGst,
       'amountReceived': amountReceived,
-      'balanceDue': mapBalanceDue,
+      'balanceDue': f.balanceDue,
       if (paymentMethod.isNotEmpty) 'paymentMethod': paymentMethod,
       if (notes != null) 'notes': notes,
       'createdByUid': createdByUid,
       'createdByName': createdByName,
       'createdBySignatureUrl': createdBySignatureUrl,
       'schemaVersion': currentSchemaVersion,
-      'gstTransactionType': customerGstin.trim().isNotEmpty ? 'B2B' : 'B2C',
+      // FIX G-4: Use the same isB2B logic (>= 15 chars) as the getter,
+      // not the weaker isNotEmpty check that was here before.
+      'gstTransactionType': gstTransactionType,
     };
   }
 
@@ -427,17 +502,28 @@ class Invoice {
     return _doubleFromMapValue(value);
   }
 
-  /// Compute discount from subtotal (used by toMap to avoid getter drift).
-  double _computeDiscount(double sub) {
-    if (discountType == null || discountValue <= 0) return 0;
-    switch (discountType!) {
+  /// Compute discount from subtotal — static so [computeFinancials] can use it.
+  static double _computeDiscountStatic(
+    double sub,
+    InvoiceDiscountType? type,
+    double value,
+  ) {
+    if (type == null || value <= 0) return 0;
+    switch (type) {
       case InvoiceDiscountType.percentage:
-        return _roundCurrency((sub * (discountValue / 100)).clamp(0, sub));
+        return _roundCurrency((sub * (value / 100)).clamp(0, sub));
       case InvoiceDiscountType.overall:
-        return _roundCurrency(discountValue.clamp(0, sub));
+        return _roundCurrency(value.clamp(0, sub));
     }
   }
 
+  // NOTE G-5 (future migration): IEEE 754 `double` can accumulate drift when
+  // summing many items (up to 200). The current round-after-sum strategy is
+  // sound for typical invoice sizes, but for future-proofing consider:
+  //   1. Compute all amounts in **paisa** (integer cents): qty * priceInPaisa.
+  //   2. Divide by 100 only at display/serialization time.
+  //   3. Use `int` throughout to eliminate floating-point entirely.
+  // This is a pure internal refactor — no UI or Firestore schema change needed.
   static double _roundCurrency(num value) {
     return (value * 100).roundToDouble() / 100;
   }

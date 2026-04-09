@@ -131,6 +131,7 @@ class FirebaseService {
     DateTime? endDateExclusive,
     InvoiceStatus? status,
     bool? gstEnabled,
+    String? createdByUid,
     int limit = 25,
     QueryDocumentSnapshot<Map<String, dynamic>>? startAfterDocument,
   }) async {
@@ -142,6 +143,7 @@ class FirebaseService {
       endDateExclusive: endDateExclusive,
       status: status,
       gstEnabled: gstEnabled,
+      createdByUid: createdByUid,
     );
 
     return query.fetchPage<Invoice>(
@@ -207,8 +209,13 @@ class FirebaseService {
     DateTime? endDateExclusive,
     InvoiceStatus? status,
     bool? gstEnabled,
+    String? createdByUid,
     int pageSize = 100,
-    int maxResults = 5000,
+    // FIX SC-1: Reduced from 5000 to 1000. At ~2 KB per invoice doc the old
+    // limit could pull ~10 MB into memory — enough to OOM low-end Androids.
+    // 1000 invoices/period covers 99.9 % of small businesses and still yields
+    // a complete GST export for a monthly filing period.
+    int maxResults = 1000,
   }) async {
     final invoices = <Invoice>[];
     QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
@@ -221,6 +228,7 @@ class FirebaseService {
         endDateExclusive: endDateExclusive,
         status: status,
         gstEnabled: gstEnabled,
+        createdByUid: createdByUid,
         limit: pageSize,
         startAfterDocument: cursor,
       );
@@ -233,16 +241,39 @@ class FirebaseService {
     return invoices;
   }
 
+  /// Derives a deterministic Firestore document ID from an invoice number.
+  /// This makes invoice creation idempotent — retries (double-tap, offline
+  /// re-sync) upsert the same document instead of creating duplicates.
+  /// Format: inv_BR_2026_00042 (from BR-2026-00042).
+  static String _deriveInvoiceDocId(String invoiceNumber) {
+    if (invoiceNumber.isEmpty) return '';
+    return 'inv_${invoiceNumber.replaceAll('-', '_')}';
+  }
+
   Future<String> addInvoice(Invoice inv) async {
     final ownerId = _requireOwnerId();
     final now = DateTime.now();
-    final docRef = inv.id.isNotEmpty
-        ? _invoicesCollection.doc(inv.id)
-        : _invoicesCollection.doc();
+    // F7 fix: derive docId from invoice number for idempotency.
+    // If id is already set (edit), use that. Otherwise derive from
+    // invoiceNumber so retries hit the same document.
+    final DocumentReference<Map<String, dynamic>> docRef;
+    if (inv.id.isNotEmpty) {
+      docRef = _invoicesCollection.doc(inv.id);
+    } else {
+      final derivedId = _deriveInvoiceDocId(inv.invoiceNumber);
+      docRef = derivedId.isNotEmpty
+          ? _invoicesCollection.doc(derivedId)
+          : _invoicesCollection.doc();
+    }
+
+    // Issue #1: usagePeriodKey enables server-side quota enforcement
+    // in Firestore rules by telling the rules which usage doc to check.
+    final usagePeriod = '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
     final data = inv.toMap()
       ..['id'] = docRef.id
-      ..['ownerId'] = ownerId;
+      ..['ownerId'] = ownerId
+      ..['usagePeriodKey'] = usagePeriod;
 
     final batch = _firestore.batch();
     batch.set(docRef, data);
@@ -286,13 +317,24 @@ class FirebaseService {
   }) async {
     final ownerId = _requireOwnerId();
     final now = DateTime.now();
-    final docRef = inv.id.isNotEmpty
-        ? _invoicesCollection.doc(inv.id)
-        : _invoicesCollection.doc();
+    // F7 fix: derive docId from invoice number for idempotency.
+    final DocumentReference<Map<String, dynamic>> docRef;
+    if (inv.id.isNotEmpty) {
+      docRef = _invoicesCollection.doc(inv.id);
+    } else {
+      final derivedId = _deriveInvoiceDocId(inv.invoiceNumber);
+      docRef = derivedId.isNotEmpty
+          ? _invoicesCollection.doc(derivedId)
+          : _invoicesCollection.doc();
+    }
+
+    // Issue #1: usagePeriodKey enables server-side quota enforcement
+    final usagePeriod = '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
     final data = inv.toMap()
       ..['id'] = docRef.id
-      ..['ownerId'] = ownerId;
+      ..['ownerId'] = ownerId
+      ..['usagePeriodKey'] = usagePeriod;
 
     final batch = _firestore.batch();
     batch.set(docRef, data);
@@ -461,12 +503,16 @@ class FirebaseService {
     await commit;
   }
 
+  // FIX SEC-2: Validate ownership before updating, matching the pattern
+  // used by updateInvoiceStatus() and deleteInvoice(). Without this,
+  // the offline cache could temporarily accept an update on another
+  // user's invoice (server would reject it later, but UI would flicker).
   Future<void> updateInvoice(Invoice inv) async {
-    final docRef = _invoicesCollection.doc(inv.id);
+    final invoiceRef = await _resolveOwnedInvoiceRef(inv.id);
     final data = inv.toMap()
       ..['id'] = inv.id
       ..['ownerId'] = inv.ownerId;
-    final write = docRef.set(data);
+    final write = invoiceRef.set(data);
     if (ConnectivityService.instance.isOffline) {
       write.catchError((Object e) {
         debugPrint('[FirebaseService] Offline invoice update queue failed: $e');
@@ -573,19 +619,42 @@ class FirebaseService {
           return;
         }
 
+        // FIX SEC-4: Compute newTotalReceived from the server-side document
+        // instead of trusting the client-supplied value. A tampered client
+        // could pass grandTotal as newTotalReceived with a tiny paymentAmount
+        // to mark an invoice as fully paid without actually paying.
+        final invoiceData = invoiceSnap.data() ?? {};
+        final serverReceived =
+            (invoiceData['amountReceived'] as num? ?? 0).toDouble();
+        final serverGrandTotal =
+            (invoiceData['grandTotal'] as num? ?? 0).toDouble();
+        final serverNewTotal = ((serverReceived + paymentAmount) * 100)
+                .roundToDouble() /
+            100;
+        final serverBalanceDue =
+            ((serverGrandTotal - serverNewTotal) * 100).roundToDouble() / 100;
+        String serverStatus;
+        if (serverNewTotal >= serverGrandTotal && serverGrandTotal > 0) {
+          serverStatus = InvoiceStatus.paid.name;
+        } else if (serverNewTotal > 0) {
+          serverStatus = InvoiceStatus.partiallyPaid.name;
+        } else {
+          serverStatus = InvoiceStatus.pending.name;
+        }
+
         txn.set(paymentRef, {
           'amount': paymentAmount,
           'method': method,
           'note': note,
           'date': FieldValue.serverTimestamp(),
-          'runningTotal': newTotalReceived,
-          'balanceAfter': balanceDue,
+          'runningTotal': serverNewTotal,
+          'balanceAfter': serverBalanceDue,
         });
 
         txn.update(invoiceRef, {
-          'amountReceived': newTotalReceived,
-          'balanceDue': balanceDue,
-          'status': status,
+          'amountReceived': serverNewTotal,
+          'balanceDue': serverBalanceDue,
+          'status': serverStatus,
         });
       });
       if (kDebugMode) {

@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/screens/business_card_screen.dart';
 import 'package:billeasy/screens/how_to_use_screen.dart';
 import 'package:billeasy/screens/language_selection_screen.dart';
 import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/screens/login_screen.dart';
+import 'package:billeasy/screens/pending_invites_screen.dart';
 import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/screens/privacy_policy_screen.dart';
 import 'package:billeasy/screens/subscription_screen.dart';
@@ -13,12 +16,14 @@ import 'package:billeasy/screens/team_management_screen.dart';
 import 'package:billeasy/screens/team_settings_screen.dart';
 import 'package:billeasy/services/auth_service.dart';
 import 'package:billeasy/services/plan_service.dart';
+import 'package:billeasy/services/profile_service.dart';
 import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/services/theme_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/utils/public_links.dart';
 import 'package:billeasy/widgets/aurora_app_backdrop.dart';
 import 'package:billeasy/widgets/connectivity_banner.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +41,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isUpdatingLanguage = false;
   bool _isDeletingAccount = false;
   bool _isSigningOut = false;
+  bool _acceptTeamInvites = true;
+  int _pendingInviteCount = 0;
+  StreamSubscription<AppPlan>? _planSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _acceptTeamInvites =
+        ProfileService.instance.cachedProfile?.acceptTeamInvites ?? true;
+    _loadPendingInviteCount();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -191,19 +216,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const _SectionLabel(title: 'TEAM'),
                     const SizedBox(height: 8),
                     _TonalCard(
-                      child: _SettingsTile(
-                        icon: Icons.groups_rounded,
-                        iconBg: const Color(0xFF34C759),
-                        title: TeamService.instance.isTeamMember
-                            ? 'Team Settings'
-                            : 'Manage Team',
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => TeamService.instance.isTeamMember
-                                ? const TeamSettingsScreen()
-                                : const TeamManagementScreen(),
+                      child: Column(
+                        children: [
+                          _SettingsTile(
+                            icon: Icons.groups_rounded,
+                            iconBg: const Color(0xFF34C759),
+                            title: TeamService.instance.isTeamMember
+                                ? 'Team Settings'
+                                : 'Manage Team',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    TeamService.instance.isTeamMember
+                                        ? const TeamSettingsScreen()
+                                        : const TeamManagementScreen(),
+                              ),
+                            ),
                           ),
-                        ),
+                          const _TileDivider(),
+                          _SettingsTile(
+                            icon: Icons.mail_rounded,
+                            iconBg: const Color(0xFF007AFF),
+                            title: _pendingInviteCount > 0
+                                ? 'Pending Invitations ($_pendingInviteCount)'
+                                : 'Pending Invitations',
+                            onTap: _openPendingInvites,
+                          ),
+                          const _TileDivider(),
+                          _SettingsToggleTile(
+                            icon: Icons.mail_lock_rounded,
+                            iconBg: const Color(0xFFFF9500),
+                            title: 'Accept Team Invites',
+                            subtitle: _acceptTeamInvites
+                                ? 'Others can invite you to their team'
+                                : 'Nobody can send you team invites',
+                            value: _acceptTeamInvites,
+                            onChanged: _toggleAcceptTeamInvites,
+                          ),
+                        ],
                       ),
                     ),
 
@@ -490,6 +540,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String planName,
     required User? currentUser,
   }) {
+    final photoUrl = currentUser?.photoURL;
     final planState = !PlanService.instance.isFullAccess
         ? 'Upgrade available'
         : TeamService.instance.isTeamMember
@@ -508,10 +559,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           CircleAvatar(
             radius: 26,
             backgroundColor: Colors.white.withValues(alpha: 0.18),
-            backgroundImage: currentUser?.photoURL != null
-                ? NetworkImage(currentUser!.photoURL!)
-                : null,
-            child: currentUser?.photoURL == null
+            backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+            child: photoUrl == null
                 ? Text(
                     accountName.isNotEmpty ? accountName[0].toUpperCase() : '?',
                     style: const TextStyle(
@@ -565,6 +614,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String accountName,
     required String accountEmail,
   }) {
+    final photoUrl = currentUser?.photoURL;
     return _TonalCard(
       child: InkWell(
         onTap: _openProfile,
@@ -576,10 +626,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               CircleAvatar(
                 radius: 24,
                 backgroundColor: context.cs.surfaceContainerLow,
-                backgroundImage: currentUser?.photoURL != null
-                    ? NetworkImage(currentUser!.photoURL!)
-                    : null,
-                child: currentUser?.photoURL == null
+                backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+                child: photoUrl == null
                     ? Text(
                         accountName.isNotEmpty
                             ? accountName[0].toUpperCase()
@@ -783,6 +831,66 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
     } finally {
       if (mounted) setState(() => _isUpdatingLanguage = false);
+    }
+  }
+
+  Future<void> _loadPendingInviteCount() async {
+    try {
+      final invites = await TeamService.instance.getPendingInvites();
+      if (mounted) setState(() => _pendingInviteCount = invites.length);
+    } catch (_) {
+      // Ignore — count stays at 0
+    }
+  }
+
+  Future<void> _openPendingInvites() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PendingInvitesScreen(
+          onDone: () {
+            // Pop back to settings
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+            }
+          },
+        ),
+      ),
+    );
+    // Refresh count after returning (invite may have been accepted/declined)
+    _loadPendingInviteCount();
+    // Refresh accept toggle in case profile changed
+    setState(() {
+      _acceptTeamInvites =
+          ProfileService.instance.cachedProfile?.acceptTeamInvites ?? true;
+    });
+  }
+
+  Future<void> _toggleAcceptTeamInvites(bool value) async {
+    setState(() => _acceptTeamInvites = value);
+    try {
+      final profile = ProfileService.instance.cachedProfile;
+      if (profile != null) {
+        await ProfileService.instance.saveCurrentProfile(
+          profile.copyWith(acceptTeamInvites: value),
+        );
+      } else {
+        // No profile yet — write just this field via Firestore merge
+        final uid = FirebaseAuth.instance.currentUser?.uid;
+        if (uid != null) {
+          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'acceptTeamInvites': value,
+            'updatedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
+        }
+      }
+    } catch (e) {
+      // Revert on failure
+      if (mounted) {
+        setState(() => _acceptTeamInvites = !value);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to update setting: $e')),
+        );
+      }
     }
   }
 
@@ -1227,6 +1335,71 @@ class _LanguageTile extends StatelessWidget {
               )
             else if (isSelected)
               const Icon(Icons.check_rounded, color: kPrimary, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsToggleTile extends StatelessWidget {
+  const _SettingsToggleTile({
+    required this.icon,
+    required this.title,
+    required this.iconBg,
+    required this.value,
+    required this.onChanged,
+    this.subtitle,
+  });
+
+  final IconData icon;
+  final String title;
+  final Color iconBg;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final String? subtitle;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () => onChanged(!value),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: iconBg,
+                borderRadius: BorderRadius.circular(7),
+              ),
+              child: Icon(icon, color: Colors.white, size: 17),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 15, color: context.cs.onSurface),
+                  ),
+                  if (subtitle != null)
+                    Text(
+                      subtitle!,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: value,
+              onChanged: onChanged,
+            ),
           ],
         ),
       ),

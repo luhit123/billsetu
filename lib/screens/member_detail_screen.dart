@@ -1218,7 +1218,7 @@ class _MemberDetailScreenState extends State<MemberDetailScreen> {
               itemCount: _attendanceLogs.length > 20
                   ? 20
                   : _attendanceLogs.length,
-              separatorBuilder: (_, __) =>
+              separatorBuilder: (_, _) =>
                   Divider(height: 1, color: context.cs.surfaceContainerLow),
               itemBuilder: (_, i) {
                 final log = _attendanceLogs[i];

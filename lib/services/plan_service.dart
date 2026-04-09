@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -298,6 +300,10 @@ class PlanService {
     final expiresAt = (data['currentPeriodEnd'] as Timestamp?)?.toDate();
     final graceAt = (data['graceExpiresAt'] as Timestamp?)?.toDate();
     final trialEnd = (data['trialExpiresAt'] as Timestamp?)?.toDate();
+    // SEC-006: Use server-provided updatedAt as reference time instead of
+    // device clock to prevent clock manipulation attacks on grace/trial.
+    final serverUpdatedAt = (data['updatedAt'] as Timestamp?)?.toDate();
+    final now = serverUpdatedAt ?? DateTime.now();
 
     _subscriptionStatus = status;
     _billingCycle = data['billingCycle'] as String?;
@@ -312,12 +318,12 @@ class PlanService {
         isPaidPlan) {
       if (status == 'halted' &&
           graceAt != null &&
-          graceAt.isAfter(DateTime.now())) {
+          graceAt.isAfter(now)) {
         _currentPlan = resolvedPlan;
         _isInGracePeriod = true;
       } else if (status == 'halted') {
         // Grace period expired — fall through to trial check
-        _resolveTrialOrExpired(trialEnd);
+        _resolveTrialOrExpired(trialEnd, now);
         _isInGracePeriod = false;
       } else {
         _currentPlan = resolvedPlan;
@@ -325,7 +331,7 @@ class PlanService {
       }
     } else {
       // Not an active paid subscriber — check trial
-      _resolveTrialOrExpired(trialEnd);
+      _resolveTrialOrExpired(trialEnd, now);
       _isInGracePeriod = false;
     }
   }
@@ -337,7 +343,11 @@ class PlanService {
   /// it takes effect immediately for all users without an app update.
   ///
   /// Falls back to [storedTrialEnd] only when createdAt is not yet cached.
-  void _resolveTrialOrExpired(DateTime? storedTrialEnd) {
+  ///
+  /// SEC-006: [referenceNow] uses the server-provided timestamp when available,
+  /// falling back to device time only as a last resort.
+  void _resolveTrialOrExpired(DateTime? storedTrialEnd, [DateTime? referenceNow]) {
+    final now = referenceNow ?? DateTime.now();
     // If the server explicitly set a trialExpiresAt (e.g. epoch 0 for
     // returning users), respect it over the RC-based calculation.
     if (storedTrialEnd != null &&
@@ -352,13 +362,13 @@ class PlanService {
       // RC-controlled: trial expiry = user's sign-up date + RC months.
       final rcMonths = RemoteConfigService.instance.trialDurationMonths;
       _trialExpiresAt = _addMonthsClamped(_userCreatedAt!, rcMonths);
-      _currentPlan = _trialExpiresAt!.isAfter(DateTime.now())
+      _currentPlan = _trialExpiresAt!.isAfter(now)
           ? AppPlan.trial
           : AppPlan.expired;
       return;
     }
     // Fallback: use stored value (e.g. before user doc is fetched)
-    if (storedTrialEnd != null && storedTrialEnd.isAfter(DateTime.now())) {
+    if (storedTrialEnd != null && storedTrialEnd.isAfter(now)) {
       _currentPlan = AppPlan.trial;
       _trialExpiresAt = storedTrialEnd;
     } else {
@@ -392,6 +402,13 @@ class PlanService {
           );
   }
 
+  // SEC-005: HMAC-sign cached plan data to prevent SharedPreferences tampering.
+  static String _computeCacheHmac(String uid, String plan, int? trialMs) {
+    final key = utf8.encode(uid);
+    final data = utf8.encode('$plan|${trialMs ?? 0}');
+    return Hmac(sha256, key).convert(data).toString();
+  }
+
   Future<void> _loadCachedPlan() async {
     try {
       String? uid;
@@ -407,13 +424,20 @@ class PlanService {
       final cachedUid = prefs.getString('cached_plan_uid');
       if (cachedUid != uid) return;
       final cached = prefs.getString('cached_plan');
-      if (cached != null) {
-        _currentPlan = AppPlan.values.firstWhere(
-          (p) => p.name == cached,
-          orElse: () => AppPlan.trial,
-        );
-      }
+      if (cached == null) return;
       final cachedTrialMs = prefs.getInt('cached_trial_expires_at');
+      // SEC-005: Verify HMAC before trusting cached plan data.
+      final storedHmac = prefs.getString('cached_plan_hmac');
+      final expectedHmac = _computeCacheHmac(uid, cached, cachedTrialMs);
+      if (storedHmac != expectedHmac) {
+        debugPrint('[PlanService] Cache HMAC mismatch — treating as expired');
+        _currentPlan = AppPlan.expired;
+        return;
+      }
+      _currentPlan = AppPlan.values.firstWhere(
+        (p) => p.name == cached,
+        orElse: () => AppPlan.trial,
+      );
       if (cachedTrialMs != null) {
         _trialExpiresAt = DateTime.fromMillisecondsSinceEpoch(cachedTrialMs);
       }
@@ -432,14 +456,17 @@ class PlanService {
       }
       if (uid == null) return;
       final prefs = await SharedPreferences.getInstance();
+      final trialMs = _trialExpiresAt?.millisecondsSinceEpoch;
       await prefs.setString('cached_plan_uid', uid);
       await prefs.setString('cached_plan', _currentPlan.name);
-      if (_trialExpiresAt != null) {
-        await prefs.setInt(
-          'cached_trial_expires_at',
-          _trialExpiresAt!.millisecondsSinceEpoch,
-        );
+      if (trialMs != null) {
+        await prefs.setInt('cached_trial_expires_at', trialMs);
       }
+      // SEC-005: Store HMAC signature alongside cached data.
+      await prefs.setString(
+        'cached_plan_hmac',
+        _computeCacheHmac(uid, _currentPlan.name, trialMs),
+      );
     } catch (e) {
       debugPrint('[PlanService] Failed to cache plan: $e');
     }

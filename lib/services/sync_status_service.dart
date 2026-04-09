@@ -1,21 +1,26 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:billeasy/services/team_service.dart';
 
 /// Monitors Firestore snapshot metadata to detect pending writes that
 /// haven't synced to the server, and surfaces sync failure warnings.
 ///
+/// Implements WidgetsBindingObserver to pause/resume the periodic timer
+/// when the app enters background/foreground (Issue #13).
+///
 /// Usage:
 ///   SyncStatusService.instance.init();
 ///   // Listen in UI:
-///   SyncStatusService.instance.hasPendingWrites  // ValueNotifier<bool>
-///   SyncStatusService.instance.lastSyncError     // ValueNotifier<String?>
-class SyncStatusService {
+///   SyncStatusService.instance.hasPendingWrites  // ValueNotifier\<bool\>
+///   SyncStatusService.instance.lastSyncError     // ValueNotifier\<String?\>
+class SyncStatusService with WidgetsBindingObserver {
   SyncStatusService._();
   static final SyncStatusService instance = SyncStatusService._();
+
+  bool _observerRegistered = false;
 
   final _firestore = FirebaseFirestore.instance;
 
@@ -33,6 +38,36 @@ class SyncStatusService {
   Timer? _checkTimer;
   bool _previouslyHadPending = false;
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      // App going to background — pause the periodic timer to save resources
+      _checkTimer?.cancel();
+      _checkTimer = null;
+    } else if (state == AppLifecycleState.resumed) {
+      // App returning to foreground — restart the timer
+      if (_sub != null && _checkTimer == null) {
+        _startCheckTimer();
+      }
+    }
+  }
+
+  void _startCheckTimer() {
+    _checkTimer?.cancel();
+    _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (hasPendingWrites.value) {
+        pendingWriteAge.value += 1;
+        if (pendingWriteAge.value >= 3) {
+          lastSyncError.value =
+              'Some changes haven\'t synced yet. Check your connection.';
+        }
+      } else {
+        pendingWriteAge.value = 0;
+      }
+    });
+  }
+
   /// Start monitoring the user's invoice collection for pending writes.
   /// Call once after authentication.
   void init() {
@@ -43,6 +78,11 @@ class SyncStatusService {
       ownerId = TeamService.instance.getEffectiveOwnerId();
     } catch (_) {
       return; // Not authenticated yet
+    }
+    // Register lifecycle observer (Issue #13)
+    if (!_observerRegistered) {
+      WidgetsBinding.instance.addObserver(this);
+      _observerRegistered = true;
     }
 
     // Listen to the invoices collection with metadata changes.
@@ -83,18 +123,7 @@ class SyncStatusService {
     );
 
     // Periodic check: if pending writes persist for too long, warn the user.
-    _checkTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (hasPendingWrites.value) {
-        pendingWriteAge.value += 1;
-        if (pendingWriteAge.value >= 3) {
-          // Pending for 90+ seconds — likely a sync issue.
-          lastSyncError.value =
-              'Some changes haven\'t synced yet. Check your connection.';
-        }
-      } else {
-        pendingWriteAge.value = 0;
-      }
-    });
+    _startCheckTimer();
   }
 
   void _dispose() {
@@ -106,6 +135,10 @@ class SyncStatusService {
 
   void dispose() {
     _dispose();
+    if (_observerRegistered) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observerRegistered = false;
+    }
     hasPendingWrites.dispose();
     lastSyncError.dispose();
     pendingWriteAge.dispose();

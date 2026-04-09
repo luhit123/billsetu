@@ -421,6 +421,8 @@ const Map<String, String> taTranslations = {
   'gstReportNetItcCredit': 'நிகர ITC கடன்',
   'gstReportNetTaxPayable': 'நிகர வரி செலுத்தவேண்டியது',
   'gstReportOverview': 'GST மேலோட்டம்',
+  'gstReportTeamSummaryNote': 'சுருக்கத் தொகைகள் அனைத்து குழு விலைப்பட்டியல்களையும் உள்ளடக்கியது. கீழே உள்ள பட்டியல் உங்கள் விலைப்பட்டியல்களை மட்டுமே காட்டுகிறது.',
+  'gstReportDriftWarning': 'சுருக்கத் தொகைகள் ஒத்திசைவில் இல்லாமல் இருக்கலாம். புதுப்பிக்க கீழே இழுக்கவும் அல்லது இந்த அறிக்கையை மீண்டும் திறக்கவும்.',
   'gstReportOutputGstSales': 'வெளியீட்டு GST (விற்பனை)',
   'gstReportInputGstPurchases': 'உள்ளீட்டு GST (கொள்முதல்)',
   'gstReportOutputSales': 'வெளியீட்டு (விற்பனை)',

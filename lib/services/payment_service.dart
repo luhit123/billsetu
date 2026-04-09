@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 
 import '../modals/payment.dart';
 import 'razorpay_checkout.dart';
@@ -61,7 +61,7 @@ class PaymentService {
       }
 
       // Step 1: Create Razorpay subscription via Cloud Function
-      final result = await _functions.httpsCallable('createSubscription').call({
+      final result = await _functions.httpsCallable('createSubscription', options: HttpsCallableOptions(timeout: const Duration(seconds: 30))).call({
         'planId': planId,
         'billingCycle': billingCycle,
       });
@@ -111,9 +111,11 @@ class PaymentService {
       final rzpResult = await _checkout.open(options);
 
       // Step 3: Handle result
+      // SEC-011: Return success:false for wallet redirects — payment hasn't
+      // completed yet. The webhook will activate the plan once confirmed.
       if (rzpResult.walletName != null) {
         return PaymentResult(
-          success: true,
+          success: false,
           activationPending: true,
           message:
               'Redirecting to ${rzpResult.walletName}. Your plan will activate once payment completes.',
@@ -132,7 +134,7 @@ class PaymentService {
       // Step 4: Verify payment server-side
       try {
         final verifyResult = await _functions
-            .httpsCallable('verifyPayment')
+            .httpsCallable('verifyPayment', options: HttpsCallableOptions(timeout: const Duration(seconds: 30)))
             .call({
               'razorpayPaymentId': rzpResult.paymentId,
               'razorpaySubscriptionId': subscriptionId,
@@ -162,25 +164,25 @@ class PaymentService {
           );
         }
       } catch (e) {
-        // Verification call failed — don't claim success.
-        // The webhook may still activate the plan later.
-        debugPrint('Verify call failed: $e');
+        // SEC-003: Do NOT claim success when verification fails.
+        // The webhook will activate the plan once Razorpay confirms payment.
+        if (kDebugMode) debugPrint('Verify call failed: $e');
         return PaymentResult(
-          success: true,
+          success: false,
           activationPending: true,
           message:
-              'Payment received but verification pending. Your plan will activate shortly.',
+              'Payment is being processed. Your plan will activate once confirmed.',
           paymentId: rzpResult.paymentId,
         );
       }
     } on FirebaseFunctionsException catch (e) {
-      debugPrint('Cloud Function error: ${e.code} — ${e.message}');
+      if (kDebugMode) debugPrint('Cloud Function error: ${e.code} — ${e.message}');
       return PaymentResult(
         success: false,
         message: e.message ?? 'Failed to initiate payment',
       );
     } catch (e) {
-      debugPrint('PaymentService error: $e');
+      if (kDebugMode) debugPrint('PaymentService error: $e');
       return PaymentResult(
         success: false,
         message: 'Payment failed. Please try again.',
@@ -195,13 +197,13 @@ class PaymentService {
   /// Cancel subscription at period end (or immediately).
   Future<bool> cancelSubscription({bool immediate = false}) async {
     try {
-      final result = await _functions.httpsCallable('cancelSubscription').call({
+      final result = await _functions.httpsCallable('cancelSubscription', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
         'immediate': immediate,
       });
       final data = result.data as Map<String, dynamic>;
       return data['success'] == true;
     } catch (e) {
-      debugPrint('Cancel error: $e');
+      if (kDebugMode) debugPrint('Cancel error: $e');
       return false;
     }
   }
@@ -210,12 +212,12 @@ class PaymentService {
   Future<bool> reactivateSubscription() async {
     try {
       final result = await _functions
-          .httpsCallable('reactivateSubscription')
+          .httpsCallable('reactivateSubscription', options: HttpsCallableOptions(timeout: const Duration(seconds: 15)))
           .call({});
       final data = result.data as Map<String, dynamic>;
       return data['success'] == true;
     } catch (e) {
-      debugPrint('Reactivate error: $e');
+      if (kDebugMode) debugPrint('Reactivate error: $e');
       return false;
     }
   }

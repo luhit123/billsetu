@@ -3,10 +3,35 @@ import 'dart:typed_data';
 
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
+import 'package:billeasy/services/remote_config_service.dart';
 import 'package:billeasy/services/team_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_storage/firebase_storage.dart';
+
+/// Simple LRU cache with a fixed maximum capacity (Issue #15).
+class _LruCache<K, V> {
+  final int maxSize;
+  final _map = <K, V>{};
+
+  _LruCache(this.maxSize);
+
+  V? get(K key) {
+    final value = _map.remove(key);
+    if (value != null) _map[key] = value; // Move to end (most recent)
+    return value;
+  }
+
+  void put(K key, V value) {
+    _map.remove(key);
+    _map[key] = value;
+    while (_map.length > maxSize) {
+      _map.remove(_map.keys.first); // Evict oldest
+    }
+  }
+
+  bool containsKey(K key) => _map.containsKey(key);
+}
 
 /// Uploads invoice PDFs to Firebase Storage, writes metadata to Firestore,
 /// and returns a branded download URL.
@@ -17,7 +42,14 @@ class InvoiceLinkService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   static final FirebaseFunctions _functions = FirebaseFunctions.instance;
 
-  static const _baseUrl = 'https://invoice.billraja.online';
+  /// Issue #20: Base URL now reads from Remote Config with hardcoded fallback.
+  static String get _baseUrl {
+    try {
+      final rcUrl = RemoteConfigService.instance.shareBaseUrl;
+      if (rcUrl.isNotEmpty) return rcUrl;
+    } catch (_) {}
+    return 'https://invoice.billraja.online';
+  }
 
   /// Returns the Storage path for an invoice PDF.
   static String _storagePath(
@@ -29,8 +61,8 @@ class InvoiceLinkService {
     return 'invoices/$ownerId/$writerUid/${invoice.id}/$fileName';
   }
 
-  /// Cache to ensure same invoice always gets same shortcode within a session.
-  static final Map<String, String> _shortCodeCache = {};
+  /// LRU cache with 100-entry limit to prevent unbounded growth (Issue #15).
+  static final _LruCache<String, String> _shortCodeCache = _LruCache(100);
 
   static final _secureRandom = Random.secure();
 
@@ -38,7 +70,8 @@ class InvoiceLinkService {
   /// Reuses existing codes from Firestore if one was already created for this invoice.
   static Future<String> _shortCode(Invoice invoice) async {
     final key = '${invoice.id}_${invoice.invoiceNumber}';
-    if (_shortCodeCache.containsKey(key)) return _shortCodeCache[key]!;
+    final cached = _shortCodeCache.get(key);
+    if (cached != null) return cached;
 
     // Check if a shared link already exists for this invoice.
     if (invoice.id.isNotEmpty) {
@@ -51,7 +84,7 @@ class InvoiceLinkService {
           .get();
       if (existing.docs.isNotEmpty) {
         final code = existing.docs.first.id;
-        _shortCodeCache[key] = code;
+        _shortCodeCache.put(key, code);
         return code;
       }
     }
@@ -59,7 +92,7 @@ class InvoiceLinkService {
     // Generate cryptographically random 32-character hex string
     final bytes = List<int>.generate(16, (_) => _secureRandom.nextInt(256));
     final code = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    _shortCodeCache[key] = code;
+    _shortCodeCache.put(key, code);
     return code;
   }
 
@@ -74,7 +107,7 @@ class InvoiceLinkService {
       throw StateError('Please save the invoice before sharing it.');
     }
 
-    await _functions.httpsCallable('saveSharedInvoiceLink').call({
+    await _functions.httpsCallable('saveSharedInvoiceLink', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'shortCode': shortCode,
       'invoiceId': invoiceId,
       if (templateName != null && templateName.trim().isNotEmpty)

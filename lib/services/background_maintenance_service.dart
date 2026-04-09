@@ -18,7 +18,7 @@ class BackgroundMaintenanceService {
 
     try {
       await _functions
-          .httpsCallable('backfillMyInvoiceData')
+          .httpsCallable('backfillMyInvoiceData', options: HttpsCallableOptions(timeout: const Duration(seconds: 60)))
           .call()
           .timeout(const Duration(seconds: 30));
       // Only mark as complete after confirmed success.

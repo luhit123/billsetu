@@ -378,7 +378,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: kPrimary.withOpacity(0.25),
+              color: kPrimary.withValues(alpha: 0.25),
               blurRadius: 20,
               offset: const Offset(0, 8),
             ),
@@ -399,7 +399,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   ),
                   icon: Icon(
                     Icons.chevron_left_rounded,
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     size: 22,
                   ),
                   onPressed: () => _changeMonth(-1),
@@ -414,14 +414,14 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         Icon(
                           Icons.calendar_today_rounded,
                           size: 12,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
                             rangeLabel,
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.95),
+                              color: Colors.white.withValues(alpha: 0.95),
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
                             ),
@@ -432,7 +432,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         Icon(
                           Icons.arrow_drop_down_rounded,
                           size: 16,
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                         ),
                       ],
                     ),
@@ -447,8 +447,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                   icon: Icon(
                     Icons.chevron_right_rounded,
                     color: isCurrentMonth
-                        ? Colors.white.withOpacity(0.3)
-                        : Colors.white.withOpacity(0.8),
+                        ? Colors.white.withValues(alpha: 0.3)
+                        : Colors.white.withValues(alpha: 0.8),
                     size: 22,
                   ),
                   onPressed: isCurrentMonth ? null : () => _changeMonth(1),
@@ -466,7 +466,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       Text(
                         AppStrings.of(context).subscriptionsRevenue,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.8),
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontSize: 13,
                           fontWeight: FontWeight.w500,
                         ),
@@ -485,7 +485,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                       Text(
                         '$_rangeMemberCount ${AppStrings.of(context).subscriptionsMembersJoined}',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 12,
                         ),
                       ),
@@ -498,7 +498,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     Text(
                       AppStrings.of(context).subscriptionsAllTime,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
+                        color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 11,
                       ),
                     ),
@@ -506,7 +506,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     Text(
                       _currencyFmt.format(_totalRevenue),
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                       ),
@@ -515,7 +515,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     Text(
                       '$_totalMembers total',
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                         fontSize: 11,
                       ),
                     ),
@@ -791,7 +791,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
             color: context.cs.surfaceContainerLowest,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: kPrimary.withOpacity(0.15),
+              color: kPrimary.withValues(alpha: 0.15),
               width: 1.5,
               strokeAlign: BorderSide.strokeAlignInside,
             ),
@@ -882,7 +882,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 28),
       decoration: BoxDecoration(
-        color: kPaidBg.withOpacity(0.5),
+        color: kPaidBg.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -1087,7 +1087,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                     Icons.event_available_rounded,
                     color: context.cs.onSurfaceVariant
                         .withAlpha(153)
-                        .withOpacity(0.6),
+                        .withValues(alpha: 0.6),
                     size: 32,
                   ),
                   const SizedBox(height: 8),
@@ -1176,8 +1176,8 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
                         Divider(
                           height: 1,
                           indent: 64,
-                          color: context.cs.surfaceContainerLow.withOpacity(
-                            0.8,
+                          color: context.cs.surfaceContainerLow.withValues(
+                            alpha: 0.8,
                           ),
                         ),
                     ],
@@ -1212,7 +1212,7 @@ class _SubscriptionsScreenState extends State<SubscriptionsScreen> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: kPrimary.withOpacity(0.35),
+            color: kPrimary.withValues(alpha: 0.35),
             blurRadius: 16,
             offset: const Offset(0, 6),
           ),
@@ -1443,12 +1443,12 @@ class _PlanCard extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [cardColor, cardColor.withOpacity(0.75)],
+            colors: [cardColor, cardColor.withValues(alpha: 0.75)],
           ),
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: cardColor.withOpacity(0.3),
+              color: cardColor.withValues(alpha: 0.3),
               blurRadius: 12,
               offset: const Offset(0, 4),
             ),
@@ -1494,13 +1494,13 @@ class _PlanCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     plan.durationLabel,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),
@@ -1513,7 +1513,7 @@ class _PlanCard extends StatelessWidget {
                     vertical: 3,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.15),
+                    color: Colors.white.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
@@ -1538,7 +1538,7 @@ class _PlanCard extends StatelessWidget {
               Text(
                 '${plan.discountPercent.toStringAsFixed(0)}% off \u2022 MRP ${currencyFmt.format(plan.price)}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   fontSize: 11,
                 ),
               ),
@@ -1547,14 +1547,14 @@ class _PlanCard extends StatelessWidget {
               children: [
                 Icon(
                   Icons.people_outline_rounded,
-                  color: Colors.white.withOpacity(0.7),
+                  color: Colors.white.withValues(alpha: 0.7),
                   size: 14,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   '${plan.memberCount} member${plan.memberCount == 1 ? '' : 's'}',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.8),
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),

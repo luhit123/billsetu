@@ -201,7 +201,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: kPrimary.withOpacity(0.15),
+              color: kPrimary.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(8),
             ),
             child: const Icon(
@@ -479,7 +479,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
-              color: kPrimary.withOpacity(0.3),
+              color: kPrimary.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 3),
             ),
@@ -689,7 +689,7 @@ class _QrAttendanceScreenState extends State<QrAttendanceScreen>
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: kPrimary.withOpacity(0.3),
+                        color: kPrimary.withValues(alpha: 0.3),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),

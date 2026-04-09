@@ -45,7 +45,21 @@ class WhatsAppShareSheet extends StatefulWidget {
 }
 
 class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
+  bool _isLoadingWhatsApp = false;
   bool _isLoadingSms = false;
+
+  /// Pre-computed values populated in initState to avoid lag on tap.
+  Future<String?>? _payLinkFuture;
+  Future<int>? _shareCountFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fetch network data eagerly so taps are near-instant.
+    _payLinkFuture = _buildUpiWebLink();
+    _shareCountFuture =
+        UsageTrackingService.instance.getWhatsAppShareCount();
+  }
 
   String get _formattedAmount =>
       widget.currencyFormat.format(widget.invoice.grandTotal);
@@ -158,8 +172,13 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
               icon: Icons.chat_rounded,
               iconColor: const Color(0xFF25D366),
               title: 'WhatsApp',
-              subtitle: 'Send invoice as PDF',
-              onTap: () => _shareWhatsApp(context),
+              subtitle: _isLoadingWhatsApp
+                  ? 'Opening WhatsApp…'
+                  : 'Send invoice as PDF',
+              isLoading: _isLoadingWhatsApp,
+              onTap: _isLoadingWhatsApp
+                  ? null
+                  : () => _shareWhatsApp(context),
             ),
             Divider(height: 1, color: context.cs.surfaceContainerLow),
             // SMS
@@ -183,11 +202,13 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
   // ── Actions ──────────────────────────────────────────────────────────────
 
   Future<void> _shareWhatsApp(BuildContext context) async {
-    // Plan gate
-    final shareCount = await UsageTrackingService.instance
-        .getWhatsAppShareCount();
+    setState(() => _isLoadingWhatsApp = true);
+
+    // Use pre-fetched share count (already started in initState).
+    final shareCount = await _shareCountFuture!;
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!context.mounted) return;
+      setState(() => _isLoadingWhatsApp = false);
       final killSwitchOff = !RemoteConfigService.instance.featureWhatsAppShare;
       final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
       String msg;
@@ -208,10 +229,11 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
       return;
     }
 
+    // Use pre-fetched UPI link (already started in initState).
+    final payLink = await _payLinkFuture;
+
     if (kIsWeb) {
-      // On web, generate download link and open wa.me with text
       final phone = _normalizedPhone() ?? '';
-      final payLink = await _buildUpiWebLink();
       String? downloadLink;
       try {
         downloadLink = await InvoiceLinkService.shareLink(
@@ -229,20 +251,20 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
         'https://wa.me/$phone?text=${Uri.encodeComponent(fullMsg)}',
       );
       await launchUrl(waUri, mode: LaunchMode.externalApplication);
-      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+      // Fire-and-forget — don't block UI for analytics write.
+      UsageTrackingService.instance.incrementWhatsAppShareCount();
       if (context.mounted) Navigator.pop(context);
       return;
     }
 
     if (widget.pdfFile == null) {
       if (!context.mounted) return;
+      setState(() => _isLoadingWhatsApp = false);
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('PDF not available')));
       return;
     }
-
-    final payLink = await _buildUpiWebLink();
 
     // Share the PDF file directly via the system share sheet (targets WhatsApp).
     await SharePlus.instance.share(
@@ -252,7 +274,9 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
       ),
     );
 
-    await UsageTrackingService.instance.incrementWhatsAppShareCount();
+    // Fire-and-forget — don't block UI for analytics write.
+    UsageTrackingService.instance.incrementWhatsAppShareCount();
+    if (mounted) setState(() => _isLoadingWhatsApp = false);
   }
 
   Future<void> _shareSms(BuildContext context) async {
@@ -266,7 +290,15 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
     }
 
     setState(() => _isLoadingSms = true);
-    final url = await _uploadAndGetLink();
+
+    // Run download link generation and UPI link in parallel.
+    final results = await Future.wait([
+      _uploadAndGetLink(),
+      _payLinkFuture!, // Already started in initState.
+    ]);
+    final url = results[0];
+    final payLink = results[1];
+
     if (!mounted) return;
     setState(() => _isLoadingSms = false);
 
@@ -282,7 +314,6 @@ class _WhatsAppShareSheetState extends State<WhatsAppShareSheet> {
       return;
     }
 
-    final payLink = await _buildUpiWebLink();
     final body = Uri.encodeComponent(_smsMessage(url, payLink: payLink));
     final uri = Uri.parse('sms:$phone?body=$body');
     try {

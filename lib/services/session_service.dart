@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// Enforces single-session login: only one device can be active at a time.
 ///
@@ -54,9 +55,17 @@ class SessionService {
     return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 
+  static String _prefsTokenKey(String uid) => 'br_active_sess_tok_$uid';
+
   /// Call after successful sign-in to claim this device as the active session.
   ///
   /// [onSessionRevoked] fires when another device takes over the session.
+  ///
+  /// On a normal app restart, the same device keeps its token in
+  /// [SharedPreferences] and Firestore already matches — we **skip** the write
+  /// so the backend does not treat every open as a "new login" (e.g. login
+  /// alert email). After [reset] on sign-out, prefs are cleared so the next
+  /// sign-in performs a real claim again.
   Future<void> claimSession({required VoidCallback onSessionRevoked}) async {
     final uid = _auth.currentUser?.uid;
     if (uid == null) {
@@ -66,17 +75,51 @@ class SessionService {
 
     _onSessionRevoked = onSessionRevoked;
     _revoked = false;
+
+    final prefs = await SharedPreferences.getInstance();
+    final prefsKey = _prefsTokenKey(uid);
+    final savedToken = prefs.getString(prefsKey);
+
+    if (savedToken != null && savedToken.isNotEmpty) {
+      try {
+        final doc = await _firestore.collection('users').doc(uid).get();
+        final session = doc.data()?['activeSession'];
+        final remoteToken = session is Map<String, dynamic>
+            ? session['token'] as String?
+            : null;
+        if (remoteToken == savedToken) {
+          _currentSessionToken = savedToken;
+          _claimConfirmed = true;
+          debugPrint(
+            '[SessionService] Resuming session (no Firestore write) — '
+            'token=${savedToken.length >= 8 ? savedToken.substring(0, 8) : savedToken}...',
+          );
+          _startSessionListener(uid);
+          return;
+        }
+      } catch (e) {
+        debugPrint('[SessionService] Resume check failed, claiming fresh: $e');
+      }
+    }
+
     _claimConfirmed = false;
 
-    // Generate a unique token for this session
+    // Generate a unique token for this session (new login or session takeover)
     _currentSessionToken = _generateToken();
 
-    debugPrint('[SessionService] Claiming session: $_platformLabel, token=${_currentSessionToken!.substring(0, 8)}...');
+    final tokenPrefix = (_currentSessionToken != null &&
+            _currentSessionToken!.length >= 8)
+        ? _currentSessionToken!.substring(0, 8)
+        : 'null';
+    debugPrint(
+      '[SessionService] Claiming session: $_platformLabel, token=$tokenPrefix...',
+    );
 
     // Start listening BEFORE writing so we catch the server-confirmed write.
     _startSessionListener(uid);
 
-    // Write session claim to Firestore
+    // Write session claim to Firestore — 5-second timeout so a slow network
+    // doesn't block the UI from becoming interactive.
     try {
       await _firestore.collection('users').doc(uid).set({
         'activeSession': {
@@ -84,14 +127,15 @@ class SessionService {
           'platform': _platformLabel,
           'claimedAt': FieldValue.serverTimestamp(),
         },
-      }, SetOptions(merge: true));
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 5));
 
       _claimConfirmed = true;
+      await prefs.setString(prefsKey, _currentSessionToken!);
       debugPrint('[SessionService] Session claim confirmed by server');
     } catch (e) {
       debugPrint('[SessionService] Failed to claim session: $e');
-      // Don't block sign-in if session claim fails (e.g. offline)
-      // Listener is already running — it will detect changes when back online
+      // Don't block sign-in if session claim fails (e.g. offline or timeout).
+      // Listener is already running — it will detect changes when back online.
     }
   }
 
@@ -148,12 +192,17 @@ class SessionService {
   }
 
   /// Clean up listeners and state. Call on sign-out.
-  void reset() {
+  Future<void> reset() async {
+    final uid = _auth.currentUser?.uid;
     _sessionSub?.cancel();
     _sessionSub = null;
     _currentSessionToken = null;
     _onSessionRevoked = null;
     _revoked = false;
     _claimConfirmed = false;
+    if (uid != null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefsTokenKey(uid));
+    }
   }
 }

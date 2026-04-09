@@ -38,17 +38,20 @@ class RemoteConfigService {
 
       await _rc!.setDefaults(_defaults);
 
-      // Fetch & activate — non-blocking after first load.
+      // Fetch & activate with a short cap so cold start reaches [runApp] quickly.
+      // Defaults stay in effect until a background fetch completes; [onConfigUpdated]
+      // notifies listeners (e.g. AppGate) when remote values arrive.
       bool fetchSucceeded = false;
       try {
-        await _rc!.fetchAndActivate();
+        await _rc!.fetchAndActivate().timeout(const Duration(seconds: 2));
         fetchSucceeded = true;
       } catch (e) {
-        debugPrint('[RemoteConfig] Initial fetch failed (using defaults): $e');
+        debugPrint(
+          '[RemoteConfig] Initial fetch skipped or failed (using defaults): $e',
+        );
       }
-      // If initial fetch failed, retry once after 30 s to pick up fresh values
-      // without blocking the app startup.
       if (!fetchSucceeded) {
+        unawaited(_backgroundFetchAndNotify());
         Future.delayed(const Duration(seconds: 30), () async {
           if (_rc == null) return;
           try {
@@ -85,6 +88,17 @@ class RemoteConfigService {
     }
   }
 
+  Future<void> _backgroundFetchAndNotify() async {
+    if (_rc == null) return;
+    try {
+      await _rc!.fetchAndActivate();
+      _updateController.add(null);
+      if (kDebugMode) debugPrint('[RemoteConfig] Background fetch succeeded');
+    } catch (e) {
+      if (kDebugMode) debugPrint('[RemoteConfig] Background fetch failed: $e');
+    }
+  }
+
   // ── Default values ────────────────────────────────────────────────────
 
   static final Map<String, dynamic> _defaults = {
@@ -115,11 +129,11 @@ class RemoteConfigService {
     'free_has_membership': false,
 
     // Plan limits — expired (legacy keys, kept for backward compatibility)
-    'expired_max_invoices': 5,
+    'expired_max_invoices': 10,
     'expired_max_customers': 5,
     'expired_max_products': 20,
     'expired_max_pdf_templates': 1,
-    'expired_max_whatsapp_shares': 0,
+    'expired_max_whatsapp_shares': 10,
     'expired_has_reports': false,
     'expired_has_purchase_orders': false,
     'expired_has_data_export': false,
@@ -152,13 +166,13 @@ class RemoteConfigService {
     'enterprise_has_membership': true,
 
     // Pricing
-    'pro_price_monthly': 59.0,
-    'pro_price_annual': 499.0,
-    'enterprise_price_monthly': 99.0,
-    'enterprise_price_annual': 999.0,
+    'pro_price_monthly': 99.0,
+    'pro_price_annual': 999.0,
+    'enterprise_price_monthly': 199.0,
+    'enterprise_price_annual': 1999.0,
 
     // Subscription config
-    'trial_duration_months': 6,
+    'trial_duration_months': 3,
     'grace_period_days': 7,
 
     // Payment gateway
@@ -185,15 +199,23 @@ class RemoteConfigService {
     // Plan comparison card — drives the Free vs Pro table on the upgrade screen.
     // Each item: icon, label, free (value or true/false), pro (value or true/false)
     'plan_comparison_json':
-        '[{"icon":"receipt_long","label":"Invoices","free":"5/month","pro":"Unlimited"},{"icon":"people","label":"Customers","free":"5","pro":"Unlimited"},{"icon":"inventory_2","label":"Products & Inventory","free":"20","pro":"Unlimited"},{"icon":"picture_as_pdf","label":"PDF Templates","free":"1","pro":"All 20+"},{"icon":"currency_rupee","label":"GST Invoicing","free":true,"pro":true},{"icon":"qr_code","label":"UPI Payment Links & QR","free":true,"pro":true},{"icon":"language","label":"Multi-language Support","free":true,"pro":true},{"icon":"cloud_off","label":"Offline Mode","free":true,"pro":true},{"icon":"badge","label":"Digital Business Card","free":true,"pro":true},{"icon":"chat","label":"WhatsApp Sharing","free":false,"pro":true},{"icon":"shopping_cart","label":"Purchase Orders","free":false,"pro":true},{"icon":"bar_chart","label":"Reports & Analytics","free":false,"pro":true},{"icon":"assessment","label":"GST Reports & GSTR-3B","free":false,"pro":true},{"icon":"card_membership","label":"Membership Management","free":false,"pro":true},{"icon":"qr_code_scanner","label":"QR Attendance","free":false,"pro":true},{"icon":"download","label":"Data Export (CSV)","free":false,"pro":true},{"icon":"palette","label":"Custom Branding & Logo","free":false,"pro":true}]',
+        '[{"icon":"receipt_long","label":"Invoices","free":"10/month","pro":"Unlimited","enterprise":"Unlimited"},{"icon":"people","label":"Customers","free":"5","pro":"Unlimited","enterprise":"Unlimited"},{"icon":"inventory_2","label":"Products & Inventory","free":"20","pro":"Unlimited","enterprise":"Unlimited"},{"icon":"picture_as_pdf","label":"PDF Templates","free":"1","pro":"All 20+","enterprise":"All 20+"},{"icon":"chat","label":"WhatsApp Sharing","free":"10/month","pro":"Unlimited","enterprise":"Unlimited"},{"icon":"currency_rupee","label":"GST Invoicing","free":true,"pro":true,"enterprise":true},{"icon":"qr_code","label":"UPI Payment Links & QR","free":true,"pro":true,"enterprise":true},{"icon":"language","label":"Multi-language Support","free":true,"pro":true,"enterprise":true},{"icon":"cloud_off","label":"Offline Mode","free":true,"pro":true,"enterprise":true},{"icon":"shopping_cart","label":"Purchase Orders","free":false,"pro":true,"enterprise":true},{"icon":"bar_chart","label":"Reports & Analytics","free":false,"pro":true,"enterprise":true},{"icon":"assessment","label":"GST Reports","free":false,"pro":true,"enterprise":true},{"icon":"description","label":"GSTR-3B Compliance","free":false,"pro":false,"enterprise":true},{"icon":"download","label":"Data Export (CSV)","free":false,"pro":true,"enterprise":true},{"icon":"group","label":"Team Members","free":false,"pro":"Up to 3","enterprise":"Unlimited"},{"icon":"card_membership","label":"Membership Management","free":false,"pro":"50 members","enterprise":"Unlimited"},{"icon":"qr_code_scanner","label":"QR Attendance & Geo-fencing","free":false,"pro":false,"enterprise":true}]',
 
     // Promotional banner
     'promo_banner_enabled': false,
     'promo_banner_text': '',
     'promo_banner_color': '#0057FF',
 
+    // Share link base URL (Issue #20 — configurable without app update)
+    'share_base_url': 'https://invoice.billraja.online',
+
     // Google Maps API key (server-side, changeable without app update)
     'google_maps_api_key': '',
+
+    // FCM Web Push VAPID key (public key from Firebase Console >
+    // Project Settings > Cloud Messaging > Web Push certificates)
+    'fcm_vapid_key':
+        'BEBPqbhLgkmHOMfATj4zAtW2lR8U9UlxF4Mt-R3rGTiRbJR4mqq_n-GazPGAt0aI8o6BP5NHQiws2YnZHvJ3pi8',
 
     // Language control — empty string means all languages enabled.
     // Comma-separated list of AppLanguage enum names to show.
@@ -295,6 +317,11 @@ class RemoteConfigService {
 
   String get razorpayKey => _getString('razorpay_key');
   String get googleMapsApiKey => _getString('google_maps_api_key');
+
+  /// Base URL for shared invoice links (Issue #20).
+  /// Configurable via Remote Config so domain changes don't require an app update.
+  String get shareBaseUrl => _getString('share_base_url');
+  String get fcmVapidKey => _getString('fcm_vapid_key');
 
   // ── Pricing ───────────────────────────────────────────────────────────
 

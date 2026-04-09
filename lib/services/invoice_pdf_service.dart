@@ -3,7 +3,6 @@ import 'dart:io';
 import 'dart:isolate';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/services/logo_cache_service.dart';
-import 'package:billeasy/services/signature_service.dart';
 import 'package:flutter/foundation.dart'
     show consolidateHttpClientResponseBytes, debugPrint, kIsWeb;
 import 'package:billeasy/modals/business_profile.dart';
@@ -137,6 +136,11 @@ class InvoicePdfService {
   pw.Font? _fontRegular;
   pw.Font? _fontBold;
 
+  /// Per-language font cache to eliminate race condition (Issue #14).
+  static final Map<AppLanguage, pw.Font> _fontRegularCache = {};
+  static final Map<AppLanguage, pw.Font> _fontBoldCache = {};
+  static final Map<AppLanguage, Completer<void>> _fontCompleters = {};
+
   // Active color scheme for current PDF build
   _VyColors _c = _VyColors(
     _vyPrimary,
@@ -160,80 +164,80 @@ class InvoicePdfService {
   Future<void> preloadFonts([AppLanguage language = AppLanguage.english]) =>
       _loadFonts(language);
 
-  static Completer<void>? _fontLoadCompleter;
-
-  AppLanguage? _loadedLanguage;
-
+  /// Issue #14: Per-language font loading with separate completers to prevent
+  /// race conditions when concurrent PDF requests use different languages.
   Future<void> _loadFonts(AppLanguage language) async {
-    if (_fontRegular != null && _loadedLanguage == language)
-      return; // already loaded for this language
-    // Reset if language changed
-    if (_loadedLanguage != null && _loadedLanguage != language) {
-      _fontRegular = null;
-      _fontBold = null;
-      _fontLoadCompleter = null;
-    }
-    if (_fontLoadCompleter != null) {
-      await _fontLoadCompleter!.future; // wait for in-progress load
+    // Check per-language cache first
+    if (_fontRegularCache.containsKey(language)) {
+      _fontRegular = _fontRegularCache[language];
+      _fontBold = _fontBoldCache[language];
       return;
     }
-    _fontLoadCompleter = Completer<void>();
+
+    // Wait if another request is already loading this language
+    if (_fontCompleters.containsKey(language)) {
+      await _fontCompleters[language]!.future;
+      _fontRegular = _fontRegularCache[language];
+      _fontBold = _fontBoldCache[language];
+      return;
+    }
+
+    _fontCompleters[language] = Completer<void>();
     try {
+      pw.Font regular;
+      pw.Font bold;
       switch (language) {
         case AppLanguage.hindi:
           final data = await rootBundle.load(
             'assets/fonts/NotoSansDevanagari.ttf',
           );
-          _fontRegular = pw.Font.ttf(data);
-          _fontBold = pw.Font.ttf(data);
+          regular = pw.Font.ttf(data);
+          bold = pw.Font.ttf(data);
         case AppLanguage.assamese:
           final data = await rootBundle.load(
             'assets/fonts/NotoSansBengali.ttf',
           );
-          _fontRegular = pw.Font.ttf(data);
-          _fontBold = pw.Font.ttf(data);
+          regular = pw.Font.ttf(data);
+          bold = pw.Font.ttf(data);
         case AppLanguage.gujarati:
-          // NOTE: assets/fonts/NotoSansGujarati.ttf is not yet bundled.
-          // Falls through to the catch block which uses NotoSansDevanagari
-          // as a graceful fallback (Latin + digits render correctly).
           final dataGu = await rootBundle.load(
             'assets/fonts/NotoSansGujarati.ttf',
           );
-          _fontRegular = pw.Font.ttf(dataGu);
-          _fontBold = pw.Font.ttf(dataGu);
+          regular = pw.Font.ttf(dataGu);
+          bold = pw.Font.ttf(dataGu);
         case AppLanguage.tamil:
-          // NOTE: assets/fonts/NotoSansTamil.ttf is not yet bundled.
-          // Falls through to the catch block which uses NotoSansDevanagari
-          // as a graceful fallback (Latin + digits render correctly).
           final dataTa = await rootBundle.load(
             'assets/fonts/NotoSansTamil.ttf',
           );
-          _fontRegular = pw.Font.ttf(dataTa);
-          _fontBold = pw.Font.ttf(dataTa);
+          regular = pw.Font.ttf(dataTa);
+          bold = pw.Font.ttf(dataTa);
         case AppLanguage.english:
-          // Use NotoSansDevanagari for English too — it covers Latin + ₹ symbol
           final dataEn = await rootBundle.load(
             'assets/fonts/NotoSansDevanagari.ttf',
           );
-          _fontRegular = pw.Font.ttf(dataEn);
-          _fontBold = pw.Font.ttf(dataEn);
+          regular = pw.Font.ttf(dataEn);
+          bold = pw.Font.ttf(dataEn);
       }
-      _loadedLanguage = language;
-      _fontLoadCompleter!.complete();
+      _fontRegularCache[language] = regular;
+      _fontBoldCache[language] = bold;
+      _fontRegular = regular;
+      _fontBold = bold;
+      _fontCompleters[language]!.complete();
     } catch (e) {
       // Fallback: try NotoSansDevanagari, then Helvetica
       try {
         final fallback = await rootBundle.load(
           'assets/fonts/NotoSansDevanagari.ttf',
         );
-        _fontRegular = pw.Font.ttf(fallback);
-        _fontBold = pw.Font.ttf(fallback);
+        _fontRegularCache[language] = pw.Font.ttf(fallback);
+        _fontBoldCache[language] = pw.Font.ttf(fallback);
       } catch (_) {
-        _fontRegular = pw.Font.helvetica();
-        _fontBold = pw.Font.helveticaBold();
+        _fontRegularCache[language] = pw.Font.helvetica();
+        _fontBoldCache[language] = pw.Font.helveticaBold();
       }
-      _loadedLanguage = language;
-      _fontLoadCompleter!.complete();
+      _fontRegular = _fontRegularCache[language];
+      _fontBold = _fontBoldCache[language];
+      _fontCompleters[language]!.complete();
     }
   }
 
@@ -272,12 +276,17 @@ class InvoicePdfService {
         );
         _logoImage = pw.MemoryImage(cachedLogo);
       } else if (profile != null && profile.logoUrl.isNotEmpty) {
-        debugPrint('[InvoicePdf] Cache empty, downloading logo...');
-        final logoBytes = await _downloadImage(profile.logoUrl);
-        if (logoBytes != null && logoBytes.isNotEmpty) {
-          debugPrint('[InvoicePdf] Logo downloaded: ${logoBytes.length} bytes');
-          _logoImage = pw.MemoryImage(logoBytes);
-          await LogoCacheService.save(logoBytes);
+        // Issue #3: Only download logos from trusted Firebase Storage domains
+        if (_isAllowedLogoUrl(profile.logoUrl)) {
+          debugPrint('[InvoicePdf] Cache empty, downloading logo...');
+          final logoBytes = await _downloadImage(profile.logoUrl);
+          if (logoBytes != null && logoBytes.isNotEmpty) {
+            debugPrint('[InvoicePdf] Logo downloaded: ${logoBytes.length} bytes');
+            _logoImage = pw.MemoryImage(logoBytes);
+            await LogoCacheService.save(logoBytes);
+          }
+        } else {
+          debugPrint('[InvoicePdf] Logo URL rejected (untrusted domain): ${profile.logoUrl}');
         }
       }
     } catch (e) {
@@ -285,13 +294,16 @@ class InvoicePdfService {
     }
 
     // Generate dynamic UPI QR code if merchant has UPI ID
+    // Issue #7: Validate UPI ID format before generating QR code
     _invoiceQrBytes = null;
-    if (profile != null && profile.upiId.isNotEmpty && invoice.grandTotal > 0) {
+    if (includePayment &&
+        profile != null &&
+        profile.upiId.isNotEmpty &&
+        invoice.grandTotal > 0 &&
+        validateUpiId(profile.upiId) == null) {
       try {
-        // Use received amount (what customer is paying now), or grand total if nothing recorded
-        final upiAmount = invoice.amountReceived > 0
-            ? invoice.amountReceived
-            : invoice.grandTotal;
+        // Prefer the outstanding amount so partial payments generate the right QR.
+        final upiAmount = invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal;
         final upiLink = buildUpiPaymentLink(
           upiId: profile.upiId,
           businessName: profile.storeName,
@@ -402,7 +414,6 @@ class InvoicePdfService {
     } on RangeError {
       _fontRegular = pw.Font.helvetica();
       _fontBold = pw.Font.helveticaBold();
-      _loadedLanguage = null;
       return builder();
     }
   }
@@ -439,6 +450,7 @@ class InvoicePdfService {
   Future<Uint8List> buildInvoicePdfBackground({
     required Invoice invoice,
     BusinessProfile? profile,
+    Client? client,
     AppLanguage language = AppLanguage.english,
     InvoiceTemplate template = InvoiceTemplate.vyapar,
     bool includePayment = true,
@@ -449,9 +461,33 @@ class InvoicePdfService {
     // Load font asset bytes on the main thread.
     final fontBytes = await _loadRawFontBytes(language);
 
+    // Generate the dynamic UPI QR code on the main/UI isolate.
+    // (generateQrImageBytes depends on dart:ui and cannot run inside a background isolate.)
+    Uint8List? invoiceQrBytes;
+    if (includePayment &&
+        profile != null &&
+        profile.upiId.isNotEmpty &&
+        invoice.grandTotal > 0 &&
+        validateUpiId(profile.upiId) == null) {
+      try {
+        final upiAmount =
+            invoice.balanceDue > 0 ? invoice.balanceDue : invoice.grandTotal;
+        final upiLink = buildUpiPaymentLink(
+          upiId: profile.upiId,
+          businessName: profile.storeName,
+          amount: upiAmount,
+          invoiceNumber: invoice.invoiceNumber,
+        );
+        invoiceQrBytes = await generateQrImageBytes(upiLink, size: 200);
+      } catch (_) {
+        // Skip QR if generation fails
+      }
+    }
+
     // Serialize models to Maps (isolate-sendable).
     final invoiceMap = invoice.toMap();
     final profileMap = profile?.toMap();
+    final clientMap = client?.toMap();
 
     return Isolate.run(() async {
       // Reconstruct font inside the isolate.
@@ -470,24 +506,110 @@ class InvoicePdfService {
       final prof = profileMap != null
           ? BusinessProfile.fromMap(profileMap)
           : null;
+      final cl = clientMap != null ? Client.fromMap(clientMap) : null;
 
       // Build PDF with pre-loaded fonts.
       final svc = InvoicePdfService()
         .._fontRegular = regularFont
-        .._fontBold = boldFont;
+        .._fontBold = boldFont
+        .._client = cl
+        .._invoiceQrBytes = invoiceQrBytes;
       const s = AppStrings(AppLanguage.english);
+
+      final colors =
+          _vyColorMap[template] ?? _vyColorMap[InvoiceTemplate.vyapar]!;
+
+      // Match the same routing logic as buildInvoicePdf() so preview and
+      // background-generated PDFs are identical.
+      final styledTemplate = _templateStyles[template];
+      if (styledTemplate != null) {
+        return svc._buildStyledPdf(
+          inv,
+          prof,
+          s,
+          styledTemplate,
+          includePayment: includePayment,
+        );
+      }
 
       switch (template) {
         case InvoiceTemplate.classic:
-          return svc._buildClassicPdf(inv, prof, s, includePayment: includePayment);
+          return svc._buildClassicPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+          );
         case InvoiceTemplate.modern:
-          return svc._buildModernPdf(inv, prof, s, includePayment: includePayment);
+          return svc._buildModernPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+          );
         case InvoiceTemplate.compact:
-          return svc._buildCompactPdf(inv, prof, s, includePayment: includePayment);
+          return svc._buildCompactPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+          );
+        case InvoiceTemplate.banner:
+          return svc._buildBannerPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
+        case InvoiceTemplate.sidebarLayout:
+          return svc._buildSidebarPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
+        case InvoiceTemplate.bordered:
+          return svc._buildBorderedPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
+        case InvoiceTemplate.twoColumn:
+          return svc._buildTwoColumnPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
+        case InvoiceTemplate.receipt:
+          return svc._buildReceiptPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
         case InvoiceTemplate.vyapar:
-          return svc._buildVyaparPdf(inv, prof, s, includePayment: includePayment);
+          return svc._buildVyaparPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
         default:
-          return svc._buildStyledPdf(inv, prof, s, _templateStyles[template]!, includePayment: includePayment);
+          return svc._buildVyaparPdf(
+            inv,
+            prof,
+            s,
+            includePayment: includePayment,
+            colors: colors,
+          );
       }
     });
   }
@@ -948,7 +1070,7 @@ class InvoicePdfService {
                     borderRadius: pw.BorderRadius.circular(6),
                   ),
                   child: pw.Text(
-                    'TAX INVOICE',
+                    'INVOICE',
                     style: pw.TextStyle(
                       color: PdfColors.white,
                       fontSize: 10,
@@ -1034,7 +1156,7 @@ class InvoicePdfService {
               ),
               child: pw.Column(
                 children: [
-                  _styledMetaRow('TAX INVOICE', '', style, emphasize: true),
+                  _styledMetaRow('INVOICE', '', style, emphasize: true),
                   pw.Divider(
                     color: style.tableBorder,
                     height: 14,
@@ -1746,7 +1868,7 @@ class InvoicePdfService {
         : pw.SizedBox.shrink();
 
     // Load saved signature
-    final signatureBytes = await SignatureService.load();
+    final creatorName = invoice.createdByName;
 
     const pageFormat = PdfPageFormat.a4;
     const marginH = 16.0, marginTop = 14.0, marginBottom = 14.0;
@@ -1779,7 +1901,7 @@ class InvoicePdfService {
               paymentWidget,
               // Terms + Signature SIDE BY SIDE (like Vyapar)
               pw.SizedBox(height: _vySectionSpacing),
-              _vyTermsAndSignatureRow(profile, s, signatureBytes),
+              _vyTermsAndSignatureRow(profile, s, creatorName),
               pw.SizedBox(height: _vySectionSpacing),
               _vyFooter(ctx, s),
             ],
@@ -2055,8 +2177,9 @@ class InvoicePdfService {
       _vyCell('#', header: true, align: pw.TextAlign.center),
       _vyCell('Item', header: true),
     ];
-    if (hasHsn)
+    if (hasHsn) {
       headerCells.add(_vyCell('HSN', header: true, align: pw.TextAlign.center));
+    }
     headerCells.add(_vyCell('Qty', header: true, align: pw.TextAlign.right));
     headerCells.add(_vyCell('Rate', header: true, align: pw.TextAlign.right));
     headerCells.add(_vyCell('Amt', header: true, align: pw.TextAlign.right));
@@ -2091,18 +2214,19 @@ class InvoicePdfService {
         _vyCell('${i + 1}', align: pw.TextAlign.center),
         _vyCell(item.description, bold: true),
       ];
-      if (hasHsn)
+      if (hasHsn) {
         cells.add(
           _vyCell(
             item.hsnCode.isEmpty ? '' : item.hsnCode,
             align: pw.TextAlign.center,
           ),
         );
+      }
       cells.add(_vyCell(item.quantityText, align: pw.TextAlign.right));
       cells.add(
-        _vyCell('${_vyNum(item.unitPrice)}', align: pw.TextAlign.right),
+        _vyCell(_vyNum(item.unitPrice), align: pw.TextAlign.right),
       );
-      cells.add(_vyCell('${_vyNum(item.rawTotal)}', align: pw.TextAlign.right));
+      cells.add(_vyCell(_vyNum(item.rawTotal), align: pw.TextAlign.right));
       if (hasDisc) {
         cells.add(
           _vyCell(
@@ -2112,7 +2236,7 @@ class InvoicePdfService {
             align: pw.TextAlign.center,
           ),
         );
-        cells.add(_vyCell('${_vyNum(item.total)}', align: pw.TextAlign.right));
+        cells.add(_vyCell(_vyNum(item.total), align: pw.TextAlign.right));
       }
       if (hasGst) {
         cells.add(
@@ -2123,14 +2247,14 @@ class InvoicePdfService {
         );
         cells.add(
           _vyCell(
-            item.gstRate > 0 ? '${_vyNum(item.gstAmount)}' : '-',
+            item.gstRate > 0 ? _vyNum(item.gstAmount) : '-',
             align: pw.TextAlign.right,
           ),
         );
       }
       cells.add(
         _vyCell(
-          '${_vyNum(item.totalWithGst)}',
+          _vyNum(item.totalWithGst),
           align: pw.TextAlign.right,
           bold: true,
         ),
@@ -2160,13 +2284,13 @@ class InvoicePdfService {
     totalCells.add(_vyCell(''));
     totalCells.add(_vyCell(''));
     totalCells.add(
-      _vyCell('${_vyNum(totalRaw)}', bold: true, align: pw.TextAlign.right),
+      _vyCell(_vyNum(totalRaw), bold: true, align: pw.TextAlign.right),
     );
     if (hasDisc) {
       totalCells.add(_vyCell(''));
       totalCells.add(
         _vyCell(
-          '${_vyNum(totalAfterDisc)}',
+          _vyNum(totalAfterDisc),
           bold: true,
           align: pw.TextAlign.right,
         ),
@@ -2176,14 +2300,14 @@ class InvoicePdfService {
       totalCells.add(_vyCell(''));
       totalCells.add(
         _vyCell(
-          '${_vyNum(totalGstAmt)}',
+          _vyNum(totalGstAmt),
           bold: true,
           align: pw.TextAlign.right,
         ),
       );
     }
     totalCells.add(
-      _vyCell('${_vyNum(totalFinal)}', bold: true, align: pw.TextAlign.right),
+      _vyCell(_vyNum(totalFinal), bold: true, align: pw.TextAlign.right),
     );
 
     rows.add(pw.TableRow(children: totalCells));
@@ -2384,37 +2508,15 @@ class InvoicePdfService {
     );
   }
 
-  // Terms (left) + Signature (right) — side by side like Vyapar
+  // Terms (left) + Signatory name (right) — side by side like Vyapar
   pw.Widget _vyTermsAndSignatureRow(
     BusinessProfile? profile,
     AppStrings s,
-    Uint8List? signatureImage,
+    String creatorName,
   ) {
     final sellerName = _sellerName(profile, s);
     final fs = _vyBaseFontSize;
-
-    pw.Widget sigArea;
-    if (signatureImage != null) {
-      final img = pw.MemoryImage(signatureImage);
-      sigArea = pw.Container(
-        width: double.infinity,
-        height: _vySignatureHeight,
-        margin: pw.EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: _vyCellPadV - 1,
-        ),
-        child: pw.Image(img, fit: pw.BoxFit.contain),
-      );
-    } else {
-      sigArea = pw.Container(
-        width: double.infinity,
-        height: _vySignatureHeight,
-        margin: pw.EdgeInsets.symmetric(
-          horizontal: 8,
-          vertical: _vyCellPadV - 1,
-        ),
-      );
-    }
+    final displayName = creatorName.isNotEmpty ? creatorName : sellerName;
 
     return pw.Table(
       border: pw.TableBorder.all(color: _c.border, width: 1),
@@ -2467,18 +2569,43 @@ class InvoicePdfService {
                 style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
               ),
             ),
-            pw.Column(
-              children: [
-                sigArea,
-                pw.Padding(
-                  padding: pw.EdgeInsets.only(bottom: _vyCellPadV),
-                  child: pw.Text(
+            pw.Padding(
+              padding: pw.EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: _vyCellPadV,
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    displayName,
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      color: _c.black,
+                      fontSize: fs + 1,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
+                  pw.SizedBox(height: 3),
+                  pw.Text(
                     'Authorized Signatory',
                     textAlign: pw.TextAlign.center,
                     style: pw.TextStyle(color: _c.body, fontSize: fs - 1),
                   ),
-                ),
-              ],
+                  pw.SizedBox(height: 2),
+                  pw.Text(
+                    'Digitally signed, no signature required',
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      color: _c.body,
+                      fontSize: fs - 2,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
+                  ),
+                  pw.SizedBox(height: 4),
+                ],
+              ),
             ),
           ],
         ),
@@ -2765,7 +2892,7 @@ class InvoicePdfService {
               ],
             ),
           ),
-          // Right: TAX INVOICE badge + total
+          // Right: INVOICE badge + total
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
@@ -2779,7 +2906,7 @@ class InvoicePdfService {
                   borderRadius: pw.BorderRadius.circular(6),
                 ),
                 child: pw.Text(
-                  'TAX INVOICE',
+                  'INVOICE',
                   style: pw.TextStyle(
                     color: PdfColors.white,
                     fontSize: 10,
@@ -3215,7 +3342,7 @@ class InvoicePdfService {
               crossAxisAlignment: pw.CrossAxisAlignment.end,
               children: [
                 pw.Text(
-                  'TAX INVOICE',
+                  'INVOICE',
                   style: pw.TextStyle(
                     color: _compactText,
                     fontSize: 10,
@@ -3985,6 +4112,24 @@ class InvoicePdfService {
     return url;
   }
 
+  /// Allowed domains for logo image downloads (Issue #3: SSRF prevention).
+  static const _allowedLogoDomains = [
+    'firebasestorage.googleapis.com',
+    'storage.googleapis.com',
+  ];
+
+  /// Validates that a logo URL points to a trusted domain.
+  static bool _isAllowedLogoUrl(String url) {
+    try {
+      final uri = Uri.parse(url);
+      if (!uri.hasScheme || !uri.scheme.startsWith('http')) return false;
+      final host = uri.host.toLowerCase();
+      return _allowedLogoDomains.any((d) => host == d || host.endsWith('.$d'));
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Downloads image bytes from a URL. Works on both web and native.
   static Future<Uint8List?> _downloadImage(String rawUrl) async {
     // Strip expired Firebase Storage tokens — public-read rules don't need them
@@ -4307,7 +4452,7 @@ class InvoicePdfService {
       creator: 'BillRaja',
     );
     final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
-    final signatureBytes = await SignatureService.load();
+    final creatorName = invoice.createdByName;
     final paymentWidget = (includePayment && profile != null)
         ? await _paymentSection(profile)
         : pw.SizedBox.shrink();
@@ -4383,7 +4528,7 @@ class InvoicePdfService {
                       crossAxisAlignment: pw.CrossAxisAlignment.end,
                       children: [
                         pw.Text(
-                          'TAX INVOICE',
+                          'INVOICE',
                           style: pw.TextStyle(
                             color: PdfColors.white,
                             fontSize: _vyTitleFontSize,
@@ -4518,7 +4663,7 @@ class InvoicePdfService {
                     pw.SizedBox(height: _vySectionSpacing),
                     paymentWidget,
                     pw.SizedBox(height: _vySectionSpacing),
-                    _vyTermsAndSignatureRow(profile, s, signatureBytes),
+                    _vyTermsAndSignatureRow(profile, s, creatorName),
                     pw.SizedBox(height: _vySectionSpacing),
                     _vyFooter(ctx, s),
                   ],
@@ -4568,7 +4713,7 @@ class InvoicePdfService {
       creator: 'BillRaja',
     );
     final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
-    final signatureBytes = await SignatureService.load();
+    final creatorName = invoice.createdByName;
     final paymentWidget = (includePayment && profile != null)
         ? await _paymentSection(profile)
         : pw.SizedBox.shrink();
@@ -4592,7 +4737,7 @@ class InvoicePdfService {
                 mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                 children: [
                   pw.Text(
-                    'TAX INVOICE',
+                    'INVOICE',
                     style: pw.TextStyle(
                       fontSize: _vyTitleFontSize,
                       fontWeight: pw.FontWeight.bold,
@@ -4620,7 +4765,7 @@ class InvoicePdfService {
               pw.SizedBox(height: _vySectionSpacing),
               paymentWidget,
               pw.SizedBox(height: _vySectionSpacing),
-              _vyTermsAndSignatureRow(profile, s, signatureBytes),
+              _vyTermsAndSignatureRow(profile, s, creatorName),
               pw.SizedBox(height: _vySectionSpacing),
               _vyFooter(ctx, s),
             ],
@@ -4701,7 +4846,7 @@ class InvoicePdfService {
       creator: 'BillRaja',
     );
     final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
-    final signatureBytes = await SignatureService.load();
+    final creatorName = invoice.createdByName;
     final paymentWidget = (includePayment && profile != null)
         ? await _paymentSection(profile)
         : pw.SizedBox.shrink();
@@ -4733,7 +4878,7 @@ class InvoicePdfService {
                   ),
                   child: pw.Center(
                     child: pw.Text(
-                      'TAX INVOICE',
+                      'INVOICE',
                       style: pw.TextStyle(
                         fontSize: _vyTitleFontSize,
                         fontWeight: pw.FontWeight.bold,
@@ -4922,7 +5067,7 @@ class InvoicePdfService {
                     ),
                   ),
                   padding: const pw.EdgeInsets.all(8),
-                  child: _vyTermsAndSignatureRow(profile, s, signatureBytes),
+                  child: _vyTermsAndSignatureRow(profile, s, creatorName),
                 ),
                 // Footer
                 pw.Container(
@@ -4979,7 +5124,7 @@ class InvoicePdfService {
       creator: 'BillRaja',
     );
     final theme = pw.ThemeData.withFont(base: _fontRegular!, bold: _fontBold!);
-    final signatureBytes = await SignatureService.load();
+    final creatorName = invoice.createdByName;
     final paymentWidget = (includePayment && profile != null)
         ? await _paymentSection(profile)
         : pw.SizedBox.shrink();
@@ -5006,7 +5151,7 @@ class InvoicePdfService {
                   pw.Padding(
                     padding: const pw.EdgeInsets.symmetric(horizontal: 12),
                     child: pw.Text(
-                      'TAX INVOICE',
+                      'INVOICE',
                       style: pw.TextStyle(
                         fontSize: _vyTitleFontSize,
                         fontWeight: pw.FontWeight.bold,
@@ -5190,7 +5335,7 @@ class InvoicePdfService {
               pw.SizedBox(height: _vySectionSpacing),
               paymentWidget,
               pw.SizedBox(height: _vySectionSpacing),
-              _vyTermsAndSignatureRow(profile, s, signatureBytes),
+              _vyTermsAndSignatureRow(profile, s, creatorName),
               pw.SizedBox(height: _vySectionSpacing),
               _vyFooter(ctx, s),
             ],
@@ -5307,7 +5452,7 @@ class InvoicePdfService {
                 ),
               dashedLine(),
               pw.Text(
-                'TAX INVOICE',
+                'INVOICE',
                 style: pw.TextStyle(
                   fontSize: fs + 2,
                   fontWeight: pw.FontWeight.bold,

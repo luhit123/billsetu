@@ -74,6 +74,38 @@ class Member {
       frozenUntil != null &&
       frozenUntil!.isAfter(DateTime.now());
 
+  // ── SM-2: Effective state helpers ──────────────────────────────────
+  // These account for the grace period and temporal boundaries so the UI
+  // can show the *real* state even before the Cloud Function syncs.
+
+  /// True when the membership is genuinely usable right now:
+  /// status == active AND still within endDate + grace period.
+  bool get isEffectivelyActive {
+    if (status != MemberStatus.active) return false;
+    final graceEnd = endDate.add(Duration(days: planGracePeriodDays));
+    return DateTime.now().isBefore(graceEnd);
+  }
+
+  /// True when the membership has lapsed beyond its grace window,
+  /// regardless of whether the Cloud Function has flipped the status yet.
+  bool get isEffectivelyExpired {
+    if (status == MemberStatus.expired || status == MemberStatus.cancelled) {
+      return true;
+    }
+    if (status == MemberStatus.active) {
+      final graceEnd = endDate.add(Duration(days: planGracePeriodDays));
+      return DateTime.now().isAfter(graceEnd);
+    }
+    return false;
+  }
+
+  /// True when the membership is frozen AND the freeze window hasn't ended.
+  bool get isEffectivelyFrozen {
+    if (status != MemberStatus.frozen) return false;
+    if (frozenUntil == null) return true; // indefinite freeze
+    return DateTime.now().isBefore(frozenUntil!);
+  }
+
   int get daysLeft {
     if (isExpired) return 0;
     if (isFrozen) return endDate.difference(DateTime.now()).inDays;
@@ -95,6 +127,14 @@ class Member {
   }
 
   factory Member.fromMap(Map<String, dynamic> map, {String? docId}) {
+    final parsedStartDate =
+        (map['startDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+    var parsedEndDate =
+        (map['endDate'] as Timestamp?)?.toDate() ?? DateTime.now();
+    // Issue #18: Ensure endDate is never before startDate (defensive against corrupt data)
+    if (parsedEndDate.isBefore(parsedStartDate)) {
+      parsedEndDate = parsedStartDate;
+    }
     return Member(
       id: docId ?? map['id'] as String? ?? '',
       ownerId: map['ownerId'] as String? ?? '',
@@ -114,8 +154,8 @@ class Member {
       planGstType: map['planGstType'] as String? ?? 'cgst_sgst',
       planEffectivePrice: (map['planEffectivePrice'] as num?)?.toDouble() ?? 0,
       status: _parseStatus(map['status'] as String?),
-      startDate: (map['startDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
-      endDate: (map['endDate'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
       frozenUntil: (map['frozenUntil'] as Timestamp?)?.toDate(),
       autoRenew: map['autoRenew'] as bool? ?? true,
       amountPaid: (map['amountPaid'] as num?)?.toDouble() ?? 0,

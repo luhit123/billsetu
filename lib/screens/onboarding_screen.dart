@@ -1008,7 +1008,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
-                  color: kOverdue.withOpacity(0.9),
+                  color: kOverdue.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Row(
@@ -1145,7 +1145,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.18),
+        color: color.withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Row(
@@ -1467,7 +1467,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: kOverdue.withOpacity(0.9),
+                  color: kOverdue.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Row(
@@ -1559,7 +1559,7 @@ class _OnboardingScreenState extends State<OnboardingScreen>
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

@@ -48,9 +48,11 @@ class PoPdfService {
       final file = File('${dir.path}/PO_${po.orderNumber}.pdf');
       await file.writeAsBytes(pdfBytes);
 
-      await Share.shareXFiles(
-        [XFile(file.path)],
-        text: 'Purchase Order #${po.orderNumber}',
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path)],
+          text: 'Purchase Order #${po.orderNumber}',
+        ),
       );
     }
   }

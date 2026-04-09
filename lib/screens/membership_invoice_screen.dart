@@ -284,7 +284,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
         borderRadius: const BorderRadius.all(Radius.circular(20)),
         boxShadow: [
           BoxShadow(
-            color: planColor.withOpacity(0.3),
+            color: planColor.withValues(alpha: 0.3),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -299,7 +299,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -326,7 +326,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     Text(
                       _invoiceNumber,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.85),
+                        color: Colors.white.withValues(alpha: 0.85),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -337,7 +337,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          Container(height: 1, color: Colors.white.withOpacity(0.2)),
+          Container(height: 1, color: Colors.white.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
           Row(
             children: [
@@ -425,7 +425,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: planColor.withOpacity(0.1),
+                    color: planColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
@@ -450,7 +450,7 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: planColor.withOpacity(0.1),
+                    color: planColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(
@@ -568,9 +568,9 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
               child: Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: planColor.withOpacity(0.06),
+                  color: planColor.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: planColor.withOpacity(0.15)),
+                  border: Border.all(color: planColor.withValues(alpha: 0.15)),
                 ),
                 child: Row(
                   children: [
@@ -844,7 +844,9 @@ class _MembershipInvoiceScreenState extends State<MembershipInvoiceScreen> {
         final file = File('${dir.path}/$fileName');
         await file.writeAsBytes(bytes);
 
-        await Share.shareXFiles([XFile(file.path)], text: text);
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path)], text: text),
+        );
       }
     } catch (error) {
       if (!mounted) return;
@@ -885,12 +887,12 @@ class _HeaderMetaTile extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.15),
+          color: Colors.white.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
-            Icon(icon, size: 18, color: Colors.white.withOpacity(0.8)),
+            Icon(icon, size: 18, color: Colors.white.withValues(alpha: 0.8)),
             const SizedBox(width: 8),
             Expanded(
               child: Column(
@@ -899,7 +901,7 @@ class _HeaderMetaTile extends StatelessWidget {
                   Text(
                     label,
                     style: TextStyle(
-                      color: Colors.white.withOpacity(0.7),
+                      color: Colors.white.withValues(alpha: 0.7),
                       fontSize: 11,
                       fontWeight: FontWeight.w500,
                     ),

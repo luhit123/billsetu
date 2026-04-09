@@ -4,6 +4,7 @@ import 'package:billeasy/modals/team.dart';
 import 'package:billeasy/services/membership_service.dart';
 import 'package:billeasy/services/team_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -87,8 +88,15 @@ class _GeoAttendanceScreenState extends State<GeoAttendanceScreen>
       }
       if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
         if (!mounted) return;
-        setState(() { _error = 'Location permission required for attendance.'; _loading = false; });
-        await Geolocator.openAppSettings();
+        setState(() {
+          _error = kIsWeb
+              ? 'Location permission denied. Please allow location access in your browser settings and reload.'
+              : 'Location permission required for attendance.';
+          _loading = false;
+        });
+        if (!kIsWeb) {
+          await Geolocator.openAppSettings();
+        }
         return;
       }
 

@@ -783,7 +783,6 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
           width: compact ? 58 : 66,
           height: compact ? 58 : 66,
           decoration: BoxDecoration(
-            gradient: kSignatureGradient,
             borderRadius: BorderRadius.circular(compact ? 18 : 22),
             boxShadow: [
               BoxShadow(
@@ -793,15 +792,11 @@ class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
               ),
             ],
           ),
-          child: Center(
-            child: Text(
-              'B',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: compact ? 28 : 32,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -1.2,
-              ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(compact ? 18 : 22),
+            child: Image.asset(
+              'assets/icon/logo.png',
+              fit: BoxFit.cover,
             ),
           ),
         ),

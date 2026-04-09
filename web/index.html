@@ -3,6 +3,13 @@
 <head>
   <base href="$FLUTTER_BASE_HREF">
 
+  <!-- 301-equivalent redirect: www → non-www (before anything else loads) -->
+  <script>
+    if (window.location.hostname === 'www.billraja.com') {
+      window.location.replace('https://billraja.com' + window.location.pathname + window.location.search + window.location.hash);
+    }
+  </script>
+
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -51,8 +58,15 @@
     "author": {
       "@type": "Organization",
       "name": "BillRaja",
-      "url": "https://billraja.com"
+      "url": "https://billraja.com",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://billraja.com/icons/Icon-512.png",
+        "width": 512,
+        "height": 512
+      }
     },
+    "image": "https://billraja.com/icons/Icon-512.png",
     "featureList": [
       "Professional billing and invoicing",
       "Employee attendance tracking with QR and geo-check-in",
@@ -77,17 +91,65 @@
   }
   </script>
 
+  <!-- Structured Data — Organization (for Google logo in search results) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "BillRaja",
+    "url": "https://billraja.com",
+    "logo": {
+      "@type": "ImageObject",
+      "url": "https://billraja.com/icons/Icon-512.png",
+      "contentUrl": "https://billraja.com/icons/Icon-512.png",
+      "width": 512,
+      "height": 512,
+      "caption": "BillRaja Logo"
+    },
+    "image": "https://billraja.com/icons/Icon-512.png",
+    "sameAs": []
+  }
+  </script>
+
+  <!-- Structured Data — WebSite (for sitelinks search box) -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "BillRaja",
+    "url": "https://billraja.com",
+    "publisher": {
+      "@type": "Organization",
+      "name": "BillRaja",
+      "logo": {
+        "@type": "ImageObject",
+        "url": "https://billraja.com/icons/Icon-512.png",
+        "width": 512,
+        "height": 512
+      }
+    }
+  }
+  </script>
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="BillRaja">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png">
+  <!-- Favicons — Google requires minimum 48x48, prefers multiples of 48 -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+  <link rel="icon" type="image/png" sizes="48x48" href="favicon-48x48.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png">
+  <link rel="shortcut icon" href="favicon.ico">
 
   <link rel="manifest" href="manifest.json">
+
+  <!-- reCAPTCHA Enterprise (App Check on web) -->
+  <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDI60sAAAAAOKDZcB7LqcJdtafApFQxQZCOksU"></script>
 
   <!-- Razorpay Checkout (web payments) -->
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>

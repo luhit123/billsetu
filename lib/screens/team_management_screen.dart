@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:billeasy/modals/team_invite.dart';
 import 'package:billeasy/modals/team_member.dart';
 import 'package:billeasy/modals/team_role.dart';
@@ -27,6 +29,21 @@ class TeamManagementScreen extends StatefulWidget {
 class _TeamManagementScreenState extends State<TeamManagementScreen> {
   final _teamService = TeamService.instance;
   bool _isCreatingTeam = false;
+  StreamSubscription<AppPlan>? _planSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +282,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
         child: Row(
           children: [
             CircleAvatar(
-              backgroundColor: kPrimary.withOpacity(0.12),
+              backgroundColor: kPrimary.withValues(alpha: 0.12),
               child: Icon(Icons.groups_rounded, color: kPrimary),
             ),
             const SizedBox(width: 12),
@@ -323,7 +340,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
     return Card(
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: _roleColor(member.role).withOpacity(0.12),
+          backgroundColor: _roleColor(member.role).withValues(alpha: 0.12),
           child: Text(
             member.displayName.isNotEmpty
                 ? member.displayName[0].toUpperCase()
@@ -345,7 +362,7 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _roleColor(member.role).withOpacity(0.12),
+                color: _roleColor(member.role).withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -518,12 +535,16 @@ class _TeamManagementScreenState extends State<TeamManagementScreen> {
   }
 
   void _showUpgradeDialog(String feature) {
+    final isEnterpriseOnly = feature.toLowerCase().contains('attendance') ||
+        feature.toLowerCase().contains('office location');
+    final planLabel = isEnterpriseOnly ? 'Enterprise' : 'Pro';
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Upgrade Required'),
+        title: Text('$planLabel Plan Required'),
         content: Text(
-          'You need a Pro or Enterprise plan to $feature. Upgrade now to unlock team collaboration features.',
+          'You need ${isEnterpriseOnly ? 'an' : 'a'} $planLabel plan to $feature. Upgrade now to unlock this feature.',
         ),
         actions: [
           TextButton(

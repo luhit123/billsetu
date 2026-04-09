@@ -11,6 +11,15 @@ service cloud.firestore {
     }
 
     // Admin check — allows authorized admin emails full read access.
+    // NOTE SEC-3 (future migration): This approach requires one Firestore read
+    // per request to check admin status, which counts against billing quotas.
+    // Consider migrating to Firebase Custom Claims on Auth tokens instead —
+    // set { admin: true } via Admin SDK, then check request.auth.token.admin
+    // here. Custom Claims are free, cached on the client, and don't add reads.
+    // Migration path:
+    //   1. Add a Cloud Function that sets custom claims when an admin is added.
+    //   2. Update this rule to: request.auth.token.admin == true
+    //   3. Keep authorizedAdmins collection as the source of truth for the CF.
     function isAdmin() {
       return isSignedIn() &&
         request.auth.token.email != null &&
@@ -61,6 +70,14 @@ service cloud.firestore {
       return isOwner(userId) || isTeamMember(userId);
     }
 
+    // Check if userId is an active member of the caller's own team.
+    // Allows a team owner to read their members' user profile docs.
+    function isMemberOfMyTeam(userId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/teams/$(request.auth.uid)/members/$(userId)) &&
+        get(/databases/$(database)/documents/teams/$(request.auth.uid)/members/$(userId)).data.status == 'active';
+    }
+
     // Owner OR team member with write permission (not viewer)
     // Legacy helper — used for broad write access checks
     function isOwnerOrTeamWriter(userId) {
@@ -76,6 +93,62 @@ service cloud.firestore {
     function canManageMembershipFor(ownerId) {
       return isOwner(ownerId) || (isTeamMember(ownerId) &&
         (getTeamRole(ownerId) == 'owner' || getTeamRole(ownerId) == 'coOwner'));
+    }
+
+    // S-5: Owner/coOwner OR team member with canMarkAttendance permission.
+    // Allows managers/sales with attendance permission to read member lists.
+    function canReadMembershipFor(ownerId) {
+      return canManageMembershipFor(ownerId) ||
+        (isTeamMember(ownerId) &&
+          teamMemberHasPermission(ownerId, 'canMarkAttendance', ['owner', 'coOwner', 'manager', 'sales']));
+    }
+
+    // S-4: Owner/coOwner OR team member with canViewReports permission.
+    function canViewAnalyticsFor(ownerId) {
+      return isOwner(ownerId) ||
+        (isTeamMember(ownerId) &&
+          teamMemberHasPermission(ownerId, 'canViewReports', ['owner', 'coOwner', 'manager']));
+    }
+
+    // ── Server-side plan enforcement ────────────────────────────────────
+    // Checks the user's usage counter for the current month against the
+    // plan limit stored in their subscription document.
+    //
+    // How it works:
+    //   1. The client writes a `usagePeriodKey` field (e.g. "2026-04") on
+    //      every invoice at creation time — this tells the rules which
+    //      usage doc to check.
+    //   2. Cloud Function `reconcileInvoiceCreate` atomically increments
+    //      `users/{ownerId}/usage/{YYYY-MM}.invoicesCreated` on every
+    //      invoice create.
+    //   3. This rule reads the subscription's `maxInvoicesPerMonth` and
+    //      compares it against the usage counter.
+    //
+    // Graceful degradation:
+    //   - No subscription doc → allow (trial/free users)
+    //   - No maxInvoicesPerMonth field → allow (unlimited)
+    //   - maxInvoicesPerMonth == -1 → allow (unlimited)
+    //   - No usage doc yet → allow (first invoice of the month)
+    //   - No usagePeriodKey on invoice → allow (legacy clients)
+    //
+    // IMPORTANT: This is a BACKSTOP. The primary enforcement is in
+    // reserveInvoiceNumber Cloud Function. This catches offline bypass.
+    function isWithinInvoiceQuota(ownerId) {
+      // If the invoice doesn't carry a usagePeriodKey, allow it
+      // (legacy client that hasn't been updated yet — Cloud Function
+      // will still enforce via validateAndEnrichInvoice).
+      return !('usagePeriodKey' in request.resource.data) ||
+        // No subscription doc → allow
+        !exists(/databases/$(database)/documents/subscriptions/$(ownerId)) ||
+        // No maxInvoicesPerMonth field → allow (unlimited plan)
+        !('maxInvoicesPerMonth' in get(/databases/$(database)/documents/subscriptions/$(ownerId)).data) ||
+        // Unlimited plan (-1) → allow
+        get(/databases/$(database)/documents/subscriptions/$(ownerId)).data.maxInvoicesPerMonth == -1 ||
+        // No usage doc yet (first invoice this month) → allow
+        !exists(/databases/$(database)/documents/users/$(ownerId)/usage/$(request.resource.data.usagePeriodKey)) ||
+        // Usage doc exists → check counter < limit
+        get(/databases/$(database)/documents/users/$(ownerId)/usage/$(request.resource.data.usagePeriodKey)).data.invoicesCreated
+          < get(/databases/$(database)/documents/subscriptions/$(ownerId)).data.maxInvoicesPerMonth;
     }
 
     // ── Override-aware permission helpers ────────────────────────────────
@@ -112,6 +185,16 @@ service cloud.firestore {
     function canManagePOFor(ownerId) {
       return isOwner(ownerId) || (isTeamMember(ownerId) &&
         teamMemberHasPermission(ownerId, 'canManagePurchaseOrders', ['owner', 'coOwner', 'manager']));
+    }
+
+    // Invoice-triggered stock adjustment permission.
+    // Allows team members who can create invoices to also adjust stock
+    // and log stock movements as part of the atomic invoice+stock batch.
+    // Without this, sales-role members can create invoices but the batch
+    // write fails because stock/movement rules require canManagePOFor().
+    function canAdjustStockViaInvoiceFor(ownerId) {
+      return isOwner(ownerId) || (isTeamMember(ownerId) &&
+        teamMemberHasPermission(ownerId, 'canCreateInvoice', ['owner', 'coOwner', 'manager', 'sales']));
     }
 
     function isNumber(value) {
@@ -265,6 +348,7 @@ service cloud.firestore {
             'createdBySignatureUrl',
             'schemaVersion',
             'gstTransactionType',
+            'usagePeriodKey',
           ]) &&
           request.resource.data.keys().hasAll([
             'id',
@@ -340,7 +424,7 @@ service cloud.firestore {
     function hasValidInvoiceSearchPrefixes() {
       return request.resource.data.searchPrefixes is list &&
           request.resource.data.searchPrefixes.size() > 0 &&
-          request.resource.data.searchPrefixes.size() <= 60 &&
+          request.resource.data.searchPrefixes.size() <= 30 &&
           // Prevent oversized prefix strings (max 100 chars each).
           // Checking first and last is sufficient since buildInvoiceSearchPrefixes
           // generates sequential substrings — first is shortest, last is longest.
@@ -383,9 +467,9 @@ service cloud.firestore {
     }
 
     function isValidInvoiceStatusUpdate() {
-      // Only allow changing payment-related fields; immutable fields must stay the same
+      // Only allow changing payment-related + signature metadata fields
       let changed = request.resource.data.diff(resource.data).changedKeys();
-      return changed.hasOnly(['status', 'amountReceived', 'balanceDue']) &&
+      return changed.hasOnly(['status', 'amountReceived', 'balanceDue', 'createdBySignatureUrl']) &&
           // Core identity fields must not change
           request.resource.data.id == resource.data.id &&
           request.resource.data.ownerId == resource.data.ownerId &&
@@ -429,7 +513,7 @@ service cloud.firestore {
     }
 
     match /invoices/{invoiceId} {
-      allow create: if isAdmin() || (isSignedIn() && isValidInvoiceCreate());
+      allow create: if isAdmin() || (isSignedIn() && isValidInvoiceCreate() && isWithinInvoiceQuota(request.resource.data.ownerId));
       allow read: if isOwnerOrTeamMember(resource.data.ownerId) || isAdmin();
       allow delete: if canDeleteInvoiceFor(resource.data.ownerId) || isAdmin();
       allow update: if isAdmin() || (canEditInvoiceFor(resource.data.ownerId) &&
@@ -448,11 +532,13 @@ service cloud.firestore {
     match /users/{userId} {
       // Profile doc: team members can read (for invoice generation with
       // business name/logo); only the owner can write. Admins can read/write.
-      allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+      // isMemberOfMyTeam: lets team owner read a member's profile (e.g. signature).
+      allow read: if isOwnerOrTeamMember(userId) || isMemberOfMyTeam(userId) || isAdmin();
       allow write: if isOwner(userId) || isAdmin();
 
       match /analytics/{document=**} {
-        allow read: if isOwnerOrTeamMember(userId) || isAdmin();
+        // S-4: Only users with canViewReports can read analytics (not all team members).
+        allow read: if canViewAnalyticsFor(userId) || isAdmin();
         allow write: if isAdmin(); // Cloud Functions + admin
       }
 
@@ -469,7 +555,11 @@ service cloud.firestore {
 
       match /products/{productId} {
         allow read: if isOwnerOrTeamMember(userId) || isAdmin();
-        allow write: if canWriteProductFor(userId) || isAdmin();
+        // canAdjustStockViaInvoiceFor: allows invoice-triggered stock
+        // decrements (currentStock + updatedAt only) without full product edit.
+        allow write: if canWriteProductFor(userId)
+          || canAdjustStockViaInvoiceFor(userId)
+          || isAdmin();
       }
 
       match /purchaseOrders/{orderId} {
@@ -479,7 +569,11 @@ service cloud.firestore {
 
       match /stockMovements/{movementId} {
         allow read: if isOwnerOrTeamMember(userId) || isAdmin();
-        allow write: if canManagePOFor(userId) || isAdmin();
+        // canAdjustStockViaInvoiceFor: allows sales-role team members
+        // to create stock movement logs as part of invoice batch writes.
+        allow write: if canManagePOFor(userId)
+          || canAdjustStockViaInvoiceFor(userId)
+          || isAdmin();
       }
 
       match /poCounters/{year} {
@@ -498,13 +592,20 @@ service cloud.firestore {
       }
 
       match /members/{memberId} {
-        allow read: if canManageMembershipFor(userId) || isAdmin();
+        // S-5: canReadMembershipFor allows attendance-permitted roles to read member lists.
+        allow read: if canReadMembershipFor(userId) || isAdmin();
         allow write: if isAdmin();
 
         match /attendance/{logId} {
-          allow read: if canManageMembershipFor(userId) || isAdmin();
+          allow read: if canReadMembershipFor(userId) || isAdmin();
           allow write: if isAdmin();
         }
+      }
+
+      // P-1: Denormalized membership stats — same read access as members.
+      match /membershipStats/{docId} {
+        allow read: if canReadMembershipFor(userId) || isAdmin();
+        allow write: if isAdmin();
       }
 
       // Notifications — user can read their own, admin + Cloud Functions can write
@@ -613,6 +714,12 @@ service cloud.firestore {
     // Admin notification requests — admin creates, Cloud Function updates
     match /notificationRequests/{requestId} {
       allow read, write: if isAdmin();
+    }
+
+    // Billing locks — server-only collection used by Cloud Functions to
+    // prevent subscription race conditions. No client access whatsoever.
+    match /billingLocks/{docId} {
+      allow read, write: if false;
     }
 
     // Connectivity health-check — allow any signed-in user to read

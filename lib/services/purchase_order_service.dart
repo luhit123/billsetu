@@ -51,18 +51,72 @@ class PurchaseOrderService {
         );
   }
 
+  /// Paginated PO query for use in UI lazy-loading (mirrors getInvoicesPage).
+  Future<FirestorePage<PurchaseOrder>> getPurchaseOrdersPage({
+    DateTime? startDate,
+    DateTime? endDateExclusive,
+    PurchaseOrderStatus? status,
+    bool gstEnabledOnly = false,
+    String? createdByUid,
+    int limit = 25,
+    QueryDocumentSnapshot<Map<String, dynamic>>? startAfterDocument,
+  }) async {
+    final ownerId = _requireOwnerId();
+    Query<Map<String, dynamic>> query = _poCol(ownerId);
+
+    if (status != null) {
+      query = query.where('status', isEqualTo: status.name);
+    }
+    if (gstEnabledOnly) {
+      query = query.where('gstEnabled', isEqualTo: true);
+    }
+    if (createdByUid != null && createdByUid.isNotEmpty) {
+      query = query.where('createdByUid', isEqualTo: createdByUid);
+    }
+    if (startDate != null) {
+      query = query.where(
+        'createdAt',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(startDate),
+      );
+    }
+    if (endDateExclusive != null) {
+      query = query.where(
+        'createdAt',
+        isLessThan: Timestamp.fromDate(endDateExclusive),
+      );
+    }
+
+    query = query.orderBy('createdAt', descending: true);
+
+    return query.fetchPage<PurchaseOrder>(
+      limit: limit,
+      startAfterDocument: startAfterDocument,
+      fromMap: (data, docId) => PurchaseOrder.fromMap(data, docId: docId),
+    );
+  }
+
   Future<List<PurchaseOrder>> getPurchaseOrders({
     DateTime? startDate,
     DateTime? endDateExclusive,
     PurchaseOrderStatus? status,
     bool gstEnabledOnly = false,
+    String? createdByUid,
     int pageSize = 200,
     int maxResults = 5000,
   }) async {
     final ownerId = _requireOwnerId();
-    Query<Map<String, dynamic>> query = _poCol(
-      ownerId,
-    ).orderBy('createdAt', descending: true);
+    Query<Map<String, dynamic>> query = _poCol(ownerId);
+
+    // Server-side filters — reduces Firestore reads and bandwidth.
+    if (status != null) {
+      query = query.where('status', isEqualTo: status.name);
+    }
+    if (gstEnabledOnly) {
+      query = query.where('gstEnabled', isEqualTo: true);
+    }
+    if (createdByUid != null && createdByUid.isNotEmpty) {
+      query = query.where('createdByUid', isEqualTo: createdByUid);
+    }
 
     if (startDate != null) {
       query = query.where(
@@ -77,6 +131,8 @@ class PurchaseOrderService {
       );
     }
 
+    query = query.orderBy('createdAt', descending: true);
+
     final orders = <PurchaseOrder>[];
     QueryDocumentSnapshot<Map<String, dynamic>>? cursor;
     var hasMore = true;
@@ -88,16 +144,7 @@ class PurchaseOrderService {
         fromMap: (data, docId) => PurchaseOrder.fromMap(data, docId: docId),
       );
 
-      final filtered = page.items.where((order) {
-        if (status != null && order.status != status) {
-          return false;
-        }
-        if (gstEnabledOnly && !order.gstEnabled) {
-          return false;
-        }
-        return true;
-      });
-      orders.addAll(filtered);
+      orders.addAll(page.items);
 
       cursor = page.cursor;
       hasMore = page.hasMore && page.items.isNotEmpty;

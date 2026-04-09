@@ -857,12 +857,15 @@ class _InvoiceTile extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        currency.format(invoice.grandTotal),
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: context.cs.onSurface,
+                      Flexible(
+                        child: Text(
+                          currency.format(invoice.grandTotal),
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                            color: context.cs.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -870,32 +873,18 @@ class _InvoiceTile extends StatelessWidget {
                   const SizedBox(height: 5),
                   Row(
                     children: [
-                      Text(
-                        invoice.invoiceNumber,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: context.cs.onSurfaceVariant.withAlpha(153),
+                      Flexible(
+                        child: Text(
+                          '${invoice.invoiceNumber}  \u00B7  ${_timeAgo(invoice.createdAt)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: context.cs.onSurfaceVariant.withAlpha(153),
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
-                      const SizedBox(width: 6),
-                      Container(
-                        width: 3,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: context.cs.onSurfaceVariant.withAlpha(153),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        _timeAgo(invoice.createdAt),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: context.cs.onSurfaceVariant.withAlpha(153),
-                        ),
-                      ),
-                      const Spacer(),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 8,

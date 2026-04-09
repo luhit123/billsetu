@@ -421,6 +421,8 @@ const Map<String, String> asTranslations = {
   'gstReportNetItcCredit': 'নিট ITC ক্ৰেডিট',
   'gstReportNetTaxPayable': 'নিট কৰ পৰিশোধযোগ্য',
   'gstReportOverview': 'GST অৱলোকন',
+  'gstReportTeamSummaryNote': 'সাৰাংশত সকলো দলৰ ইনভইচ অন্তৰ্ভুক্ত। তালিকাত কেৱল আপোনাৰ ইনভইচ দেখুৱাইছে।',
+  'gstReportDriftWarning': 'সাৰাংশ মুঠ সমন্বয়ৰ বাহিৰত থাকিব পাৰে। ৰিফ্ৰেশ কৰিবলৈ তললৈ টানক বা এই প্ৰতিবেদন পুনৰ খোলক।',
   'gstReportOutputGstSales': 'আউটপুট GST (বিক্ৰী)',
   'gstReportInputGstPurchases': 'ইনপুট GST (ক্ৰয়)',
   'gstReportOutputSales': 'আউটপুট (বিক্ৰী)',

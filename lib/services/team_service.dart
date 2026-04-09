@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:billeasy/modals/effective_permissions.dart';
@@ -39,10 +39,18 @@ class TeamService {
   final StreamController<TeamRole> _roleController =
       StreamController<TeamRole>.broadcast();
 
+  // FIX T-1: Callback invoked when the user is removed from a team by the
+  // owner (the userTeamMap document disappears while the user is online).
+  // The UI layer (e.g. main.dart) registers a callback that shows a SnackBar
+  // and navigates to the home screen.
+  void Function()? onRemovedFromTeam;
+
   /// Tracks the last successful cache update from listeners.
   /// If stale (>10 min), permissions are force-refreshed on next access.
   DateTime _lastSuccessfulUpdate = DateTime.now();
-  static const _staleCacheThreshold = Duration(minutes: 10);
+  // FIX T-2: Reduced from 10 min to 2 min so revoked permissions are
+  // detected sooner when the real-time listener has silently failed.
+  static const _staleCacheThreshold = Duration(minutes: 2);
   static String _mapCacheKey(String uid) => 'team_service_map_v1_$uid';
   static String _teamCacheKey(String uid) => 'team_service_team_v1_$uid';
 
@@ -75,9 +83,7 @@ class TeamService {
     } catch (e) {
       // Offline or permission error — prefer last known team state over
       // pretending the user is a solo owner.
-      if (kDebugMode) {
-        debugPrint('[TeamService] init failed, using cached team state: $e');
-      }
+      if (kDebugMode) debugPrint('[TeamService] init failed, using cached team state: $e');
     }
 
     // Fetch the team doc for permission overrides.
@@ -104,9 +110,7 @@ class TeamService {
         }
       }
     } catch (e) {
-      if (kDebugMode) {
-        debugPrint('[TeamService] team doc load failed: $e');
-      }
+      if (kDebugMode) debugPrint('[TeamService] team doc load failed: $e');
     }
   }
 
@@ -118,6 +122,7 @@ class TeamService {
         .snapshots()
         .listen(
           (snap) {
+            final wasOnTeam = _cachedMap != null && !_cachedMap!.isOwner;
             if (snap.exists && snap.data() != null) {
               _cachedMap = UserTeamMap.fromMap(snap.data()!);
             } else {
@@ -128,11 +133,19 @@ class TeamService {
             _startTeamListener(); // Re-subscribe when team changes
             _roleController.add(currentRole);
             _persistCachedState(uid);
+
+            // FIX T-1: Detect involuntary removal — the member's userTeamMap
+            // doc was deleted by the owner while the user was online. Skip if
+            // the user left voluntarily via leaveTeam().
+            if (wasOnTeam && _cachedMap == null && !_userInitiatedLeave) {
+              onRemovedFromTeam?.call();
+            }
           },
           onError: (Object error, StackTrace stackTrace) {
-            if (kDebugMode) {
-              debugPrint('[TeamService] userTeamMap listener failed: $error');
-            }
+            if (kDebugMode) debugPrint('[TeamService] userTeamMap listener failed: $error');
+            // FIX T-2: Force immediate refresh on next `can` access so stale
+            // permissions don't persist after a listener failure.
+            _lastSuccessfulUpdate = DateTime(0);
             _roleController.add(currentRole);
           },
         );
@@ -163,9 +176,9 @@ class TeamService {
             }
           },
           onError: (Object error, StackTrace stackTrace) {
-            if (kDebugMode) {
-              debugPrint('[TeamService] team doc listener failed: $error');
-            }
+            if (kDebugMode) debugPrint('[TeamService] team doc listener failed: $error');
+            // FIX T-2: Force immediate refresh on next `can` access.
+            _lastSuccessfulUpdate = DateTime(0);
           },
         );
   }
@@ -204,7 +217,7 @@ class TeamService {
   /// any overrides the team owner has configured.
   ///
   /// For solo users: returns owner defaults (all true) — zero behaviour change.
-  /// If the cache is stale (>10 min without a listener update), triggers a
+  /// If the cache is stale (>2 min without a listener update), triggers a
   /// background refresh so the next access gets fresh data.
   EffectivePermissions get can {
     if (_cachedMap != null &&
@@ -251,6 +264,9 @@ class TeamService {
   /// The business name of the team the user belongs to (empty if solo).
   String get teamBusinessName => _cachedMap?.teamBusinessName ?? '';
 
+  /// The member's display name as set by the owner during invitation.
+  String get memberDisplayName => _cachedMap?.displayName ?? '';
+
   // ── Team creation ──────────────────────────────────────────────────────────
 
   /// Creates a new team for the current user (the owner).
@@ -262,8 +278,22 @@ class TeamService {
     String ownerEmail = '',
   }) async {
     final uid = getActualUserId();
-    debugPrint('[TeamService] createTeam uid=$uid auth.uid=${_auth.currentUser?.uid}');
+    if (kDebugMode) debugPrint('[TeamService] createTeam uid=$uid auth.uid=${_auth.currentUser?.uid}');
 
+    await _functions.httpsCallable('createTeamCF', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
+      'businessName': businessName,
+      'ownerName': ownerName,
+      'ownerPhone': ownerPhone,
+      'ownerEmail': ownerEmail,
+    });
+
+    // Update local cache
+    final mapEntry = UserTeamMap(
+      teamId: uid,
+      role: TeamRole.owner,
+      teamBusinessName: businessName,
+      isOwner: true,
+    );
     final team = Team(
       ownerId: uid,
       ownerName: ownerName,
@@ -272,32 +302,6 @@ class TeamService {
       businessName: businessName,
       memberCount: 1,
     );
-
-    final ownerMember = TeamMember(
-      uid: uid,
-      role: TeamRole.owner,
-      displayName: ownerName,
-      phone: ownerPhone,
-      email: ownerEmail,
-      status: 'active',
-      invitedBy: uid,
-    );
-
-    final mapEntry = UserTeamMap(
-      teamId: uid,
-      role: TeamRole.owner,
-      teamBusinessName: businessName,
-      isOwner: true,
-    );
-
-    final batch = _firestore.batch();
-    batch.set(_firestore.collection('teams').doc(uid), team.toMap());
-    batch.set(
-      _firestore.collection('teams').doc(uid).collection('members').doc(uid),
-      ownerMember.toMap(),
-    );
-    batch.set(_firestore.collection('userTeamMap').doc(uid), mapEntry.toMap());
-    await batch.commit();
 
     _cachedMap = mapEntry;
     _cachedTeam = team;
@@ -314,7 +318,7 @@ class TeamService {
     String email = '',
     required TeamRole role,
   }) async {
-    await _functions.httpsCallable('createTeamInvite').call({
+    await _functions.httpsCallable('createTeamInvite', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'name': name,
       'phone': phone,
       'email': email,
@@ -324,16 +328,33 @@ class TeamService {
 
   /// Returns pending invites for the current user (matched by phone/email).
   Future<List<TeamInvite>> getPendingInvites() async {
-    final result = await _functions.httpsCallable('checkPendingInvites').call();
-    final List<dynamic> invites = result.data['invites'] ?? [];
-    return invites
-        .map((e) => TeamInvite.fromMap(Map<String, dynamic>.from(e)))
-        .toList();
+    try {
+      final result = await _functions
+          .httpsCallable(
+            'checkPendingInvites',
+            options: HttpsCallableOptions(timeout: const Duration(seconds: 15)),
+          )
+          .call();
+      final List<dynamic> invites = result.data['invites'] ?? [];
+      return invites
+          .map((e) => TeamInvite.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
+    } on FirebaseFunctionsException catch (e) {
+      if (kDebugMode) {
+        debugPrint(
+          '[TeamService] checkPendingInvites failed: ${e.code} — ${e.message} details=${e.details}',
+        );
+      }
+      rethrow;
+    } catch (e) {
+      if (kDebugMode) debugPrint('[TeamService] checkPendingInvites failed: $e');
+      rethrow;
+    }
   }
 
   /// Accepts an invite via Cloud Function.
   Future<void> acceptInvite(String inviteId) async {
-    await _functions.httpsCallable('acceptTeamInvite').call({
+    await _functions.httpsCallable('acceptTeamInvite', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'inviteId': inviteId,
     });
     // Re-init to pick up the new userTeamMap entry.
@@ -342,7 +363,7 @@ class TeamService {
 
   /// Declines an invite via Cloud Function.
   Future<void> declineInvite(String inviteId) async {
-    await _functions.httpsCallable('declineTeamInvite').call({
+    await _functions.httpsCallable('declineTeamInvite', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'inviteId': inviteId,
     });
   }
@@ -357,6 +378,7 @@ class TeamService {
         .doc(teamId)
         .collection('members')
         .where('status', isEqualTo: 'active')
+        .limit(100) // P-3: Safety cap for large Enterprise teams.
         .snapshots()
         .map(
           (snap) => snap.docs.map((d) => TeamMember.fromMap(d.data())).toList(),
@@ -365,14 +387,14 @@ class TeamService {
 
   /// Removes a team member via Cloud Function.
   Future<void> removeMember(String memberUid) async {
-    await _functions.httpsCallable('removeTeamMember').call({
+    await _functions.httpsCallable('removeTeamMember', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberUid': memberUid,
     });
   }
 
   /// Changes a member's role via Cloud Function.
   Future<void> changeRole(String memberUid, TeamRole newRole) async {
-    await _functions.httpsCallable('changeTeamMemberRole').call({
+    await _functions.httpsCallable('changeTeamMemberRole', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'memberUid': memberUid,
       'role': newRole.toStringValue(),
     });
@@ -387,7 +409,24 @@ class TeamService {
   /// Current user leaves the team they belong to.
   Future<void> leaveTeam() async {
     _userInitiatedLeave = true;
-    await _functions.httpsCallable('leaveTeam').call();
+    // Cancel listeners BEFORE the Cloud Function runs, so stale listeners
+    // don't fire and hit permission-denied on the now-removed member doc.
+    _mapSub?.cancel();
+    _teamSub?.cancel();
+    _mapSub = null;
+    _teamSub = null;
+    _cachedMap = null;
+    _cachedTeam = null;
+    await _functions.httpsCallable('leaveTeam', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call();
+    // Terminate Firestore and clear offline cache to discard any pending
+    // writes that were queued under the old team context — those writes
+    // would fail with PERMISSION_DENIED now that we're no longer a member.
+    try {
+      await _firestore.terminate();
+      await _firestore.clearPersistence();
+    } catch (e) {
+      if (kDebugMode) debugPrint('[TeamService] Cache clear after leave failed: $e');
+    }
     await init();
   }
 
@@ -420,7 +459,7 @@ class TeamService {
 
   /// Cancels a pending invite.
   Future<void> cancelInvite(String inviteId) async {
-    await _functions.httpsCallable('cancelTeamInvite').call({
+    await _functions.httpsCallable('cancelTeamInvite', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'inviteId': inviteId,
     });
   }
@@ -440,7 +479,7 @@ class TeamService {
         cleaned[entry.key] = entry.value;
       }
     }
-    await _functions.httpsCallable('updateTeamRolePermissions').call({
+    await _functions.httpsCallable('updateTeamRolePermissions', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'role': role.toStringValue(),
       'overrides': cleaned,
     });
@@ -453,7 +492,7 @@ class TeamService {
     required double radius,
     String address = '',
   }) async {
-    await _functions.httpsCallable('updateTeamOfficeLocation').call({
+    await _functions.httpsCallable('updateTeamOfficeLocation', options: HttpsCallableOptions(timeout: const Duration(seconds: 15))).call({
       'latitude': latitude,
       'longitude': longitude,
       'radius': radius,
@@ -572,6 +611,7 @@ class TeamService {
       'officeLongitude': value.officeLongitude,
       'officeRadius': value.officeRadius,
       'officeAddress': value.officeAddress,
+      'requireGeofenceOnCheckout': value.requireGeofenceOnCheckout,
       'rolePermissions': value.rolePermissions,
       'createdAt': value.createdAt?.toIso8601String(),
       'updatedAt': value.updatedAt?.toIso8601String(),
@@ -605,6 +645,7 @@ class TeamService {
       officeLongitude: (json['officeLongitude'] as num?)?.toDouble(),
       officeRadius: (json['officeRadius'] as num?)?.toDouble() ?? 200,
       officeAddress: json['officeAddress'] as String? ?? '',
+      requireGeofenceOnCheckout: json['requireGeofenceOnCheckout'] as bool? ?? false,
       rolePermissions: permissions,
       createdAt: DateTime.tryParse(json['createdAt'] as String? ?? ''),
       updatedAt: DateTime.tryParse(json['updatedAt'] as String? ?? ''),

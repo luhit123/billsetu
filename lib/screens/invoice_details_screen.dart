@@ -8,7 +8,6 @@ import 'package:flutter/services.dart';
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/services/team_service.dart';
-import 'package:http/http.dart' as http;
 import 'package:billeasy/widgets/permission_denied_dialog.dart';
 import 'package:billeasy/modals/invoice.dart';
 import 'package:billeasy/screens/template_picker_sheet.dart';
@@ -19,8 +18,8 @@ import 'package:billeasy/services/invoice_link_service.dart';
 import 'package:billeasy/services/invoice_pdf_service.dart';
 import 'package:billeasy/services/payment_link_service.dart';
 import 'package:billeasy/services/profile_service.dart';
-import 'package:billeasy/widgets/signature_pad.dart';
 import 'package:billeasy/screens/create_invoice_screen.dart';
+import 'package:billeasy/screens/profile_setup_screen.dart';
 import 'package:billeasy/theme/app_colors.dart';
 import 'package:billeasy/widgets/invoice_preview_widget.dart';
 import 'package:flutter/material.dart';
@@ -28,6 +27,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -59,11 +59,9 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   InvoiceTemplate _template = InvoiceTemplate.vyapar;
   BusinessProfile? _profile;
   Client? _clientDetails;
-  Uint8List? _signatureImage;
-  Uint8List? _logoImage;
   Uint8List? _cachedPdfBytes;
-  String _termsText = 'Thank you for doing business with us.';
   bool _loading = true;
+  bool _includePaymentLink = false;
 
   /// Templates available via arrow cycling — Vyapar first, then structural layouts.
   static const _structuralTemplates = {
@@ -78,6 +76,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   /// Live invoice — starts with the widget prop and updates from Firestore stream.
   late Invoice _liveInvoice;
   StreamSubscription? _invoiceSub;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
@@ -88,11 +87,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     // preview renders on the very first frame — no loading shimmer.
     final ps = ProfileService.instance;
     _profile = ps.cachedProfile;
-    _logoImage = ps.logoBytes;
-    _signatureImage = ps.signatureBytes;
 
     _listenToInvoice();
     _init();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _listenToInvoice() {
@@ -112,6 +112,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _invoiceSub?.cancel();
     super.dispose();
   }
@@ -134,9 +135,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
           final match = InvoiceTemplate.values.where((t) => t.name == saved);
           if (match.isNotEmpty) _template = match.first;
         }
-        _termsText =
-            prefs.getString('invoice_terms') ??
-            'Thank you for doing business with us.';
       }
 
       if (mounted) {
@@ -148,30 +146,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       debugPrint('[InvoiceDetails] Failed to load prefs/client: $e');
     }
 
-    // If the invoice was created by a different team member, fetch their
-    // signature in the background (don't block the preview for this).
-    _loadCreatorSignatureIfNeeded();
-  }
-
-  Future<void> _loadCreatorSignatureIfNeeded() async {
-    try {
-      final invoice = widget.invoice;
-      final actualUid = TeamService.instance.getActualUserId();
-      if (invoice.createdByUid.isNotEmpty &&
-          invoice.createdByUid != actualUid &&
-          invoice.createdBySignatureUrl.isNotEmpty) {
-        final response = await http.get(
-          Uri.parse(invoice.createdBySignatureUrl),
-        );
-        if (response.statusCode == 200 &&
-            response.bodyBytes.isNotEmpty &&
-            mounted) {
-          setState(() => _signatureImage = response.bodyBytes);
-        }
-      }
-    } catch (_) {
-      // Keep current user's signature as fallback
-    }
   }
 
   void _invalidatePdf() {
@@ -183,13 +157,36 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     _profile ??= await ProfileService().getCurrentProfile();
     // Fetch client if not loaded yet
     _clientDetails ??= await ClientService().getClient(_liveInvoice.clientId);
-    final bytes = await InvoicePdfService().buildInvoicePdf(
-      invoice: _liveInvoice,
-      profile: _profile,
-      client: _clientDetails,
-      language: AppStrings.of(context).language,
-      template: _template,
-    );
+
+    if (!mounted) return Uint8List(0);
+
+    // Capture language after the async gap so we don't use context across awaits.
+    final language = AppStrings.of(context).language;
+
+    // F6 fix: Use background isolate for PDF generation on non-web
+    // platforms to keep the UI thread free. For large invoices (100+
+    // items), this prevents 2-5 second UI freezes during layout.
+    // Web doesn't support Isolate.run, so falls back to main thread.
+    final Uint8List bytes;
+    if (kIsWeb) {
+      bytes = await InvoicePdfService().buildInvoicePdf(
+        invoice: _liveInvoice,
+        profile: _profile,
+        client: _clientDetails,
+        language: language,
+        template: _template,
+        includePayment: _includePaymentLink,
+      );
+    } else {
+      bytes = await InvoicePdfService().buildInvoicePdfBackground(
+        invoice: _liveInvoice,
+        profile: _profile,
+        client: _clientDetails,
+        language: language,
+        template: _template,
+        includePayment: _includePaymentLink,
+      );
+    }
     _cachedPdfBytes = bytes;
     return bytes;
   }
@@ -200,19 +197,10 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     if (availableWidth >= 1560) return 1200;
     if (availableWidth >= 1380) return 1120;
     if (availableWidth >= 1180) return 1020;
-    if (availableWidth >= 920)
+    if (availableWidth >= 920) {
       return (availableWidth - 72).clamp(860.0, 1020.0);
+    }
     return (availableWidth - 16).clamp(320.0, 860.0);
-  }
-
-  double _previewTextScaleFor(BoxConstraints constraints) {
-    final availableWidth = constraints.maxWidth;
-    if (availableWidth >= 1800) return 1.48;
-    if (availableWidth >= 1560) return 1.38;
-    if (availableWidth >= 1380) return 1.3;
-    if (availableWidth >= 1180) return 1.22;
-    if (availableWidth >= 920) return 1.12;
-    return 1.0;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -308,7 +296,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                         CreateInvoiceScreen(editingInvoice: _liveInvoice),
                   ),
                 );
-                if (result != null && mounted) {
+                if (result != null && context.mounted) {
                   // Refresh with updated invoice
                   Navigator.pushReplacement(
                     context,
@@ -345,35 +333,87 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
           ],
         ),
         child: SafeArea(
-          minimum: const EdgeInsets.fromLTRB(12, 8, 12, 10),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          minimum: const EdgeInsets.fromLTRB(12, 6, 12, 10),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // WhatsApp — shows Image/PDF choice
-              _ShareIcon(
-                icon: Icons.chat,
-                iconWidget: const FaIcon(
-                  FontAwesomeIcons.whatsapp,
-                  color: Color(0xFF25D366),
-                  size: 24,
+              // Payment link toggle
+              GestureDetector(
+                onTap: () => _togglePaymentLink(!_includePaymentLink),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 2,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.link_rounded,
+                        size: 15,
+                        color: _includePaymentLink
+                            ? kPrimary
+                            : context.cs.onSurfaceVariant.withAlpha(120),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Payment link',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: _includePaymentLink
+                              ? context.cs.onSurface
+                              : context.cs.onSurfaceVariant.withAlpha(120),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      SizedBox(
+                        height: 28,
+                        width: 42,
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: Switch.adaptive(
+                            value: _includePaymentLink,
+                            activeTrackColor: kPrimary,
+                            onChanged: _togglePaymentLink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                label: 'WhatsApp',
-                color: const Color(0xFF25D366),
-                onTap: () => _shareViaWhatsApp(context),
               ),
-              // SMS — opens SMS directly
-              _ShareIcon(
-                icon: Icons.sms_outlined,
-                label: 'SMS',
-                color: const Color(0xFF1565C0),
-                onTap: () => _shareViaSms(context),
-              ),
-              // Print
-              _ShareIcon(
-                icon: Icons.print_outlined,
-                label: 'Print',
-                color: context.cs.onSurfaceVariant,
-                onTap: () => _printPdf(context),
+              const SizedBox(height: 2),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  // WhatsApp — shows Image/PDF choice
+                  _ShareIcon(
+                    icon: Icons.chat,
+                    iconWidget: const FaIcon(
+                      FontAwesomeIcons.whatsapp,
+                      color: Color(0xFF25D366),
+                      size: 24,
+                    ),
+                    label: 'WhatsApp',
+                    color: const Color(0xFF25D366),
+                    onTap: () => _shareViaWhatsApp(context),
+                  ),
+                  // SMS — opens SMS directly
+                  _ShareIcon(
+                    icon: Icons.sms_outlined,
+                    label: 'SMS',
+                    color: const Color(0xFF1565C0),
+                    onTap: () => _shareViaSms(context),
+                  ),
+                  // Print
+                  _ShareIcon(
+                    icon: Icons.print_outlined,
+                    label: 'Print',
+                    color: context.cs.onSurfaceVariant,
+                    onTap: () => _printPdf(context),
+                  ),
+                ],
               ),
             ],
           ),
@@ -465,9 +505,6 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                       LayoutBuilder(
                         builder: (context, constraints) {
                           final previewWidth = _previewWidthFor(constraints);
-                          final previewTextScale = _previewTextScaleFor(
-                            constraints,
-                          );
                           return InteractiveViewer(
                             constrained: false,
                             minScale: 0.5,
@@ -485,72 +522,36 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                                     : 8,
                                 vertical: 8,
                               ),
-                              child: Builder(
-                                builder: (_) {
-                                  // Only allow editing signature/terms on invoices the
-                                  // current user created (or legacy invoices without createdByUid).
-                                  final isMyInvoice =
-                                      invoice.createdByUid.isEmpty ||
-                                      invoice.createdByUid ==
-                                          TeamService.instance
-                                              .getActualUserId();
-                                  final previewContent = MediaQuery(
-                                    data: MediaQuery.of(context).copyWith(
-                                      textScaler: TextScaler.linear(
-                                        previewTextScale,
-                                      ),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 220),
+                                width: previewWidth,
+                                curve: Curves.easeOutCubic,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(
+                                    kIsWeb && constraints.maxWidth >= 920
+                                        ? 18
+                                        : 12,
+                                  ),
+                                  border: Border.all(
+                                    color: context.cs.outlineVariant,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: context.cs.onSurface
+                                          .withValues(alpha: 0.08),
+                                      blurRadius: 28,
+                                      offset: const Offset(0, 14),
                                     ),
-                                    child: InvoicePreviewWidget(
-                                      invoice: invoice,
-                                      profile: _profile,
-                                      template: _template,
-                                      signatureImage: _signatureImage,
-                                      logoImage: _logoImage,
-                                      termsText: _termsText,
-                                      onSignatureTap: isMyInvoice
-                                          ? () => _openSignaturePad(context)
-                                          : null,
-                                      onTermsTap: isMyInvoice
-                                          ? () => _editTerms(context)
-                                          : null,
-                                    ),
-                                  );
-                                  return AnimatedContainer(
-                                    duration: const Duration(milliseconds: 220),
-                                    width: previewWidth,
-                                    curve: Curves.easeOutCubic,
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(
-                                        kIsWeb && constraints.maxWidth >= 920
-                                            ? 18
-                                            : 12,
-                                      ),
-                                      border: Border.all(
-                                        color: context.cs.outlineVariant,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: context.cs.onSurface
-                                              .withValues(alpha: 0.08),
-                                          blurRadius: 28,
-                                          offset: const Offset(0, 14),
-                                        ),
-                                      ],
-                                    ),
-                                    clipBehavior: Clip.antiAlias,
-                                    // Auto-shrink the invoice to fit so
-                                    // signature/terms are always visible.
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      alignment: Alignment.topCenter,
-                                      child: SizedBox(
-                                        width: previewWidth,
-                                        child: previewContent,
-                                      ),
-                                    ),
-                                  );
-                                },
+                                  ],
+                                ),
+                                clipBehavior: Clip.antiAlias,
+                                padding: const EdgeInsets.all(14),
+                                child: InvoicePreviewWidget(
+                                  invoice: invoice,
+                                  profile: _profile,
+                                  template: _template,
+                                ),
                               ),
                             ),
                           );
@@ -611,62 +612,104 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     );
   }
 
-  // ── Signature & Terms ───────────────────────────────────────────────────
-
-  Future<void> _openSignaturePad(BuildContext context) async {
-    final result = await SignaturePadSheet.show(
-      context,
-      existingSignature: _signatureImage,
-    );
-    if (result != null) {
-      // Save locally + upload to cloud (syncs across devices & team)
-      await ProfileService.instance.uploadSignature(result);
-      if (!mounted) return;
-      _invalidatePdf();
-      setState(() => _signatureImage = result);
-    }
-  }
-
-  Future<void> _editTerms(BuildContext context) async {
-    final controller = TextEditingController(text: _termsText);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(
-          'Terms & Conditions',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        content: TextField(
-          controller: controller,
-          maxLines: 4,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'Enter your terms and conditions...',
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    if (result != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('invoice_terms', result);
-      if (!mounted) return;
-      _invalidatePdf();
-      setState(() => _termsText = result);
-    }
-  }
+  // Terms/signatory editing previously affected only the old widget-preview.
+  // The screen now previews the real generated PDF, so those edits are removed.
 
   // ── Actions ─────────────────────────────────────────────────────────────
+
+  void _togglePaymentLink(bool turnOn) {
+    if (!turnOn) {
+      _invalidatePdf();
+      setState(() => _includePaymentLink = false);
+      return;
+    }
+
+    // Turning ON — check if UPI ID is configured.
+    final hasUpi = _profile != null && _profile!.upiId.trim().isNotEmpty;
+    if (hasUpi) {
+      _invalidatePdf();
+      setState(() => _includePaymentLink = true);
+      return;
+    }
+
+    // No UPI ID — guide user to add one.
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (ctx) => SafeArea(
+        minimum: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Theme.of(ctx).colorScheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            Icon(Icons.account_balance_wallet_outlined,
+                size: 40, color: kPrimary),
+            const SizedBox(height: 12),
+            const Text(
+              'UPI ID not set',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Add your UPI ID in My Profile so customers '
+              'can pay you directly from the invoice.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: Theme.of(ctx).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: FilledButton.icon(
+                icon: const Icon(Icons.person_outline, size: 18),
+                label: const Text('Go to My Profile'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: kPrimary,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileSetupScreen(),
+                    ),
+                  ).then((_) async {
+                    // Reload profile after returning — user may have added UPI.
+                    final updated =
+                        await ProfileService().getCurrentProfile();
+                    if (mounted && updated != null) {
+                      setState(() {
+                        _profile = updated;
+                        if (updated.upiId.trim().isNotEmpty) {
+                          _includePaymentLink = true;
+                        }
+                      });
+                    }
+                  });
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _cycleTemplate(int direction) async {
     // Arrows cycle only through the 5 structural layouts, not colour variants.
@@ -760,7 +803,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       debugPrint('[InvoiceDetails] Client lookup failed: $e');
     }
 
-    if (!mounted) return;
+    if (!context.mounted) return;
 
     final rawPhone = (clientPhone ?? '').replaceAll(RegExp(r'[^0-9]'), '');
     if (rawPhone.isEmpty) {
@@ -786,13 +829,13 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         ? storeName
         : 'BillRaja';
 
-    // Add UPI payment link if available (uses balance due)
+    // Add UPI payment link if the toggle is ON
     String upiPart = '';
-    if (_profile != null && _profile!.upiId.isNotEmpty && inv.grandTotal > 0) {
-      // Use received amount (what customer is paying now), or grand total if nothing recorded
-      final payAmount = inv.amountReceived > 0
-          ? inv.amountReceived
-          : inv.grandTotal;
+    if (_includePaymentLink &&
+        _profile != null &&
+        _profile!.upiId.isNotEmpty &&
+        inv.grandTotal > 0) {
+      final payAmount = inv.balanceDue > 0 ? inv.balanceDue : inv.grandTotal;
       final payLink = await PaymentLinkService.instance.createUpiWebPaymentLink(
         upiId: _profile!.upiId,
         businessName: _profile!.storeName,
@@ -829,6 +872,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     }
 
     // Native: show PDF vs Image choice
+    if (!context.mounted) return;
     final choice = await showModalBottomSheet<String>(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -899,11 +943,12 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         // Render PDF page to image with white background
         final pages = await Printing.raster(
           pdfBytes,
-          pages: [0],
           dpi: 200,
         ).toList();
         if (pages.isNotEmpty) {
-          final rasterPage = pages.first;
+          // QR/payment section is near the end of the PDF, so for multi-page
+          // invoices we render the last page instead of the first.
+          final rasterPage = pages.last;
           final rawImage = await rasterPage.toImage();
 
           // Draw white background + invoice on top
@@ -940,7 +985,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
         }
       }
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -958,7 +1003,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     if (filePath == null || !mounted) return;
 
     // Send file + pre-filled text via WhatsApp native intent
-    if (Platform.isAndroid) {
+    if (!kIsWeb && Platform.isAndroid) {
       try {
         const channel = MethodChannel('com.luhit.billeasy/share');
         await channel.invokeMethod('whatsapp', {
@@ -975,12 +1020,27 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
 
     if (!mounted) return;
 
-    // Fallback (iOS / no WhatsApp): open wa.me with message only
-    final waUri = Uri.parse(
-      'https://wa.me/$whatsAppPhone?text=${Uri.encodeComponent(message)}',
-    );
-    await launchUrl(waUri, mode: LaunchMode.externalApplication);
-    await UsageTrackingService.instance.incrementWhatsAppShareCount();
+    // F8 fix: Use platform share sheet with file attachment instead of
+    // wa.me URL (which embeds raw phone number in a web URL that can be
+    // logged by proxies, clipboard history, or URL-intercepting apps).
+    // The share sheet lets the user pick WhatsApp and attaches the
+    // invoice file directly — same end result, better privacy.
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(filePath)],
+          text: message,
+        ),
+      );
+      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+    } catch (e) {
+      // If share sheet fails, fall back to wa.me URL (existing behaviour)
+      final waUri = Uri.parse(
+        'https://wa.me/$whatsAppPhone?text=${Uri.encodeComponent(message)}',
+      );
+      await launchUrl(waUri, mode: LaunchMode.externalApplication);
+      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+    }
   }
 
   /// SMS — open SMS app directly with invoice link
@@ -1011,7 +1071,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
     try {
       await launchUrl(smsUri);
     } catch (e) {
-      if (mounted) {
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -1237,6 +1297,17 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                         final amount =
                             double.tryParse(amountCtrl.text.trim()) ?? 0;
                         if (amount <= 0) return;
+                        if (amount > balance) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Amount cannot exceed balance due (\u20b9${balance.toStringAsFixed(2)})',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
                         final newTotalReceived =
                             ((invoice.amountReceived + amount) * 100)
                                 .roundToDouble() /
@@ -1254,7 +1325,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                             method: selectedMethod.toLowerCase(),
                             note: noteCtrl.text.trim(),
                           );
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -1265,7 +1336,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                             );
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('Failed to record payment: $e'),
@@ -1366,7 +1437,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
                       vertical: 8,
                     ),
                     itemCount: payments.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
+                    separatorBuilder: (_, _) => const Divider(height: 1),
                     itemBuilder: (_, i) {
                       final p = payments[i];
                       final amount = (p['amount'] as num? ?? 0).toDouble();
@@ -1752,8 +1823,9 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
       context,
       TeamService.instance.can.canDeleteInvoice,
       'delete invoices',
-    ))
+    )) {
       return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1798,7 +1870,7 @@ class _InvoiceDetailsScreenState extends State<InvoiceDetailsScreen> {
   }
 }
 
-class _ShareIcon extends StatelessWidget {
+class _ShareIcon extends StatefulWidget {
   const _ShareIcon({
     required this.icon,
     required this.label,
@@ -1814,33 +1886,97 @@ class _ShareIcon extends StatelessWidget {
   final Widget? iconWidget;
 
   @override
+  State<_ShareIcon> createState() => _ShareIconState();
+}
+
+class _ShareIconState extends State<_ShareIcon>
+    with SingleTickerProviderStateMixin {
+  bool _busy = false;
+  late final AnimationController _pulseCtrl;
+  late final Animation<double> _pulseAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    );
+    _pulseAnim = Tween<double>(begin: 1.0, end: 0.85).animate(
+      CurvedAnimation(parent: _pulseCtrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _pulseCtrl.dispose();
+    super.dispose();
+  }
+
+  void _handleTap() {
+    if (_busy) return;
+    setState(() => _busy = true);
+    _pulseCtrl.repeat(reverse: true);
+    widget.onTap();
+    // Auto-reset after a short delay (action opens external app)
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        _pulseCtrl.stop();
+        _pulseCtrl.reset();
+        setState(() => _busy = false);
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+    return InkWell(
+      onTap: _handleTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedBuilder(
+              animation: _pulseAnim,
+              builder: (context, child) => Transform.scale(
+                scale: _busy ? _pulseAnim.value : 1.0,
+                child: child,
+              ),
+              child: Container(
+                width: 52,
+                height: 52,
+                decoration: BoxDecoration(
+                  color: widget.color.withValues(alpha: _busy ? 0.2 : 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Center(
+                  child: _busy
+                      ? SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.5,
+                            color: widget.color,
+                          ),
+                        )
+                      : widget.iconWidget ??
+                          Icon(widget.icon, color: widget.color, size: 26),
+                ),
+              ),
             ),
-            child: Center(
-              child: iconWidget ?? Icon(icon, color: color, size: 24),
+            const SizedBox(height: 4),
+            Text(
+              _busy ? 'Opening...' : widget.label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: widget.color,
+              ),
             ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: color,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

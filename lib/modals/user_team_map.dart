@@ -11,6 +11,7 @@ class UserTeamMap {
     required this.teamId,
     required this.role,
     this.teamBusinessName = '',
+    this.displayName = '',
     this.isOwner = false,
     this.joinedAt,
   });
@@ -20,6 +21,8 @@ class UserTeamMap {
 
   final TeamRole role;
   final String teamBusinessName;
+  /// The member's display name as set by the owner during invitation.
+  final String displayName;
   final bool isOwner;
   final DateTime? joinedAt;
 
@@ -28,6 +31,7 @@ class UserTeamMap {
       teamId: map['teamId'] as String? ?? '',
       role: TeamRole.fromString(map['role'] as String?),
       teamBusinessName: map['teamBusinessName'] as String? ?? '',
+      displayName: map['displayName'] as String? ?? '',
       isOwner: map['isOwner'] as bool? ?? false,
       joinedAt: (map['joinedAt'] as Timestamp?)?.toDate(),
     );
@@ -38,6 +42,7 @@ class UserTeamMap {
       'teamId': teamId,
       'role': role.toStringValue(),
       'teamBusinessName': teamBusinessName,
+      'displayName': displayName,
       'isOwner': isOwner,
       'joinedAt': joinedAt != null ? Timestamp.fromDate(joinedAt!) : FieldValue.serverTimestamp(),
     };

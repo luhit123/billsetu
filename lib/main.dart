@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, kDebugMode;
 import 'package:billeasy/l10n/app_strings.dart';
 import 'package:billeasy/modals/business_profile.dart';
 import 'package:billeasy/screens/force_update_screen.dart';
@@ -35,6 +35,7 @@ import 'package:billeasy/screens/home_screen.dart';
 import 'package:billeasy/screens/onboarding_screen.dart';
 import 'package:billeasy/services/theme_service.dart';
 import 'package:billeasy/theme/app_colors.dart';
+import 'package:billeasy/widgets/skeleton_screens.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,12 +50,12 @@ Future<void> main() async {
   // Crashlytics is not supported on web — guard with kIsWeb.
   if (!kIsWeb) {
     FlutterError.onError = (FlutterErrorDetails details) {
-      debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
+      if (kDebugMode) debugPrint('[FlutterError] ${details.exception}\n${details.stack}');
       FirebaseCrashlytics.instance.recordFlutterFatalError(details);
     };
 
     PlatformDispatcher.instance.onError = (error, stack) {
-      debugPrint('[PlatformError] $error\n$stack');
+      if (kDebugMode) debugPrint('[PlatformError] $error\n$stack');
       FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
       return true;
     };
@@ -68,29 +69,25 @@ Future<void> main() async {
   if (!kIsWeb) {
     FirebaseFirestore.instance.settings = const Settings(
       persistenceEnabled: true,
-      cacheSizeBytes: 104857600, // 100 MB — maximum allowed by Firestore SDK
+      cacheSizeBytes: 52428800, // 50 MB — [M2-FIX] reduced from 100 MB to conserve storage on low-end devices
     );
   }
 
   ConnectivityService.instance.init();
-  await AppCheckService.activate();
 
-  // ── Firebase Remote Config ────────────────────────────────────────────────
-  // Must init before PlanService so that plan limits are available.
-  await RemoteConfigService.instance.init();
-
-  // Initialise team awareness FIRST — reads userTeamMap/{uid} once.
-  // Must run before PlanService and ProfileService so they use the correct
-  // effective owner ID (team owner's UID for team members).
-  await TeamService.instance.init();
-
-  // Load plan, profile, and PDF fonts in parallel — they are independent
-  // once TeamService is initialised (all use getEffectiveOwnerId()).
+  // App Check + Remote Config in parallel — both are required before UI relies
+  // on backend calls, but neither needs to wait for the other.
   await Future.wait([
-    PlanService.instance.loadPlan(),
-    ProfileService.instance.init(),
-    InvoicePdfService().preloadFonts(),
+    AppCheckService.activate(),
+    RemoteConfigService.instance.init(),
   ]);
+
+  // Team, plan, profile, and subscription listeners are loaded when the user
+  // reaches [SignedInHomeGate] ([_refreshWorkspaceContext]). Running them
+  // here blocked serially after every [Firebase.initializeApp] even when
+  // [currentUser] was not yet restored, duplicating work and delaying first
+  // frame. PDF fonts preload after first paint so bundle I/O doesn't extend
+  // splash time.
 
   // Initialize sync status monitoring — detects pending writes that
   // haven't reached the server and surfaces warnings to the user.
@@ -105,6 +102,12 @@ Future<void> main() async {
   });
 
   runApp(const BillRajaApp());
+
+  // Warm PDF fonts on the next frame — first invoice build stays fast while
+  // cold start no longer waits on asset loading.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    InvoicePdfService().preloadFonts().catchError((_) {});
+  });
 }
 
 class BillRajaApp extends StatelessWidget {
@@ -454,7 +457,7 @@ class _AuthGateState extends State<AuthGate> {
   @override
   Widget build(BuildContext context) {
     if (_checkingOnboarding) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const LoginSkeleton();
     }
 
     if (_showOnboarding) {
@@ -465,9 +468,7 @@ class _AuthGateState extends State<AuthGate> {
       stream: FirebaseAuth.instance.idTokenChanges(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const LoginSkeleton();
         }
 
         if (snapshot.data == null) {
@@ -565,6 +566,14 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
       }
       _wasOnTeam = ts.isTeamMember;
     });
+
+    // Load workspace (team → plan → profile) as early as possible: user is
+    // already non-null from [AuthGate]. A microtask runs before the next frame,
+    // so this starts sooner than addPostFrameCallback while avoiding the old
+    // serial pre-runApp bottleneck.
+    scheduleMicrotask(() {
+      _refreshWorkspaceContext();
+    });
   }
 
   String _buildWorkspaceKey(TeamService teamService) {
@@ -583,6 +592,9 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
 
     _workspaceRefreshRunning = true;
     try {
+      // Team context can change the effective owner id, so initialize it first.
+      await TeamService.instance.init();
+
       PlanService.instance.reset();
       await PlanService.instance.loadPlan();
 
@@ -593,7 +605,7 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
         setState(() {});
       }
     } catch (e) {
-      debugPrint('[SignedInHomeGate] Workspace refresh failed: $e');
+      if (kDebugMode) debugPrint('[SignedInHomeGate] Workspace refresh failed: $e');
     } finally {
       _workspaceRefreshRunning = false;
     }
@@ -680,10 +692,10 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
     if (!_postLoginCheckDone && !_postLoginCheckRunning) {
       _postLoginCheckRunning = true;
       _runPostLoginChecks();
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const HomeSkeleton();
     }
     if (_postLoginCheckRunning) {
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return const HomeSkeleton();
     }
 
     // ── Step 2: Show pending invites if any ──
@@ -714,12 +726,12 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
                   {'createdAt': FieldValue.serverTimestamp()},
                   SetOptions(merge: true),
                 );
-                debugPrint('[SignedInHomeGate] Plan activated — createdAt written');
+                if (kDebugMode) debugPrint('[SignedInHomeGate] Plan activated — createdAt written');
                 // Reload plan so it picks up the new createdAt
                 await PlanService.instance.loadPlan();
               }
             } catch (e) {
-              debugPrint('[SignedInHomeGate] Failed to activate plan: $e');
+              if (kDebugMode) debugPrint('[SignedInHomeGate] Failed to activate plan: $e');
             }
             _isFirstTimeCelebration = false;
           }
@@ -734,16 +746,12 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
+          return const HomeSkeleton();
         }
 
         if (snapshot.hasError) {
           if (ConnectivityService.instance.isOffline) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
+            return const HomeSkeleton();
           }
           return Scaffold(
             body: Center(
@@ -782,18 +790,26 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
   }
 
   /// Runs invite check + celebration check exactly once after login.
+  /// Wrapped with a 10-second timeout so the user is never stuck on the
+  /// skeleton screen if Firestore reads hang (slow network, throttled
+  /// background tab, etc.).
   Future<void> _runPostLoginChecks() async {
-    await _checkPendingInvites();
-    if (_showPendingInvites == true) {
+    try {
+      await Future(() async {
+        await _checkPendingInvites();
+        if (_showPendingInvites == true) return;
+        await _checkAndShowCelebration();
+      }).timeout(const Duration(seconds: 10));
+    } catch (e) {
+      if (kDebugMode) debugPrint('[SignedInHomeGate] Post-login checks timed out: $e');
+      // On timeout, skip invites and celebration — go straight to home.
       if (mounted) {
         setState(() {
-          _postLoginCheckRunning = false;
-          _postLoginCheckDone = true;
+          _showPendingInvites ??= false;
+          _showCelebration ??= false;
         });
       }
-      return;
     }
-    await _checkAndShowCelebration();
     if (mounted) {
       setState(() {
         _postLoginCheckRunning = false;
@@ -805,12 +821,12 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
   Future<void> _checkPendingInvites() async {
     try {
       final invites = await TeamService.instance.getPendingInvites();
-      debugPrint('[SignedInHomeGate] Pending invites found: ${invites.length}');
+      if (kDebugMode) debugPrint('[SignedInHomeGate] Pending invites found: ${invites.length}');
       if (mounted) {
         setState(() => _showPendingInvites = invites.isNotEmpty);
       }
     } catch (e) {
-      debugPrint('[SignedInHomeGate] Invite check failed: $e');
+      if (kDebugMode) debugPrint('[SignedInHomeGate] Invite check failed: $e');
       if (mounted) setState(() => _showPendingInvites = false);
     }
   }
@@ -819,12 +835,12 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
     // Only show celebration if there IS a trial to celebrate (duration > 0).
     final trialMonths = RemoteConfigService.instance.trialDurationMonths;
     if (trialMonths <= 0) {
-      debugPrint('[SignedInHomeGate] trial_duration_months=$trialMonths — skipping celebration');
+      if (kDebugMode) debugPrint('[SignedInHomeGate] trial_duration_months=$trialMonths — skipping celebration');
       if (mounted) setState(() => _showCelebration = false);
       return;
     }
 
-    // Check if user has already activated (has createdAt in user doc).
+    // Check if user has already activated or is a returning user.
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
@@ -832,20 +848,32 @@ class _SignedInHomeGateState extends State<SignedInHomeGate> {
             .collection('users')
             .doc(uid)
             .get();
+        final data = userDoc.data();
         final hasCreatedAt = userDoc.exists &&
-            userDoc.data() != null &&
-            userDoc.data()!['createdAt'] != null;
+            data != null &&
+            data['createdAt'] != null;
+        final isReturningUser = userDoc.exists &&
+            data != null &&
+            data['returningUser'] == true;
+
         _isFirstTimeCelebration = !hasCreatedAt;
 
-        // Only show celebration for first-time users (not on every login).
+        // Returning users (deleted account + re-signed up) don't see celebration.
+        if (isReturningUser) {
+          if (kDebugMode) debugPrint('[SignedInHomeGate] Returning user — skipping celebration');
+          if (mounted) setState(() => _showCelebration = false);
+          return;
+        }
+
+        // Already activated users don't see celebration.
         if (hasCreatedAt) {
-          debugPrint('[SignedInHomeGate] User already activated — skipping celebration');
+          if (kDebugMode) debugPrint('[SignedInHomeGate] User already activated — skipping celebration');
           if (mounted) setState(() => _showCelebration = false);
           return;
         }
       }
     } catch (e) {
-      debugPrint('[SignedInHomeGate] createdAt check failed: $e');
+      if (kDebugMode) debugPrint('[SignedInHomeGate] createdAt check failed: $e');
     }
     if (mounted) setState(() => _showCelebration = true);
   }

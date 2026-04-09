@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:billeasy/l10n/app_strings.dart';
@@ -55,6 +56,13 @@ class _ReportsScreenState extends State<ReportsScreen>
     decimalDigits: 0,
   );
 
+  String? get _teamFilterUid {
+    final ts = TeamService.instance;
+    return ts.isTeamMember && !ts.can.canViewOthersInvoices
+        ? ts.getActualUserId()
+        : null;
+  }
+
   // ── Revenue tab state ──────────────────────────────────────────────────────
   _ReportPeriod _period = _ReportPeriod.thisMonth;
   List<Invoice> _revenueInvoices = [];
@@ -78,6 +86,7 @@ class _ReportsScreenState extends State<ReportsScreen>
   List<PurchaseOrder> _purchaseOrders = [];
   bool _purchaseOrdersLoading = true;
   int _purchaseOrderRequestId = 0;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
@@ -87,10 +96,14 @@ class _ReportsScreenState extends State<ReportsScreen>
     _subscribeReceivables();
     _subscribeProducts();
     _loadPurchaseOrders();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -130,6 +143,7 @@ class _ReportsScreenState extends State<ReportsScreen>
       final invoices = await _firebaseService.getAllInvoices(
         startDate: start,
         endDateExclusive: end,
+        createdByUid: _teamFilterUid,
         pageSize: 250,
         maxResults: 10000,
       );
@@ -156,6 +170,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     try {
       final invoices = await _firebaseService.getAllInvoices(
         status: InvoiceStatus.pending,
+        createdByUid: _teamFilterUid,
         pageSize: 200,
         maxResults: 5000,
       );
@@ -182,6 +197,7 @@ class _ReportsScreenState extends State<ReportsScreen>
     });
     try {
       final invoices = await _firebaseService.getAllInvoices(
+        createdByUid: _teamFilterUid,
         pageSize: 250,
         maxResults: 10000,
       );

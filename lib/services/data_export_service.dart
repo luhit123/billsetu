@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -12,6 +13,12 @@ import 'team_service.dart';
 import '../modals/invoice.dart';
 import '../modals/client.dart';
 import '../modals/product.dart';
+
+/// Random suffix generator to prevent predictable temp file paths (Issue #21).
+String _randomSuffix() {
+  final rng = Random.secure();
+  return List.generate(8, (_) => rng.nextInt(16).toRadixString(16)).join();
+}
 
 class DataExportService {
   DataExportService._();
@@ -71,7 +78,7 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    await _shareAndCleanup(csv, 'invoices_export.csv', 'Invoices Export');
+    await _shareAndCleanup(csv, 'invoices_export_${_randomSuffix()}.csv', 'Invoices Export');
   }
 
   Future<void> exportCustomersCSV() async {
@@ -109,7 +116,7 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    await _shareAndCleanup(csv, 'customers_export.csv', 'Customers Export');
+    await _shareAndCleanup(csv, 'customers_export_${_randomSuffix()}.csv', 'Customers Export');
   }
 
   Future<void> exportProductsCSV() async {
@@ -167,7 +174,7 @@ class DataExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    await _shareAndCleanup(csv, 'products_export.csv', 'Products Export');
+    await _shareAndCleanup(csv, 'products_export_${_randomSuffix()}.csv', 'Products Export');
   }
 
   /// Write CSV to a temp file, share it, then delete the file.
@@ -191,7 +198,9 @@ class DataExportService {
     final file = File('${dir.path}/$fileName');
     try {
       await file.writeAsString(csv);
-      await Share.shareXFiles([XFile(file.path)], text: subject);
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: subject),
+      );
     } finally {
       try {
         if (await file.exists()) await file.delete();

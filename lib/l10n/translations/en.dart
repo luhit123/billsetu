@@ -421,6 +421,8 @@ const Map<String, String> enTranslations = {
   'gstReportNetItcCredit': 'Net ITC Credit',
   'gstReportNetTaxPayable': 'Net Tax Payable',
   'gstReportOverview': 'GST OVERVIEW',
+  'gstReportTeamSummaryNote': 'Summary totals include all team invoices. The list below shows only your invoices.',
+  'gstReportDriftWarning': 'Summary totals may be out of sync. Pull down to refresh or re-open this report.',
   'gstReportOutputGstSales': 'Output GST (Sales)',
   'gstReportInputGstPurchases': 'Input GST (Purchases)',
   'gstReportOutputSales': 'Output (Sales)',

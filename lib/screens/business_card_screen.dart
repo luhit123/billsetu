@@ -733,7 +733,7 @@ class _ProfileData {
           width: size,
           height: size,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _initialsCircle(size, bgColor, textColor, fontSize),
+          errorBuilder: (_, _, _) => _initialsCircle(size, bgColor, textColor, fontSize),
         ),
       );
     }
@@ -899,7 +899,7 @@ class _ElegantCard extends StatelessWidget {
                         alignment: Alignment.center,
                         child: d.hasLogo
                             ? ClipRRect(borderRadius: BorderRadius.circular(10),
-                                child: Image.network(d.logoUrl, width: 46, height: 46, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
+                                child: Image.network(d.logoUrl, width: 46, height: 46, fit: BoxFit.cover, errorBuilder: (_, _, _) =>
                                     Text(d.initials, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _accent))))
                             : Text(d.initials, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900, color: _accent)),
                       ),
@@ -1000,7 +1000,7 @@ class _FreshCard extends StatelessWidget {
                           alignment: Alignment.center,
                           child: d.hasLogo
                               ? ClipRRect(borderRadius: BorderRadius.circular(14),
-                                  child: Image.network(d.logoUrl, width: 56, height: 56, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
+                                  child: Image.network(d.logoUrl, width: 56, height: 56, fit: BoxFit.cover, errorBuilder: (_, _, _) =>
                                       Text(d.initials, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white))))
                               : Text(d.initials, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white)),
                         ),
@@ -1084,7 +1084,7 @@ class _SunsetCard extends StatelessWidget {
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.network(d.logoUrl, width: 56, height: 56, fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => CustomPaint(
+                                  errorBuilder: (_, _, _) => CustomPaint(
                                     size: const Size(56, 56),
                                     painter: _DiamondPainter(text: d.initials, borderColor: Colors.white.withValues(alpha: 0.4), fillColor: Colors.white.withValues(alpha: 0.12)),
                                   ),
@@ -1189,7 +1189,7 @@ class _ForestCard extends StatelessWidget {
                         ),
                         child: Center(child: d.hasLogo
                             ? ClipRRect(borderRadius: BorderRadius.circular(10),
-                                child: Image.network(d.logoUrl, width: 40, height: 40, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
+                                child: Image.network(d.logoUrl, width: 40, height: 40, fit: BoxFit.cover, errorBuilder: (_, _, _) =>
                                     Text(d.initials, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: _sage))))
                             : Text(d.initials, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: _sage))),
                       ),
@@ -1372,7 +1372,7 @@ class _NeonCard extends StatelessWidget {
                             ? ClipRRect(
                                 borderRadius: BorderRadius.circular(8),
                                 child: Image.network(d.logoUrl, width: 52, height: 52, fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => CustomPaint(
+                                  errorBuilder: (_, _, _) => CustomPaint(
                                     size: const Size(52, 52),
                                     painter: _HexMonogramPainter(text: d.initials, color: _cyan),
                                   ),
@@ -1472,7 +1472,7 @@ class _SaffronCard extends StatelessWidget {
                     alignment: Alignment.center,
                     child: d.hasLogo
                         ? ClipRRect(borderRadius: BorderRadius.circular(14),
-                            child: Image.network(d.logoUrl, width: 26, height: 26, fit: BoxFit.cover, errorBuilder: (_, __, ___) =>
+                            child: Image.network(d.logoUrl, width: 26, height: 26, fit: BoxFit.cover, errorBuilder: (_, _, _) =>
                                 Text(d.initials, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white))))
                         : Text(d.initials, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.white)),
                   ),

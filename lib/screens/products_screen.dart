@@ -56,6 +56,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   bool _isLoading = true;
   Object? _loadError;
   StreamSubscription<List<Product>>? _productSub;
+  StreamSubscription<AppPlan>? _planSub;
 
   /// In-memory search filter -- zero network calls.
   List<Product> get _filtered {
@@ -68,10 +69,14 @@ class _ProductsScreenState extends State<ProductsScreen> {
   void initState() {
     super.initState();
     _subscribe();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _searchDebounce?.cancel();
     _searchCtrl.dispose();
     _productSub?.cancel();

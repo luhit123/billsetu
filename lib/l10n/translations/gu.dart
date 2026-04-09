@@ -421,6 +421,8 @@ const Map<String, String> guTranslations = {
   'gstReportNetItcCredit': 'નેટ ITC ક્રેડિટ',
   'gstReportNetTaxPayable': 'નેટ ટૅક્સ ચૂકવવાપાત્ર',
   'gstReportOverview': 'GST ઓવરવ્યૂ',
+  'gstReportTeamSummaryNote': 'સારાંશ કુલમાં બધા ટીમ ઇન્વોઇસ સામેલ છે. નીચેની યાદી માત્ર તમારા ઇન્વોઇસ બતાવે છે.',
+  'gstReportDriftWarning': 'સારાંશ કુલ સિંક બહાર હોઈ શકે છે. રિફ્રેશ કરવા માટે નીચે ખેંચો અથવા આ રિપોર્ટ ફરીથી ખોલો.',
   'gstReportOutputGstSales': 'આઉટપુટ GST (વેચાણ)',
   'gstReportInputGstPurchases': 'ઇનપુટ GST (ખરીદી)',
   'gstReportOutputSales': 'આઉટપુટ (વેચાણ)',

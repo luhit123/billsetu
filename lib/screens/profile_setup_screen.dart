@@ -31,6 +31,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _phoneController = TextEditingController();
   final _gstinController = TextEditingController();
   final _upiIdController = TextEditingController();
+  final _signatoryNameController = TextEditingController();
   // Preserved from existing profiles (not shown in UI, written back unchanged)
   String _upiQrUrl = '';
   String _upiNumber = '';
@@ -70,6 +71,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _phoneController.dispose();
     _gstinController.dispose();
     _upiIdController.dispose();
+    _signatoryNameController.dispose();
     super.dispose();
   }
 
@@ -86,6 +88,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         _gstinController.text = profile.gstin;
         _logoUrl = profile.logoUrl;
         _upiIdController.text = profile.upiId;
+        _signatoryNameController.text = profile.signatoryName;
         // Preserve hidden fields so they survive a re-save
         _upiQrUrl = profile.upiQrUrl;
         _upiNumber = profile.upiNumber;
@@ -168,6 +171,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
       bankName: _bankName,
       storeLatitude: _storeLatitude,
       storeLongitude: _storeLongitude,
+      signatoryName: _signatoryNameController.text.trim(),
     );
 
     try {
@@ -652,6 +656,32 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   const SizedBox(height: 8),
                   Text(
                     'Your invoice QR codes will use this UPI ID so customers can pay you directly — zero fees.',
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      color: context.cs.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              // ── Invoice Signature ───────────────────────────────────
+              _SectionCard(
+                icon: Icons.draw_rounded,
+                title: 'Invoice Signature',
+                subtitle: 'Name shown as authorized signatory on invoices',
+                children: [
+                  _Field(
+                    controller: _signatoryNameController,
+                    label: 'Signatory Name',
+                    hint: 'e.g. Rahul Sharma',
+                    icon: Icons.person_outline_rounded,
+                    textCapitalization: TextCapitalization.words,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'This name appears as "Authorized Signatory" on all your invoices. If left empty, your business name will be used.',
                     style: TextStyle(
                       fontSize: 11.5,
                       color: context.cs.onSurfaceVariant,

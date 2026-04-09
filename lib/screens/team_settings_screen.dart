@@ -152,79 +152,77 @@ class _TeamSettingsScreenState extends State<TeamSettingsScreen>
   Widget _buildMemberView(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Team')),
-      body: Padding(
+      body: ListView(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        CircleAvatar(
-                          backgroundColor: kPrimary.withOpacity(0.12),
-                          child: Icon(Icons.groups_rounded, color: kPrimary),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: kPrimary.withValues(alpha: 0.12),
+                        child: Icon(Icons.groups_rounded, color: kPrimary),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _service.teamBusinessName.isNotEmpty
+                                  ? _service.teamBusinessName
+                                  : 'Team',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Your role: ${_service.currentRole.displayName}',
+                              style: TextStyle(color: kTextSecondary, fontSize: 13),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _service.teamBusinessName.isNotEmpty
-                                    ? _service.teamBusinessName
-                                    : 'Team',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Your role: ${_service.currentRole.displayName}',
-                                style: TextStyle(color: kTextSecondary, fontSize: 13),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      _service.currentRole.description,
-                      style: TextStyle(color: kTextSecondary, fontSize: 13),
-                    ),
-                  ],
-                ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _service.currentRole.description,
+                    style: TextStyle(color: kTextSecondary, fontSize: 13),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Your Permissions', style: Theme.of(context).textTheme.titleSmall),
-                    const SizedBox(height: 8),
-                    for (final entry in TeamRole.configurablePermissions)
-                      _permRow(entry.label, _service.can.check(entry.key)),
-                  ],
-                ),
+          ),
+          const SizedBox(height: 24),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Your Permissions', style: Theme.of(context).textTheme.titleSmall),
+                  const SizedBox(height: 8),
+                  for (final entry in TeamRole.configurablePermissions)
+                    _permRow(entry.label, _service.can.check(entry.key)),
+                ],
               ),
             ),
-            const Spacer(),
-            OutlinedButton.icon(
-              onPressed: () => _leaveTeam(context),
-              icon: const Icon(Icons.exit_to_app_rounded, color: Colors.red),
-              label: const Text('Leave Team', style: TextStyle(color: Colors.red)),
-              style: OutlinedButton.styleFrom(
-                side: const BorderSide(color: Colors.red),
-              ),
+          ),
+          const SizedBox(height: 32),
+          OutlinedButton.icon(
+            onPressed: () => _leaveTeam(context),
+            icon: const Icon(Icons.exit_to_app_rounded, color: Colors.red),
+            label: const Text('Leave Team', style: TextStyle(color: Colors.red)),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red),
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 16),
+        ],
       ),
     );
   }

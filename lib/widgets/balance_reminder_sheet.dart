@@ -35,6 +35,19 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
   bool _isSendingWhatsApp = false;
   bool _isSendingSms = false;
 
+  /// Pre-computed values populated in initState to avoid lag on tap.
+  Future<String?>? _payLinkFuture;
+  Future<int>? _shareCountFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fetch network data eagerly so taps are near-instant.
+    _payLinkFuture = _buildPayLink();
+    _shareCountFuture =
+        UsageTrackingService.instance.getWhatsAppShareCount();
+  }
+
   final NumberFormat _currency = NumberFormat.currency(
     locale: 'en_IN',
     symbol: '\u20b9',
@@ -192,7 +205,7 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
                 itemCount: widget.unpaidInvoices.length > 6
                     ? 6
                     : widget.unpaidInvoices.length,
-                separatorBuilder: (_, __) => const SizedBox(height: 4),
+                separatorBuilder: (_, _) => const SizedBox(height: 4),
                 itemBuilder: (_, i) {
                   if (i == 5 && widget.unpaidInvoices.length > 6) {
                     return Padding(
@@ -294,11 +307,13 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
   // ── Actions ───────────────────────────────────────────────────────────
 
   Future<void> _sendWhatsApp() async {
-    // Plan gate — reuse existing WhatsApp share limits
-    final shareCount = await UsageTrackingService.instance
-        .getWhatsAppShareCount();
+    setState(() => _isSendingWhatsApp = true);
+
+    // Use pre-fetched share count (already started in initState).
+    final shareCount = await _shareCountFuture!;
     if (!PlanService.instance.canShareWhatsApp(shareCount)) {
       if (!mounted) return;
+      setState(() => _isSendingWhatsApp = false);
       final max = PlanService.instance.currentLimits.maxWhatsAppSharesPerMonth;
       await LimitReachedDialog.show(
         context,
@@ -314,20 +329,21 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
     final phone = _normalizedPhone();
     if (phone == null) {
       if (!mounted) return;
+      setState(() => _isSendingWhatsApp = false);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No phone number for this customer')),
       );
       return;
     }
 
-    setState(() => _isSendingWhatsApp = true);
-
-    final payLink = await _buildPayLink();
+    // Use pre-fetched UPI link (already started in initState).
+    final payLink = await _payLinkFuture;
     final message = Uri.encodeComponent(_whatsAppMessage(payLink: payLink));
     final uri = Uri.parse('https://wa.me/$phone?text=$message');
 
     if (await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      await UsageTrackingService.instance.incrementWhatsAppShareCount();
+      // Fire-and-forget — don't block UI for analytics write.
+      UsageTrackingService.instance.incrementWhatsAppShareCount();
       if (mounted) Navigator.pop(context);
     } else {
       if (mounted) {
@@ -352,7 +368,8 @@ class _BalanceReminderSheetState extends State<BalanceReminderSheet> {
 
     setState(() => _isSendingSms = true);
 
-    final payLink = await _buildPayLink();
+    // Use pre-fetched UPI link (already started in initState).
+    final payLink = await _payLinkFuture;
     final body = Uri.encodeComponent(_smsMessage(payLink: payLink));
     final uri = Uri.parse('sms:$phone?body=$body');
 

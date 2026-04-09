@@ -1,5 +1,5 @@
 import 'package:cloud_functions/cloud_functions.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode;
 
 class PaymentLinkService {
   PaymentLinkService._();
@@ -27,7 +27,7 @@ class PaymentLinkService {
 
     try {
       final result = await _functions
-          .httpsCallable('createUpiPaymentLink')
+          .httpsCallable('createUpiPaymentLink', options: HttpsCallableOptions(timeout: const Duration(seconds: 15)))
           .call({
             'upiId': trimmedUpiId,
             'businessName': trimmedBusinessName,
@@ -41,7 +41,7 @@ class PaymentLinkService {
         return url.isEmpty ? null : url;
       }
     } catch (error) {
-      debugPrint('[PaymentLinkService] Signed payment link failed: $error');
+      if (kDebugMode) debugPrint('[PaymentLinkService] Signed payment link failed: $error');
     }
 
     return null;

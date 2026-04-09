@@ -1,6 +1,6 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show debugPrint, kDebugMode, kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'logo_cache_service.dart';
 import 'plan_service.dart';
@@ -20,13 +20,18 @@ class AuthService {
     GoogleSignIn? googleSignIn,
     FirebaseFunctions? functions,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
-       _googleSignIn =
-           googleSignIn ??
-           GoogleSignIn(serverClientId: kIsWeb ? null : _webClientId),
+       // IMPORTANT: Don't construct GoogleSignIn on web.
+       //
+       // The google_sign_in_web plugin asserts that a web client id is present
+       // (via a meta tag or passed clientId). This app uses Firebase Auth popup
+       // flow on web, so we only create GoogleSignIn on non-web platforms.
+       _googleSignIn = kIsWeb
+           ? null
+           : (googleSignIn ?? GoogleSignIn(serverClientId: _webClientId)),
        _functions = functions ?? FirebaseFunctions.instance;
 
   final FirebaseAuth _firebaseAuth;
-  final GoogleSignIn _googleSignIn;
+  final GoogleSignIn? _googleSignIn;
   final FirebaseFunctions _functions;
 
   static String friendlyErrorMessage(
@@ -173,7 +178,11 @@ class AuthService {
       debugPrint('[AuthService] Starting Google Sign-In...');
     }
 
-    final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+    final googleSignIn = _googleSignIn;
+    if (googleSignIn == null) {
+      throw StateError('Google Sign-In is not configured for web in this flow.');
+    }
+    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
 
     if (googleUser == null) {
       if (kDebugMode) {
@@ -239,10 +248,12 @@ class AuthService {
               ) ??
               false;
           if (isGoogleUser) {
+            final googleSignIn = _googleSignIn;
+            if (googleSignIn == null) return;
             try {
-              await _googleSignIn.disconnect();
+              await googleSignIn.disconnect();
             } catch (_) {
-              await _googleSignIn.signOut();
+              await googleSignIn.signOut();
             }
           }
         } catch (_) {
@@ -265,7 +276,7 @@ class AuthService {
     }
 
     await currentUser.getIdToken(true);
-    await _functions.httpsCallable('deleteMyAccount').call();
+    await _functions.httpsCallable('deleteMyAccount', options: HttpsCallableOptions(timeout: const Duration(seconds: 60))).call();
     await signOut();
   }
 
@@ -274,7 +285,7 @@ class AuthService {
   }
 
   Future<void> _clearLocalSession() async {
-    SessionService.instance.reset();
+    await SessionService.instance.reset();
     TeamService.instance.reset();
     PlanService.instance.reset();
     ProfileService.instance.reset();

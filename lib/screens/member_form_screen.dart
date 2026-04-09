@@ -534,7 +534,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: kPaid.withOpacity(0.15),
+                            color: kPaid.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -637,7 +637,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
               ),
               Switch.adaptive(
                 value: _autoRenew,
-                activeColor: kPrimary,
+                activeTrackColor: kPrimary,
                 onChanged: (v) => setState(() => _autoRenew = v),
               ),
             ],
@@ -653,7 +653,7 @@ class _MemberFormScreenState extends State<MemberFormScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: context.cs.primaryContainer.withOpacity(0.35),
+        color: context.cs.primaryContainer.withValues(alpha: 0.35),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(

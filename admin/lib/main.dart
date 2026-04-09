@@ -1,14 +1,15 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-// ignore: avoid_web_libraries_in_flutter
-import 'dart:html' as html;
+import 'dart:js_interop';
+import 'package:web/web.dart' as web;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 
@@ -674,8 +675,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         if (!isWide)
                           _MobileShellHeader(
                             currentTab: _tabs[_selectedTab],
-                            onMenu: () =>
-                                _scaffoldKey.currentState?.openDrawer(),
                             onSignOut: widget.onSignOut,
                           ),
                         Expanded(child: page),
@@ -693,25 +692,25 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Scaffold(
       key: _scaffoldKey,
       backgroundColor: Colors.transparent,
-      drawer: isWide
-          ? null
-          : Drawer(
-              shape: const RoundedRectangleBorder(),
-              child: SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: _SidebarContent(
-                    email: user?.email ?? '',
-                    selectedIndex: _selectedTab,
-                    tabs: _tabs,
-                    onSelect: _selectTab,
-                    onSignOut: widget.onSignOut,
-                    compact: true,
-                  ),
-                ),
-              ),
-            ),
       body: shell,
+      bottomNavigationBar: isWide
+          ? null
+          : NavigationBar(
+              height: 64,
+              selectedIndex: _selectedTab,
+              onDestinationSelected: _selectTab,
+              labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+              backgroundColor: Colors.white,
+              indicatorColor: kPrimary.withValues(alpha: 0.12),
+              surfaceTintColor: Colors.transparent,
+              shadowColor: const Color(0xFF0F172A).withValues(alpha: 0.08),
+              elevation: 8,
+              destinations: _tabs.map((t) => NavigationDestination(
+                icon: Icon(t.icon, size: 22),
+                selectedIcon: Icon(t.icon, size: 22, color: kPrimary),
+                label: t.label,
+              )).toList(),
+            ),
     );
   }
 }
@@ -996,27 +995,26 @@ class _SidebarStatusPill extends StatelessWidget {
 
 class _MobileShellHeader extends StatelessWidget {
   final _AdminTabInfo currentTab;
-  final VoidCallback onMenu;
   final VoidCallback onSignOut;
 
   const _MobileShellHeader({
     required this.currentTab,
-    required this.onMenu,
     required this.onSignOut,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 0),
+      padding: const EdgeInsets.fromLTRB(16, 10, 8, 0),
       child: Row(
         children: [
-          IconButton(onPressed: onMenu, icon: const Icon(Icons.menu_rounded)),
+          Icon(currentTab.icon, size: 22, color: kPrimary),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(currentTab.label, style: context.tt.titleMedium),
+                Text(currentTab.label, style: context.tt.titleMedium?.copyWith(fontWeight: FontWeight.w700)),
                 Text(
                   currentTab.description,
                   style: context.tt.bodySmall?.copyWith(color: kSlate),
@@ -1027,7 +1025,7 @@ class _MobileShellHeader extends StatelessWidget {
           IconButton(
             onPressed: onSignOut,
             tooltip: 'Sign out',
-            icon: const Icon(Icons.logout_rounded),
+            icon: const Icon(Icons.logout_rounded, size: 20),
           ),
         ],
       ),
@@ -1056,12 +1054,17 @@ class _AdminPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final scroll = LayoutBuilder(
       builder: (context, constraints) {
-        final horizontal = constraints.maxWidth >= 960 ? 28.0 : 18.0;
+        final compact = constraints.maxWidth < 600;
+        final horizontal = constraints.maxWidth >= 960
+            ? 28.0
+            : compact
+                ? 12.0
+                : 18.0;
         return ListView(
           physics: const AlwaysScrollableScrollPhysics(
             parent: BouncingScrollPhysics(),
           ),
-          padding: EdgeInsets.fromLTRB(horizontal, 22, horizontal, 28),
+          padding: EdgeInsets.fromLTRB(horizontal, compact ? 14 : 22, horizontal, compact ? 18 : 28),
           children: [
             _PageHero(
               badge: badge,
@@ -1069,7 +1072,7 @@ class _AdminPage extends StatelessWidget {
               subtitle: subtitle,
               trailing: trailing,
             ),
-            const SizedBox(height: 22),
+            SizedBox(height: compact ? 14 : 22),
             ...children,
           ],
         );
@@ -1096,17 +1099,19 @@ class _PageHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final wide = MediaQuery.sizeOf(context).width >= 980;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final wide = screenWidth >= 980;
+    final compact = screenWidth < 600;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(compact ? 14 : 24),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [Color(0xFFFFFFFF), Color(0xFFF8FBFF)],
         ),
-        borderRadius: BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(compact ? 18 : 30),
         border: Border.all(color: kSurfaceBorder.withValues(alpha: 0.8)),
       ),
       child: wide
@@ -1150,30 +1155,33 @@ class _PageHeroText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 12, vertical: compact ? 5 : 8),
           decoration: BoxDecoration(
             color: kPrimary.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(999),
           ),
           child: Text(
             badge,
-            style: context.tt.labelLarge?.copyWith(color: kPrimary),
+            style: (compact ? context.tt.labelMedium : context.tt.labelLarge)?.copyWith(color: kPrimary),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(title, style: context.tt.headlineLarge),
-        const SizedBox(height: 8),
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 760),
-          child: Text(
-            subtitle,
-            style: context.tt.bodyLarge?.copyWith(color: kSlate, height: 1.6),
+        SizedBox(height: compact ? 10 : 16),
+        Text(title, style: compact ? context.tt.titleLarge : context.tt.headlineLarge),
+        if (!compact) ...[
+          const SizedBox(height: 8),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 760),
+            child: Text(
+              subtitle,
+              style: context.tt.bodyLarge?.copyWith(color: kSlate, height: 1.6),
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -1284,11 +1292,12 @@ class _SectionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: EdgeInsets.all(compact ? 14 : 22),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(compact ? 18 : 28),
         border: Border.all(color: kSurfaceBorder.withValues(alpha: 0.8)),
         boxShadow: [
           BoxShadow(
@@ -1308,8 +1317,8 @@ class _SectionCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: context.tt.titleLarge),
-                    if (subtitle != null) ...[
+                    Text(title, style: compact ? context.tt.titleMedium : context.tt.titleLarge),
+                    if (subtitle != null && !compact) ...[
                       const SizedBox(height: 6),
                       Text(
                         subtitle!,
@@ -1325,7 +1334,7 @@ class _SectionCard extends StatelessWidget {
               if (trailing != null) ...[const SizedBox(width: 12), trailing!],
             ],
           ),
-          const SizedBox(height: 18),
+          SizedBox(height: compact ? 12 : 18),
           child,
         ],
       ),
@@ -1350,41 +1359,44 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final compact = MediaQuery.sizeOf(context).width < 600;
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(compact ? 14 : 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(26),
+        borderRadius: BorderRadius.circular(compact ? 18 : 26),
         border: Border.all(color: kSurfaceBorder.withValues(alpha: 0.8)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 46,
-            height: 46,
+            width: compact ? 36 : 46,
+            height: compact ? 36 : 46,
             decoration: BoxDecoration(
               color: accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(compact ? 12 : 16),
             ),
-            child: Icon(icon, color: accent),
+            child: Icon(icon, color: accent, size: compact ? 20 : 24),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 10 : 16),
           Text(
             value,
-            style: context.tt.headlineMedium?.copyWith(
+            style: (compact ? context.tt.titleLarge : context.tt.headlineMedium)?.copyWith(
               fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
-          Text(label, style: context.tt.labelLarge?.copyWith(color: kSlate)),
-          const SizedBox(height: 8),
-          Text(
-            hint,
-            style: context.tt.bodySmall?.copyWith(
-              color: kSlate.withValues(alpha: 0.92),
+          const SizedBox(height: 4),
+          Text(label, style: (compact ? context.tt.labelMedium : context.tt.labelLarge)?.copyWith(color: kSlate)),
+          if (!compact) ...[
+            const SizedBox(height: 8),
+            Text(
+              hint,
+              style: context.tt.bodySmall?.copyWith(
+                color: kSlate.withValues(alpha: 0.92),
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -1833,7 +1845,7 @@ class _CommandCenterTabState extends State<_CommandCenterTab> {
                       ? 5
                       : width >= 840
                       ? 3
-                      : 1;
+                      : 2;
                   final cardWidth = _splitWidth(width, columns);
                   final cards = [
                     _MetricCard(
@@ -2338,7 +2350,7 @@ class _UserManagementTabState extends State<_UserManagementTab> {
                 ? 4
                 : width >= 680
                 ? 2
-                : 1;
+                : 2;
             final cardWidth = _splitWidth(width, columns);
             return Wrap(
               spacing: 16,
@@ -2504,20 +2516,21 @@ class _UserManagementTabState extends State<_UserManagementTab> {
                     final sub = _subsByUid[doc.id];
                     final trial = _isTrialUser(data, sub);
                     final plan = _subscriptionLabel(sub);
+                    final compact = MediaQuery.sizeOf(context).width < 600;
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: EdgeInsets.all(compact ? 12 : 16),
                       decoration: BoxDecoration(
                         color: const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(22),
+                        borderRadius: BorderRadius.circular(compact ? 16 : 22),
                       ),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(compact ? 14 : 20),
                         onTap: () => _showUserActions(doc.id, data),
                         child: Row(
                           children: [
                             CircleAvatar(
-                              radius: 24,
+                              radius: compact ? 18 : 24,
                               backgroundColor: kPrimary.withValues(alpha: 0.12),
                               child: Text(
                                 _bestUserName(
@@ -3219,7 +3232,7 @@ class _SubscriptionManagementTabState
                 ? 4
                 : constraints.maxWidth >= 680
                 ? 2
-                : 1;
+                : 2;
             final width = _splitWidth(constraints.maxWidth, columns);
             return Wrap(
               spacing: 16,
@@ -3291,7 +3304,7 @@ class _SubscriptionManagementTabState
                   final wide = constraints.maxWidth >= 860;
                   final childWidth = wide
                       ? _splitWidth(constraints.maxWidth, 4)
-                      : constraints.maxWidth;
+                      : _splitWidth(constraints.maxWidth, 2);
                   return Wrap(
                     spacing: 12,
                     runSpacing: 12,
@@ -3847,7 +3860,7 @@ class _TeamManagementTabState extends State<_TeamManagementTab> {
                 ? 4
                 : constraints.maxWidth >= 680
                 ? 2
-                : 1;
+                : 2;
             final width = _splitWidth(constraints.maxWidth, columns);
             return Wrap(
               spacing: 16,
@@ -4183,12 +4196,21 @@ class _SystemToolsTabState extends State<_SystemToolsTab> {
   }
 
   Future<void> _pickNotifImage() async {
-    final uploadInput = html.FileUploadInputElement()..accept = 'image/*';
+    final uploadInput = web.HTMLInputElement()
+      ..type = 'file'
+      ..accept = 'image/*';
     uploadInput.click();
-    await uploadInput.onChange.first;
-    if (uploadInput.files == null || uploadInput.files!.isEmpty) return;
 
-    final file = uploadInput.files!.first;
+    final changeCompleter = Completer<void>();
+    uploadInput.addEventListener(
+      'change',
+      (web.Event e) { changeCompleter.complete(); }.toJS,
+    );
+    await changeCompleter.future;
+    final files = uploadInput.files;
+    if (files == null || files.length == 0) return;
+
+    final file = files.item(0)!;
     if (file.size > 5 * 1024 * 1024) {
       _showError('Image must be under 5 MB.');
       return;
@@ -4196,10 +4218,16 @@ class _SystemToolsTabState extends State<_SystemToolsTab> {
 
     setState(() => _notifImageUploading = true);
     try {
-      final reader = html.FileReader();
+      final reader = web.FileReader();
+      final loadCompleter = Completer<void>();
+      reader.addEventListener(
+        'load',
+        (web.Event e) { loadCompleter.complete(); }.toJS,
+      );
       reader.readAsArrayBuffer(file);
-      await reader.onLoad.first;
-      final bytes = Uint8List.fromList(reader.result as List<int>);
+      await loadCompleter.future;
+      final result = reader.result;
+      final bytes = (result as JSArrayBuffer).toDart.asUint8List();
       if (mounted) {
         setState(() {
           _notifImageBytes = bytes;
@@ -4213,17 +4241,18 @@ class _SystemToolsTabState extends State<_SystemToolsTab> {
     }
   }
 
-  /// Uploads the picked image to Firebase Storage and returns the download URL.
+  /// Uploads the picked image via Cloud Function (bypasses App Check on Storage).
   Future<String?> _uploadNotifImage() async {
     if (_notifImageBytes == null) return null;
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
     final ext = _notifImageName?.split('.').last ?? 'png';
-    final ref = FirebaseStorage.instance.ref('broadcasts/$timestamp.$ext');
-    await ref.putData(
-      _notifImageBytes!,
-      SettableMetadata(contentType: 'image/$ext'),
-    );
-    return ref.getDownloadURL();
+    final result = await FirebaseFunctions.instance
+        .httpsCallable('uploadBroadcastImage')
+        .call({
+      'imageBase64': base64Encode(_notifImageBytes!),
+      'contentType': 'image/$ext',
+      'ext': ext,
+    });
+    return result.data['url'] as String?;
   }
 
   Future<void> _sendBroadcastNotification() async {
@@ -4281,6 +4310,7 @@ class _SystemToolsTabState extends State<_SystemToolsTab> {
         'title': title,
         'body': body,
         'target': target,
+        // ignore: use_null_aware_elements
         if (imageUrl != null) 'imageUrl': imageUrl,
         'status': 'pending',
         'sentBy': FirebaseAuth.instance.currentUser?.email ?? '',
@@ -4358,7 +4388,7 @@ class _SystemToolsTabState extends State<_SystemToolsTab> {
                 ? 4
                 : constraints.maxWidth >= 680
                 ? 2
-                : 1;
+                : 2;
             final width = _splitWidth(constraints.maxWidth, columns);
             return Wrap(
               spacing: 16,

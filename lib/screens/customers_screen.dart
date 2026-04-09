@@ -60,6 +60,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
   StreamSubscription<List<CustomerGroup>>? _groupsSub;
   List<CustomerGroup> _groups = const [];
   Object? _groupsLoadError;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
@@ -78,10 +79,14 @@ class _CustomersScreenState extends State<CustomersScreen> {
       },
     );
     _loadClients(reset: true);
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _groupsSub?.cancel();
     _searchDebounce?.cancel();
     _searchController.dispose();

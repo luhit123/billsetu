@@ -59,20 +59,18 @@ class InvoicePreviewWidget extends StatelessWidget {
     required this.invoice,
     this.profile,
     this.template = InvoiceTemplate.vyapar,
-    this.signatureImage,
     this.logoImage,
-    this.onSignatureTap,
     this.onTermsTap,
+    this.onSignatoryNameTap,
     this.termsText,
   });
 
   final Invoice invoice;
   final BusinessProfile? profile;
   final InvoiceTemplate template;
-  final Uint8List? signatureImage;
   final Uint8List? logoImage;
-  final VoidCallback? onSignatureTap;
   final VoidCallback? onTermsTap;
+  final VoidCallback? onSignatoryNameTap;
   final String? termsText;
 
   InvoiceColors get _c => templateColorMap[template] ?? templateColorMap[InvoiceTemplate.vyapar]!;
@@ -80,6 +78,11 @@ class InvoicePreviewWidget extends StatelessWidget {
   String get _sellerName {
     final name = profile?.storeName.trim() ?? '';
     return name.isNotEmpty ? name : 'Your Store';
+  }
+
+  String get _creatorDisplayName {
+    final name = invoice.createdByName.trim();
+    return name.isNotEmpty ? name : _sellerName;
   }
 
   bool get _hasLogo => profile != null && profile!.logoUrl.isNotEmpty;
@@ -122,7 +125,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                 fit: BoxFit.contain,
                 cacheWidth: (size * 2).toInt(),
                 cacheHeight: (size * 2).toInt(),
-                errorBuilder: (_, error, ___) {
+                errorBuilder: (_, error, _) {
                   debugPrint('[InvoicePreview] Logo load error: $error');
                   return Icon(Icons.store_rounded, size: size * 0.6, color: const Color(0xFFBDBDBD));
                 },
@@ -167,7 +170,7 @@ class InvoicePreviewWidget extends StatelessWidget {
             ),
             child: Center(
               child: Text(
-                'Tax Invoice',
+                'Invoice',
                 style: TextStyle(
                   color: c.primary,
                   fontSize: 18,
@@ -291,60 +294,41 @@ class InvoicePreviewWidget extends StatelessWidget {
 
           const SizedBox(height: 6),
 
-          // ── Signature Block — tappable ──
+          // ── Signatory Block ──
           Row(
             children: [
               const Spacer(),
-              SizedBox(
-                width: 180,
-                child: GestureDetector(
-                  onTap: onSignatureTap,
+              GestureDetector(
+                onTap: onSignatoryNameTap,
+                child: SizedBox(
+                  width: 180,
                   child: _bordered(c, child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       _labelHeader(c, 'For $_sellerName:'),
-                      Container(
-                        height: 50,
-                        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                        child: signatureImage != null
-                            ? Image.memory(signatureImage!, fit: BoxFit.contain)
-                            : Container(
-                                decoration: BoxDecoration(
-                                  border: Border.all(
-                                    color: onSignatureTap != null
-                                        ? c.primary.withValues(alpha: 0.4)
-                                        : c.border,
-                                    width: onSignatureTap != null ? 1.5 : 0.5,
-                                  ),
-                                  borderRadius: BorderRadius.circular(4),
-                                  color: onSignatureTap != null
-                                      ? c.primary.withValues(alpha: 0.03)
-                                      : null,
-                                ),
-                                child: onSignatureTap != null
-                                    ? Center(
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(Icons.draw_rounded,
-                                                size: 12, color: c.primary.withValues(alpha: 0.5)),
-                                            const SizedBox(width: 4),
-                                            Text('Tap to sign',
-                                              style: TextStyle(
-                                                color: c.primary.withValues(alpha: 0.5),
-                                                fontSize: 8,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                      ),
                       Padding(
-                        padding: const EdgeInsets.only(left: 12, bottom: 4),
-                        child: Text('Authorized Signatory', style: TextStyle(color: c.body, fontSize: 8)),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        child: Column(
+                          children: [
+                            Text(
+                              _creatorDisplayName,
+                              style: TextStyle(
+                                color: c.black,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 2),
+                            Text('Authorized Signatory', style: TextStyle(color: c.body, fontSize: 7)),
+                            const SizedBox(height: 1),
+                            Text(
+                              'Digitally signed, no signature required',
+                              style: TextStyle(color: c.muted, fontSize: 6, fontStyle: FontStyle.italic),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   )),
@@ -396,40 +380,37 @@ class InvoicePreviewWidget extends StatelessWidget {
         const SizedBox(height: 6),
         Row(children: [
           const Spacer(),
-          SizedBox(
-            width: 180,
-            child: GestureDetector(
-              onTap: onSignatureTap,
+          GestureDetector(
+            onTap: onSignatoryNameTap,
+            child: SizedBox(
+              width: 180,
               child: _bordered(c, child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   _labelHeader(c, 'For $_sellerName:'),
-                  Container(
-                    height: 50,
-                    margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                    child: signatureImage != null
-                        ? Image.memory(signatureImage!, fit: BoxFit.contain)
-                        : Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: onSignatureTap != null ? c.primary.withValues(alpha: 0.4) : c.border,
-                                width: onSignatureTap != null ? 1.5 : 0.5,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                              color: onSignatureTap != null ? c.primary.withValues(alpha: 0.03) : null,
-                            ),
-                            child: onSignatureTap != null
-                                ? Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
-                                    Icon(Icons.draw_rounded, size: 12, color: c.primary.withValues(alpha: 0.5)),
-                                    const SizedBox(width: 4),
-                                    Text('Tap to sign', style: TextStyle(color: c.primary.withValues(alpha: 0.5), fontSize: 8, fontWeight: FontWeight.w600)),
-                                  ]))
-                                : null,
-                          ),
-                  ),
                   Padding(
-                    padding: const EdgeInsets.only(left: 12, bottom: 4),
-                    child: Text('Authorized Signatory', style: TextStyle(color: c.body, fontSize: 8)),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    child: Column(
+                      children: [
+                        Text(
+                          _creatorDisplayName,
+                          style: TextStyle(
+                            color: c.black,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 2),
+                        Text('Authorized Signatory', style: TextStyle(color: c.body, fontSize: 7)),
+                        const SizedBox(height: 1),
+                        Text(
+                          'Digitally signed, no signature required',
+                          style: TextStyle(color: c.muted, fontSize: 6, fontStyle: FontStyle.italic),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               )),
@@ -461,7 +442,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                   children: [
                     if (_hasLogo) ClipRRect(
                       borderRadius: BorderRadius.circular(4),
-                      child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 30, height: 30, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                      child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 30, height: 30, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink()),
                     ),
                     if (_hasLogo) const SizedBox(width: 8),
                     Expanded(child: Column(
@@ -479,7 +460,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    const Text('TAX INVOICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    const Text('INVOICE', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
                     Text(invoice.invoiceNumber, style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 9)),
                   ],
                 ),
@@ -568,7 +549,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                      Text('TAX INVOICE', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: c.primary)),
+                      Text('INVOICE', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: c.primary)),
                       Text(invoice.invoiceNumber, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: c.body)),
                     ]),
                     Divider(color: c.primary, thickness: 2, height: 10),
@@ -658,7 +639,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                   ]),
                 ]),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('TAX INVOICE', style: TextStyle(color: c.black, fontSize: 15, fontWeight: FontWeight.bold)),
+                  Text('INVOICE', style: TextStyle(color: c.black, fontSize: 15, fontWeight: FontWeight.bold)),
                   Text(invoice.invoiceNumber, style: TextStyle(color: c.primary, fontSize: 10, fontWeight: FontWeight.bold)),
                   Text('Date: ${_dateFormat.format(invoice.createdAt)}', style: TextStyle(color: c.body, fontSize: 8)),
                   if (invoice.dueDate != null)
@@ -729,7 +710,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                 _logoWidget(size: 26),
                 Text(_sellerName, style: TextStyle(color: c.primary, fontSize: 13, fontWeight: FontWeight.bold)),
               ]),
-              Text('TAX INVOICE', style: TextStyle(color: c.black, fontSize: 13, fontWeight: FontWeight.bold)),
+              Text('INVOICE', style: TextStyle(color: c.black, fontSize: 13, fontWeight: FontWeight.bold)),
             ]),
           ),
           // Two-column: Bill To | Invoice Details
@@ -829,7 +810,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                 if (_hasLogo) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(4),
-                    child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 28, height: 28, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+                    child: Image.network(_cleanLogoUrl(profile!.logoUrl), width: 28, height: 28, fit: BoxFit.contain, errorBuilder: (_, _, _) => const SizedBox.shrink()),
                   ),
                   const SizedBox(height: 4),
                 ],
@@ -841,7 +822,7 @@ class InvoicePreviewWidget extends StatelessWidget {
                 if (profile?.gstin.isNotEmpty == true)
                   Text('GSTIN: ${profile!.gstin}', style: TextStyle(fontSize: 8, color: c.body), textAlign: TextAlign.center),
                 dashed(),
-                Text('TAX INVOICE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: c.primary), textAlign: TextAlign.center),
+                Text('INVOICE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: c.primary), textAlign: TextAlign.center),
                 const SizedBox(height: 2),
                 Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
                   Text('No: ${invoice.invoiceNumber}', style: TextStyle(fontSize: 8, color: c.body)),

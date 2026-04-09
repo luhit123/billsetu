@@ -87,11 +87,18 @@ class SubscriptionPlan {
     }
   }
 
+  /// Effective price after discount. Clamps discount to 0-100% (Issue #10).
   double get effectivePrice {
-    if (discountPercent > 0) {
-      return price - (price * discountPercent / 100);
+    final clampedDiscount = discountPercent.clamp(0, 100).toDouble();
+    if (clampedDiscount > 0) {
+      return price - (price * clampedDiscount / 100);
     }
     return price;
+  }
+
+  /// Validates colorHex format (Issue #26).
+  static bool isValidColorHex(String hex) {
+    return RegExp(r'^#[0-9A-Fa-f]{6}$').hasMatch(hex);
   }
 
   factory SubscriptionPlan.fromMap(Map<String, dynamic> map, {String? docId}) {
@@ -118,7 +125,7 @@ class SubscriptionPlan {
       isActive: map['isActive'] as bool? ?? true,
       isDeleted: map['isDeleted'] as bool? ?? false,
       memberCount: map['memberCount'] as int? ?? 0,
-      colorHex: map['colorHex'] as String? ?? '#1E3A8A',
+      colorHex: _sanitizeColorHex(map['colorHex'] as String?),
       gstEnabled: map['gstEnabled'] as bool? ?? false,
       gstRate: (map['gstRate'] as num?)?.toDouble() ?? 18.0,
       gstType: map['gstType'] as String? ?? 'cgst_sgst',
@@ -210,5 +217,12 @@ class SubscriptionPlan {
       (e) => e.name == s,
       orElse: () => PlanDuration.monthly,
     );
+  }
+
+  /// Sanitizes colorHex from Firestore, falling back to default if invalid (Issue #26).
+  static String _sanitizeColorHex(String? raw) {
+    const fallback = '#1E3A8A';
+    if (raw == null || raw.isEmpty) return fallback;
+    return isValidColorHex(raw) ? raw : fallback;
   }
 }

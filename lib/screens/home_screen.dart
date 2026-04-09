@@ -58,6 +58,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _selectedTab = 0;
   late final List<Widget> _tabs;
+  StreamSubscription<AppPlan>? _planSub;
 
   @override
   void initState() {
@@ -69,6 +70,15 @@ class _HomeScreenState extends State<HomeScreen> {
       const ProductsScreen(embeddedInHomeShell: true),
     ];
     ReviewService.instance.onAppOpen();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _planSub?.cancel();
+    super.dispose();
   }
 
   @override
@@ -139,22 +149,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         Row(
                           children: [
-                            Container(
-                              width: 42,
-                              height: 42,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: kSignatureGradient,
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'B',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 17,
-                                  ),
-                                ),
+                            ClipOval(
+                              child: Image.asset(
+                                'assets/icon/logo.png',
+                                width: 42,
+                                height: 42,
+                                fit: BoxFit.cover,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -372,6 +372,7 @@ class _DashboardPageState extends State<_DashboardPage> {
   // Streams & subscriptions
   StreamSubscription<List<Invoice>>? _invoicesSub;
   StreamSubscription<DashboardAnalytics?>? _analyticsSub;
+  StreamSubscription<AppPlan>? _planSub;
 
   // State
   List<Invoice> _allInvoices = [];
@@ -400,10 +401,14 @@ class _DashboardPageState extends State<_DashboardPage> {
     _subscribeToInvoices();
     _subscribeToAnalytics();
     _loadLowStockProducts();
+    _planSub = PlanService.instance.planStream.listen((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
+    _planSub?.cancel();
     _invoicesSub?.cancel();
     _analyticsSub?.cancel();
     super.dispose();
@@ -529,10 +534,12 @@ class _DashboardPageState extends State<_DashboardPage> {
 
   double get _totalOutstanding {
     final a = _analytics;
-    if (a != null) return a.totalOutstanding;
-    return _allInvoices
-        .where((inv) => inv.status != InvoiceStatus.paid)
-        .fold<double>(0, (s, inv) => s + inv.balanceDue);
+    final raw = a != null
+        ? a.totalOutstanding
+        : _allInvoices
+            .where((inv) => inv.status != InvoiceStatus.paid)
+            .fold<double>(0, (s, inv) => s + inv.balanceDue);
+    return raw < 0 ? 0 : raw;
   }
 
   double get _totalPaid {
@@ -809,6 +816,9 @@ class _DashboardPageState extends State<_DashboardPage> {
   }
 
   Widget _buildHeroCard() {
+    final ts = TeamService.instance;
+    final isTeam = ts.isOnTeam;
+    final teamName = ts.teamBusinessName;
     return GestureDetector(
       onTap: () => Navigator.push(
         context,
@@ -867,13 +877,54 @@ class _DashboardPageState extends State<_DashboardPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Total Outstanding',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.6),
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            isTeam ? 'Team Outstanding' : 'Total Outstanding',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.white.withValues(alpha: 0.6),
+                            ),
+                          ),
+                        ),
+                        if (isTeam && teamName.isNotEmpty)
+                          Flexible(
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 3,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.groups_rounded,
+                                    size: 13,
+                                    color: Colors.white.withValues(alpha: 0.8),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Flexible(
+                                    child: Text(
+                                      teamName,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.white.withValues(alpha: 0.8),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -884,14 +935,23 @@ class _DashboardPageState extends State<_DashboardPage> {
                         color: Colors.white,
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      '$_pendingCount pending  \u00B7  $_overdueCount overdue',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: Colors.white.withValues(alpha: 0.7),
-                      ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: _heroStatPill(
+                            Icons.schedule_rounded,
+                            '$_pendingCount pending',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: _heroStatPill(
+                            Icons.warning_amber_rounded,
+                            '$_overdueCount overdue',
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -899,6 +959,31 @@ class _DashboardPageState extends State<_DashboardPage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _heroStatPill(IconData icon, String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: Colors.white.withValues(alpha: 0.7)),
+          const SizedBox(width: 4),
+          Text(
+            text,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: Colors.white.withValues(alpha: 0.8),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -922,6 +1007,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             color: kPending,
             label: _s.homeFilterPending,
             amount: _totalPending,
+            count: _pendingCount,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const InvoicesScreen()),
@@ -932,6 +1018,7 @@ class _DashboardPageState extends State<_DashboardPage> {
             color: kOverdue,
             label: _s.homeFilterOverdue,
             amount: _totalOverdue,
+            count: _overdueCount,
             onTap: () => Navigator.push(
               context,
               MaterialPageRoute(builder: (_) => const InvoicesScreen()),
@@ -947,6 +1034,7 @@ class _DashboardPageState extends State<_DashboardPage> {
     required String label,
     required double amount,
     required VoidCallback onTap,
+    int? count,
   }) {
     return Expanded(
       child: GestureDetector(
@@ -963,15 +1051,40 @@ class _DashboardPageState extends State<_DashboardPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: context.cs.onSurfaceVariant,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
+                        color: context.cs.onSurfaceVariant,
+                      ),
+                    ),
+                    if (count != null) ...[
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '$count',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 4),
                 Text(
                   _currencyFormat.format(amount),
                   style: TextStyle(
@@ -1315,12 +1428,17 @@ class _DashboardPageState extends State<_DashboardPage> {
   }
 
   void _showFeatureUpgradePrompt(String featureName) {
+    // Attendance & GSTR-3B are Enterprise-only; everything else is Pro+.
+    final isEnterpriseOnly = featureName.toLowerCase().contains('attendance') ||
+        featureName.toLowerCase().contains('gstr');
+    final planLabel = isEnterpriseOnly ? 'Enterprise' : 'Pro';
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$featureName — Pro Feature'),
+        title: Text('$featureName — $planLabel Feature'),
         content: Text(
-          'Upgrade to Pro or Enterprise to unlock $featureName and other premium features.',
+          'Upgrade to $planLabel to unlock $featureName and other premium features.',
         ),
         actions: [
           TextButton(
